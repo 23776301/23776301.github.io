@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Ubuntu better usage</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        .code-description {
+            background-color: white;
+            padding: 10px;
+            color: black;
+            font-weight: bold;
+        }
+
+        .code-block {
+            background-color: black;
+            color: white;
+            padding: 10px;
+            font-family: Consolas, monospace;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Ubuntu Tips</h1>
+
+    <div class="code-description">
+        <p>apt use ShanghaiTech GeekPie Source</p>
+    </div>
+    <pre class="code-block">
+<code>sudo sh -c 'echo "
+deb https://mirrors.shanghaitech.edu.cn/ubuntu/ lunar main restricted universe multiverse
+deb-src https://mirrors.shanghaitech.edu.cn/ubuntu/ lunar main restricted universe multiverse
+
+deb https://mirrors.shanghaitech.edu.cn/ubuntu/ lunar-security main restricted universe multiverse
+deb-src https://mirrors.shanghaitech.edu.cn/ubuntu/ lunar-security main restricted universe multiverse
+
+deb https://mirrors.shanghaitech.edu.cn/ubuntu/ lunar-updates main restricted universe multiverse
+deb-src https://mirrors.shanghaitech.edu.cn/ubuntu/ lunar-updates main restricted universe multiverse
+
+deb https://mirrors.shanghaitech.edu.cn/ubuntu/ lunar-backports main restricted universe multiverse
+deb-src https://mirrors.shanghaitech.edu.cn/ubuntu/ lunar-backports main restricted universe multiverse
+" > /etc/apt/sources.list'
+sudo apt update
+sudo apt upgrade</code></pre>
+
+    <div class="code-description">
+        <p>Display CPU Usage, Netwotk Traffic, ... on the topbar</p>
+    </div>
+    <pre class="code-block">
+<code>sudo apt-get install gnome-tweak-tool gnome-shell-extensions</code>
+</pre>
+
+    <div class="code-description">
+        <p>Create a global static symbol link, so that when you call python, the system uses python3</p>
+    </div>
+    <pre class="code-block">
+<code>sudo ln -s /usr/bin/python3 /usr/bin/python</code>
+</pre>
+
+
+
+</body>
+
+</html>
