@@ -210,14 +210,6 @@ select:focus{border-color:var(--accent)}
         <input type="range" id="volSlider" min="0" max="1" step="0.01" value="0.7" oninput="onVolChange()">
         <span class="val" id="volVal">70%</span>
       </div>
-      <div class="row">
-        <label>配色</label>
-        <div style="flex:1;display:flex;gap:4px;flex-wrap:wrap">
-          <button class="btn speed-btn palette-btn" data-palette="A" onclick="setPalette('A')" style="padding:4px 10px;min-height:28px;font-size:11px">A</button>
-          <button class="btn speed-btn palette-btn" data-palette="B" onclick="setPalette('B')" style="padding:4px 10px;min-height:28px;font-size:11px">B</button>
-          <button class="btn speed-btn palette-btn active" data-palette="C" onclick="setPalette('C')" style="padding:4px 10px;min-height:28px;font-size:11px">C</button>
-        </div>
-      </div>
 
       <h2 style="margin-top:20px">音色</h2>
       <div class="row">
@@ -323,6 +315,18 @@ select:focus{border-color:var(--accent)}
         <div class="stats-bar" style="font-size:10px;color:var(--dim);margin-top:3px;display:flex;justify-content:space-between">
           <span><span id="statTracks">轨道：-</span> · <span id="statTotal">音符：-</span></span>
           <span><span id="statPlayed">已播：-/-</span> · <span id="statPercent">0.00%</span></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+          <span style="font-size:10px;color:var(--dim);flex-shrink:0">配色</span>
+          <div style="display:flex;flex-direction:column;justify-content:space-between;height:30px;font-size:9px;color:var(--dim);line-height:1;flex-shrink:0;">
+            <span>白</span><span>黑</span>
+          </div>
+          <div id="paletteSwatch" style="flex:1;min-width:80px;max-width:340px;height:30px;"></div>
+          <div style="display:flex;gap:4px;flex-shrink:0;">
+            <button class="btn speed-btn palette-btn" data-palette="A" onclick="setPalette('A')" style="padding:2px 9px;min-height:24px;font-size:10px">A</button>
+            <button class="btn speed-btn palette-btn" data-palette="B" onclick="setPalette('B')" style="padding:2px 9px;min-height:24px;font-size:10px">B</button>
+            <button class="btn speed-btn palette-btn active" data-palette="C" onclick="setPalette('C')" style="padding:2px 9px;min-height:24px;font-size:10px">C</button>
+          </div>
         </div>
         <div id="fileInfo" style="display:none"></div>
       </div>
@@ -437,6 +441,30 @@ function showDebugTerminal(){
     applyDebugAppearance();
   }
 }
+function hideDebugTerminal(){
+  const el = document.getElementById('debugTerminal');
+  if(el) el.style.display = 'none';
+}
+// 性能降级时是否自动弹出调试窗（默认勾选）
+let dbgAutoOpen = true;
+function onDbgAutoOpenChange(){
+  const cb = document.getElementById('dbgAutoOpen');
+  dbgAutoOpen = !!(cb && cb.checked);
+  try{ localStorage.setItem('dbgAutoOpen', dbgAutoOpen ? '1' : '0'); }catch(e){}
+}
+(function(){
+  try{
+    const s = localStorage.getItem('dbgAutoOpen');
+    if(s !== null) dbgAutoOpen = s === '1';
+  }catch(e){}
+  // 面板 DOM 在脚本之后，轮询等待后同步勾选状态
+  const apply = () => {
+    const cb = document.getElementById('dbgAutoOpen');
+    if(cb) cb.checked = dbgAutoOpen;
+    else setTimeout(apply, 200);
+  };
+  apply();
+})();
 function toggleDebugTerminal() {
   const el = document.getElementById('debugTerminal');
   if(el.style.display === 'none' || el.style.display === '') {
@@ -576,12 +604,19 @@ const PerfArbiter = {
       console.warn('[AudioDebug] 最近 ' + this.windowSize + ' 秒出现 ' + total +
         ' 次性能问题（' + parts.join('、') + '），启用渲染+音频降级');
       applyDegradation(true);
-      // 首次因性能仲裁降级时，主动弹出调试窗以便查看
-      if(typeof showDebugTerminal === 'function') showDebugTerminal();
+      // 按勾选设置自动弹出调试窗，并滚动到最新输出
+      if(typeof dbgAutoOpen === 'undefined' || dbgAutoOpen){
+        if(typeof showDebugTerminal === 'function') showDebugTerminal();
+        setTimeout(() => { if(typeof scrollDebugBottom === 'function') scrollDebugBottom(); }, 0);
+      }
     } else if(this.degraded && this.perSecond.length >= this.windowSize && total <= this.RECOVER_AT){
       this.degraded = false;
       console.log('[AudioDebug][OK] 最近 ' + this.windowSize + ' 秒性能问题已低于阈值，恢复完整渲染与播放');
       applyDegradation(false);
+      // 降级取消时自动收起调试窗
+      if(typeof dbgAutoOpen === 'undefined' || dbgAutoOpen){
+        if(typeof hideDebugTerminal === 'function') hideDebugTerminal();
+      }
     }
   }
 };
@@ -2023,7 +2058,30 @@ function setPalette(name){
   document.querySelectorAll('.palette-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.palette === name);
   });
+  updatePaletteSwatch();
   if(typeof allNotes !== 'undefined') drawScene(allNotes, 0, 0, currentTime);
+}
+// 两个横向三角渐变块：左尖=轻，右短直角边=重；上白键、下黑键
+function updatePaletteSwatch(){
+  const host = document.getElementById('paletteSwatch');
+  if(!host) return;
+  const pal = PALETTES[currentPalette] || PALETTES.C;
+  const W = 300, H = 30, gap = 3;
+  const triH = (H - gap) / 2;
+  const stops = (colors) => colors.map((c, i) =>
+    '<stop offset="' + (i / (colors.length - 1) * 100).toFixed(1) + '%" stop-color="' + c + '"/>').join('');
+  const tri = (yTop, fillId) =>
+    '<polygon points="0,' + (yTop + triH / 2) + ' ' + W + ',' + yTop + ' ' + W + ',' + (yTop + triH) +
+    '" fill="url(#' + fillId + ')"/>';
+  host.innerHTML =
+    '<svg width="100%" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+      '<defs>' +
+        '<linearGradient id="pgW" x1="0" y1="0" x2="1" y2="0">' + stops(pal.white) + '</linearGradient>' +
+        '<linearGradient id="pgB" x1="0" y1="0" x2="1" y2="0">' + stops(pal.black) + '</linearGradient>' +
+      '</defs>' +
+      tri(0, 'pgW') +
+      tri(triH + gap, 'pgB') +
+    '</svg>';
 }
 // 恢复上次选择
 (function(){
@@ -2261,6 +2319,9 @@ document.getElementById('playBtn').addEventListener('click', () => {});
     </label>
     <label style="color:#aaa;font-size:10px;display:flex;align-items:center;gap:4px;">模糊
       <input id="dbgBlur" type="range" min="0" max="100" step="5" value="30" oninput="applyDebugAppearance()" style="width:64px;">
+    </label>
+    <label style="color:#aaa;font-size:10px;display:flex;align-items:center;gap:4px;cursor:pointer;">
+      <input id="dbgAutoOpen" type="checkbox" checked onchange="onDbgAutoOpenChange()" style="accent-color:var(--accent);cursor:pointer;">降级自动弹窗
     </label>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;">
       <button id="debugCopyBtn" onclick="copyDebugTerminal()" style="background:#2a4;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">copy</button>
