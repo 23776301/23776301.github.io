@@ -58,7 +58,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .canvas-toolbar .tool-btn.active{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
 .canvas-stage{flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:0;background:var(--panel)}
 .stage-wrap{position:absolute;box-shadow:none;border-radius:0;overflow:hidden}
-#mainCanvas{display:block;cursor:default}
+#mainCanvas{display:block;cursor:default;touch-action:none}
 
 .player-bar{height:56px;background:var(--panel);border-top:1px solid var(--line);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0}
 .player-bar .play-btn{width:36px;height:36px;border-radius:50%;background:linear-gradient(120deg,var(--accent),var(--accent2));border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
@@ -293,9 +293,47 @@ const CFG = {
     gradAngle:360, gradRadius:640, bgImage:'', bgBlur:0, bgDarken:0 },
   elements: [], selectedId: null,
   audio: null, audioCtx: null, analyser: null, freq: null, wave: null,
-  playing: false, loop: true, volume: 1,
+  playing: false, loop: true, volume: 1, smoothing: 0.8,
 };
 window.__CFG = CFG;
+
+/* ============================================================
+   配置持久化（localStorage）
+   ============================================================ */
+const STORAGE_KEY = 'music-viz-config-v1';
+let _saveTimer = null;
+function scheduleSave(){
+  if(_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(saveConfig, 300);
+}
+function saveConfig(){
+  try{
+    const data = {
+      canvas: {...CFG.canvas, bgImage:''}, // object URL 无法跨会话，不保存
+      elements: CFG.elements.map(e=>({ id:e.id, type:e.type, params:e.params })),
+      volume: CFG.volume, loop: CFG.loop, smoothing: CFG.smoothing,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }catch(e){}
+}
+function loadConfig(){
+  let data;
+  try{ data = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); }catch(e){ return false; }
+  if(!data || !data.canvas) return false;
+  Object.assign(CFG.canvas, data.canvas, { bgImage:'' });
+  if(CFG.canvas.bgType==='image') CFG.canvas.bgType='solid'; // 图片无法恢复
+  if(typeof data.volume==='number') CFG.volume = data.volume;
+  if(typeof data.loop==='boolean') CFG.loop = data.loop;
+  if(typeof data.smoothing==='number') CFG.smoothing = data.smoothing;
+  if(Array.isArray(data.elements) && data.elements.length){
+    CFG.elements = data.elements.map(e=>({
+      id:e.id, type:e.type, params:{ ...defaultElementParams(e.type), ...e.params }, _env:null
+    }));
+    _eid = Math.max(...CFG.elements.map(e=>e.id), 0);
+    CFG.selectedId = CFG.elements[CFG.elements.length-1].id;
+  }
+  return true;
+}
 
 let _ac = null;
 function ensureCtx(){ if(!_ac || _ac.state==='closed') _ac = new (window.AudioContext||window.webkitAudioContext)(); return _ac; }
@@ -329,13 +367,12 @@ function defaultElementParams(type){
 
 let _eid = 0;
 function addElement(type){
-  CFG.elements = [];
-  CFG.selectedId = null;
   const el = { id:++_eid, type, params:defaultElementParams(type), _env:null };
   el.params.x = 50;
   el.params.y = 50;
   CFG.elements.push(el);
   CFG.selectedId = el.id;
+  scheduleSave();
   renderLibrary(); renderProps();
   const lib=document.getElementById('library');
   const propsPanel=document.querySelector('.props');
@@ -353,6 +390,7 @@ function getSelected(){ return CFG.elements.find(e=>e.id===CFG.selectedId); }
 function removeElement(id){
   CFG.elements = CFG.elements.filter(e=>e.id!==id);
   if(CFG.selectedId===id) CFG.selectedId = null;
+  scheduleSave();
   renderProps();
 }
 
@@ -384,7 +422,9 @@ function multiColor(colors, t){
 function elemColor(p, t){
   if(p.colorMode==='solid') return p.colors[0] || '#ff3f58';
   if(p.colorMode==='rainbow'){
-    return `hsl(${(t*300 + performance.now()*0.05)%360},100%,60%)`;
+    // 基于播放进度而非墙钟时间：暂停时颜色随之冻结
+    const clock = CFG.audio ? CFG.audio.currentTime : 0;
+    return `hsl(${(t*300 + clock*30)%360},100%,60%)`;
   }
   return multiColor(p.colors, t);
 }
@@ -406,8 +446,7 @@ function envStep(cur, target, dt, attackMs, releaseMs){
    ============================================================ */
 function getFreqBars(p, el, n, dt){
   if(!CFG.analyser) return new Array(n).fill(0);
-  const f = CFG.freq;
-  CFG.analyser.getByteFrequencyData(f);
+  const f = CFG.freq; // 每帧在 render() 中统一取样一次
   const sr = CFG.audioCtx ? CFG.audioCtx.sampleRate : 44100;
   const nyquist = sr/2;
   const minBin = Math.max(0, Math.floor(p.freqMin/nyquist * f.length));
@@ -441,10 +480,10 @@ DRAW['bars'] = function(ctx,p,W,H,el,dt){
   const bars = getFreqBars(p,el,p.barCount,dt);
   const bw = W/p.barCount;
   for(let i=0;i<p.barCount;i++){
-    let v = bars[i]; if(p.invert) v = 1-v;
+    const v = bars[i];
     const bh = v*H; if(bh<0.5) continue;
     ctx.fillStyle = elemColor(p, i/p.barCount);
-    const x=i*bw+bw*0.12, y=p.invert?0:H-bh;
+    const x=i*bw+bw*0.12, y=H-bh;
     if(p.rounded){ const r=Math.min(bw*0.3,bh*0.3);
       ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+bw*0.76-r,y);
       ctx.quadraticCurveTo(x+bw*0.76,y,x+bw*0.76,y+r);
@@ -516,7 +555,7 @@ DRAW['circle-radial'] = function(ctx,p,W,H,el,dt){
 
 DRAW['circle-wave'] = function(ctx,p,W,H,el,dt){
   if(!CFG.analyser) return;
-  const w = CFG.wave; CFG.analyser.getByteTimeDomainData(w);
+  const w = CFG.wave; // 每帧在 render() 中统一取样一次
   const cx=W/2, cy=H/2, R=Math.min(W,H)*0.35;
   ctx.beginPath();
   const n = 180;
@@ -536,7 +575,7 @@ DRAW['circle-wave'] = function(ctx,p,W,H,el,dt){
 };
 
 DRAW['circle-pulse'] = function(ctx,p,W,H,el,dt){
-  const bars = getFreqBars(p,el,32,dt);
+  const bars = getFreqBars(p,el,p.barCount,dt);
   let avg=0; bars.forEach(v=>avg+=v); avg/=bars.length;
   const cx=W/2, cy=H/2, baseR=Math.min(W,H)*0.2;
   for(let ring=0;ring<3;ring++){
@@ -642,6 +681,11 @@ function render(){
   _lastFrameTime = now;
 
   drawBackground(CFG);
+  // 每帧只取样一次频谱/时域，供所有元素复用
+  if(CFG.analyser){
+    CFG.analyser.getByteFrequencyData(CFG.freq);
+    CFG.analyser.getByteTimeDomainData(CFG.wave);
+  }
   // 只对频谱元素应用缩放，画板和背景保持不变
   const z = CFG.canvas.zoom;
   ctx.save();
@@ -657,20 +701,33 @@ function render(){
     ctx.globalAlpha = p.opacity;
     const cx = ex+ew/2, cy = ey+eh/2;
     ctx.translate(cx, cy);
+    // 镜像/翻转在元素中心处生效，对所有效果通用
+    if(p.mirror) ctx.scale(-1, 1);
+    if(p.invert) ctx.scale(1, -1);
     if(p.rotation) ctx.rotate(p.rotation*Math.PI/180);
     ctx.translate(-ew/2, -eh/2);
     const fn = DRAW[el.type];
     if(fn) fn(ctx, p, ew, eh, el, dt);
     ctx.restore();
   }
-  ctx.restore();
-  // 选中框
+  // 选中框（与元素同一坐标系）
   const sel = getSelected();
   if(sel){
     const p = sel.params;
     const ew = canvas.width*p.w/100, eh = canvas.height*p.h/100;
     const ex = canvas.width*p.x/100-ew/2, ey = canvas.height*p.y/100-eh/2;
+    ctx.save();
+    ctx.setLineDash([6/z, 4/z]);
+    ctx.lineWidth = 1.5/z;
+    ctx.strokeStyle = 'rgba(88,166,255,0.95)';
+    ctx.strokeRect(ex, ey, ew, eh);
+    ctx.setLineDash([]);
+    const hs = 6/z;
+    ctx.fillStyle = 'rgba(88,166,255,0.95)';
+    [[ex,ey],[ex+ew,ey],[ex,ey+eh],[ex+ew,ey+eh]].forEach(([hx,hy])=>ctx.fillRect(hx-hs/2,hy-hs/2,hs,hs));
+    ctx.restore();
   }
+  ctx.restore();
   updateSeekUI();
 }
 
@@ -688,6 +745,7 @@ function loadAudio(file){
   const src = ac.createMediaElementSource(audio);
   const analyser = ac.createAnalyser();
   analyser.fftSize=2048;
+  analyser.smoothingTimeConstant=CFG.smoothing;
   src.connect(analyser); analyser.connect(ac.destination);
   CFG.audio=audio; CFG.audioCtx=ac; CFG.analyser=analyser;
   CFG.freq=new Uint8Array(analyser.frequencyBinCount);
@@ -786,19 +844,20 @@ function renderLibrary(){
   body.innerHTML=html;
   body.querySelectorAll('.lib-item').forEach(el=>el.addEventListener('click',()=>addElement(el.dataset.type)));
   const seg=document.getElementById('bgTypeSeg');
-  if(seg) seg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{CFG.canvas.bgType=b.dataset.v;renderLibrary();}));
-  const bc=document.getElementById('bgColor'); if(bc)bc.addEventListener('input',e=>{CFG.canvas.bgColor=e.target.value;});
-  const g1=document.getElementById('gradColor1'); if(g1)g1.addEventListener('input',e=>CFG.canvas.gradColor1=e.target.value);
-  const g2=document.getElementById('gradColor2'); if(g2)g2.addEventListener('input',e=>CFG.canvas.gradColor2=e.target.value);
+  if(seg) seg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{CFG.canvas.bgType=b.dataset.v;scheduleSave();renderLibrary();}));
+  const bc=document.getElementById('bgColor'); if(bc)bc.addEventListener('input',e=>{CFG.canvas.bgColor=e.target.value;scheduleSave();});
+  const g1=document.getElementById('gradColor1'); if(g1)g1.addEventListener('input',e=>{CFG.canvas.gradColor1=e.target.value;scheduleSave();});
+  const g2=document.getElementById('gradColor2'); if(g2)g2.addEventListener('input',e=>{CFG.canvas.gradColor2=e.target.value;scheduleSave();});
   body.querySelectorAll('[data-grad-stop]').forEach(inp=>inp.addEventListener('input',e=>{
     const idx=+e.target.dataset.gradStop;
     CFG.canvas.gradStops[idx]=+e.target.value;
     e.target.nextElementSibling.textContent=e.target.value+'%';
+    scheduleSave();
   }));
-  const ga=document.getElementById('gradAngle'); if(ga)ga.addEventListener('input',e=>{CFG.canvas.gradAngle=+e.target.value;document.getElementById('gradAngleVal').textContent=e.target.value+'°';});
-  const gr=document.getElementById('gradRadius'); if(gr)gr.addEventListener('input',e=>{CFG.canvas.gradRadius=+e.target.value;document.getElementById('gradRadiusVal').textContent=e.target.value+'px';});
-  const bl=document.getElementById('bgBlur'); if(bl)bl.addEventListener('input',e=>{CFG.canvas.bgBlur=+e.target.value;document.getElementById('bgBlurVal').textContent=e.target.value;});
-  const bd=document.getElementById('bgDarken'); if(bd)bd.addEventListener('input',e=>{CFG.canvas.bgDarken=+e.target.value;document.getElementById('bgDarkenVal').textContent=Math.round(e.target.value*100)+'%';});
+  const ga=document.getElementById('gradAngle'); if(ga)ga.addEventListener('input',e=>{CFG.canvas.gradAngle=+e.target.value;document.getElementById('gradAngleVal').textContent=e.target.value+'°';scheduleSave();});
+  const gr=document.getElementById('gradRadius'); if(gr)gr.addEventListener('input',e=>{CFG.canvas.gradRadius=+e.target.value;document.getElementById('gradRadiusVal').textContent=e.target.value+'px';scheduleSave();});
+  const bl=document.getElementById('bgBlur'); if(bl)bl.addEventListener('input',e=>{CFG.canvas.bgBlur=+e.target.value;document.getElementById('bgBlurVal').textContent=e.target.value;scheduleSave();});
+  const bd=document.getElementById('bgDarken'); if(bd)bd.addEventListener('input',e=>{CFG.canvas.bgDarken=+e.target.value;document.getElementById('bgDarkenVal').textContent=Math.round(e.target.value*100)+'%';scheduleSave();});
   const bi=document.getElementById('bgImgInput'); if(bi)bi.addEventListener('change',e=>loadBgImage(e.target.files[0]));
 }
 function loadBgImage(file){
@@ -973,7 +1032,8 @@ function bindPropsFields(sel){
         p[field]=parseFloat(el.value);
         const valEl=el.parentElement.querySelector('.val');
         if(valEl) valEl.textContent=parseFloat(el.value).toFixed(parseFloat(el.step)<1?2:0);
-        if(field==='smoothing'&&CFG.analyser) CFG.analyser.smoothingTimeConstant=p.smoothing;
+        if(field==='smoothing'){ CFG.smoothing=p.smoothing; if(CFG.analyser) CFG.analyser.smoothingTimeConstant=p.smoothing; }
+        scheduleSave();
       });
     } else if(el.type==='color'){
       el.addEventListener('input',()=>{
@@ -990,6 +1050,7 @@ function bindPropsFields(sel){
         }
         const s=el.parentElement.querySelector('span');
         if(s&&!s.classList.contains('color-hex')) s.textContent=el.value;
+        scheduleSave();
       });
     } else if(el.type==='text'||el.type==='number'){
       el.addEventListener('input',()=>{
@@ -1009,6 +1070,7 @@ function bindPropsFields(sel){
     } else if(el.classList.contains('toggle')){
       el.addEventListener('click',()=>{
         p[field]=!p[field]; el.classList.toggle('on');
+        scheduleSave();
         renderProps();
       });
     } else if(el.classList.contains('seg')){
@@ -1016,6 +1078,7 @@ function bindPropsFields(sel){
         p[field]=b.dataset.v;
         el.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
         b.classList.add('active');
+        scheduleSave();
         renderProps();
       }));
     }
@@ -1023,20 +1086,20 @@ function bindPropsFields(sel){
   // 多色编辑器:上移/下移/删除/添加
   body.querySelectorAll('[data-color-up]').forEach(b=>b.addEventListener('click',()=>{
     const i=parseInt(b.dataset.colorUp);
-    if(i>0){ [p.colors[i-1],p.colors[i]]=[p.colors[i],p.colors[i-1]]; renderProps(); }
+    if(i>0){ [p.colors[i-1],p.colors[i]]=[p.colors[i],p.colors[i-1]]; scheduleSave(); renderProps(); }
   }));
   body.querySelectorAll('[data-color-down]').forEach(b=>b.addEventListener('click',()=>{
     const i=parseInt(b.dataset.colorDown);
-    if(i<p.colors.length-1){ [p.colors[i+1],p.colors[i]]=[p.colors[i],p.colors[i+1]]; renderProps(); }
+    if(i<p.colors.length-1){ [p.colors[i+1],p.colors[i]]=[p.colors[i],p.colors[i+1]]; scheduleSave(); renderProps(); }
   }));
   body.querySelectorAll('[data-color-del]').forEach(b=>b.addEventListener('click',()=>{
     const i=parseInt(b.dataset.colorDel);
-    if(p.colors.length>1){ p.colors.splice(i,1); renderProps(); }
+    if(p.colors.length>1){ p.colors.splice(i,1); scheduleSave(); renderProps(); }
   }));
   const addBtn=document.getElementById('colorAddBtn');
   if(addBtn) addBtn.addEventListener('click',()=>{
     p.colors.push('#'+Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'));
-    renderProps();
+    scheduleSave(); renderProps();
   });
   // 双端点滑条同步
   body.querySelectorAll('.dual-range').forEach(dr=>{
@@ -1085,10 +1148,12 @@ function updateDualRangeFill(dr){ if(!dr) return;
    画布交互
    ============================================================ */
 let _drag=null;
-canvas.addEventListener('mousedown',e=>{
+function canvasPos(e){
   const rect=canvas.getBoundingClientRect();
-  const mx=(e.clientX-rect.left)/rect.width*canvas.width;
-  const my=(e.clientY-rect.top)/rect.height*canvas.height;
+  return { x:(e.clientX-rect.left)/rect.width*canvas.width, y:(e.clientY-rect.top)/rect.height*canvas.height };
+}
+canvas.addEventListener('pointerdown',e=>{
+  const {x:mx,y:my}=canvasPos(e);
   let hit=null;
   for(let i=CFG.elements.length-1;i>=0;i--){
     const el=CFG.elements[i]; const p=el.params;
@@ -1096,24 +1161,28 @@ canvas.addEventListener('mousedown',e=>{
     const ex=canvas.width*p.x/100-ew/2, ey=canvas.height*p.y/100-eh/2;
     if(mx>=ex&&mx<=ex+ew&&my>=ey&&my<=ey+eh){ hit=el; break; }
   }
-  if(hit){ CFG.selectedId=hit.id; renderProps();
+  if(hit){
+    CFG.selectedId=hit.id; renderProps();
     document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
     document.querySelector('.ibtn[data-tool="props"]')?.classList.add('active');
     _lastTool='props';
     document.getElementById('mobilePreview').classList.remove('active');
     _drag={el:hit,offX:mx-canvas.width*hit.params.x/100,offY:my-canvas.height*hit.params.y/100};
+    try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
+    e.preventDefault();
   } else { CFG.selectedId=null; renderProps(); }
 });
-canvas.addEventListener('mousemove',e=>{
+canvas.addEventListener('pointermove',e=>{
   if(!_drag) return;
-  const rect=canvas.getBoundingClientRect();
-  const mx=(e.clientX-rect.left)/rect.width*canvas.width;
-  const my=(e.clientY-rect.top)/rect.height*canvas.height;
+  const {x:mx,y:my}=canvasPos(e);
   _drag.el.params.x=(mx-_drag.offX)/canvas.width*100;
   _drag.el.params.y=(my-_drag.offY)/canvas.height*100;
   renderProps();
+  e.preventDefault();
 });
-window.addEventListener('mouseup',()=>{_drag=null;});
+function endDrag(){ if(_drag){ _drag=null; scheduleSave(); } }
+canvas.addEventListener('pointerup',endDrag);
+canvas.addEventListener('pointercancel',endDrag);
 
 /* ============================================================
    画布比例 & 缩放
@@ -1127,6 +1196,7 @@ function setAspect(aspect){
   stageWrap.style.width=canvas.width+'px';
   stageWrap.style.height=canvas.height+'px';
   applyZoom();
+  scheduleSave();
 }
 function applyZoom(){
   const z=CFG.canvas.zoom;
@@ -1255,10 +1325,13 @@ window.addEventListener('keydown',e=>{
 /* ============================================================
    初始化
    ============================================================ */
-setAspect('16:9');
+const _restored = loadConfig();
+setAspect(CFG.canvas.aspect || '16:9');
+document.getElementById('volSlider').value = CFG.volume;
+document.getElementById('loopBtn').classList.toggle('active', CFG.loop);
 renderLibrary();
-renderProps();
-addElement('bars');
+if(_restored && CFG.elements.length) renderProps();
+else addElement('bars');
 requestAnimationFrame(render);
 // 保持默认100%缩放，不自动适配（窗口尺寸变化不改缩放，避免默认被压到很小）
 
