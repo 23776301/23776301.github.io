@@ -390,12 +390,14 @@ function _appendDebug(msg, type) {
   line.style.wordBreak = 'break-all';
   line.textContent = '[' + time + '] ' + msg;
   if(_debugContentEl) {
+    // 仅当用户原本就在底部附近时才自动跟随；否则保持当前位置，不打断查看历史
+    const atBottom = _debugContentEl.scrollHeight - _debugContentEl.scrollTop - _debugContentEl.clientHeight < 40;
     _debugContentEl.appendChild(line);
     // 限制DOM行数，防止调试输出本身造成内存/渲染压力
     while(_debugContentEl.childElementCount > 300){
       _debugContentEl.removeChild(_debugContentEl.firstChild);
     }
-    _debugContentEl.scrollTop = _debugContentEl.scrollHeight;
+    if(atBottom) _debugContentEl.scrollTop = _debugContentEl.scrollHeight;
   }
   _saveDebugLog(msg, type);
 }
@@ -430,6 +432,46 @@ function clearDebugTerminal() {
   if(_debugDB) {
     const tx = _debugDB.transaction(DEBUG_STORE, 'readwrite');
     tx.objectStore(DEBUG_STORE).clear();
+  }
+}
+function scrollDebugTop(){
+  const el = document.getElementById('debugTerminalContent');
+  if(el) el.scrollTop = 0;
+}
+function scrollDebugBottom(){
+  const el = document.getElementById('debugTerminalContent');
+  if(el) el.scrollTop = el.scrollHeight;
+}
+function _copyFeedback(ok){
+  const btn = document.getElementById('debugCopyBtn');
+  if(!btn) return;
+  if(!btn._origText) btn._origText = btn.textContent;
+  btn.textContent = ok ? '已复制✓' : '复制失败';
+  clearTimeout(btn._t);
+  btn._t = setTimeout(() => { btn.textContent = btn._origText; }, 1200);
+}
+function _copyFallback(text){
+  try{
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    _copyFeedback(ok);
+  }catch(e){ _copyFeedback(false); }
+}
+function copyDebugTerminal(){
+  const el = document.getElementById('debugTerminalContent');
+  if(!el) return;
+  const text = el.innerText || '';
+  if(!text){ _copyFeedback(false); return; }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(() => _copyFeedback(true), () => _copyFallback(text));
+  } else {
+    _copyFallback(text);
   }
 }
 </script>
@@ -1926,9 +1968,12 @@ document.getElementById('playBtn').addEventListener('click', () => {});
 
 <!-- ===== 调试终端面板 ===== -->
 <div id="debugTerminal" style="position:fixed;left:0;right:0;bottom:0;height:40%;background:rgba(0,0,0,0.92);z-index:9999;display:none;flex-direction:column;font-family:monospace;font-size:11px;border-top:1px solid #444;">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:#222;border-bottom:1px solid #444;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:#222;border-bottom:1px solid #444;gap:8px;flex-wrap:wrap;">
     <span style="color:#0f0;font-weight:bold;">DEBUG TERMINAL</span>
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button id="debugCopyBtn" onclick="copyDebugTerminal()" style="background:#2a4;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">复制</button>
+      <button onclick="scrollDebugTop()" style="background:#333;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">↑ 顶部</button>
+      <button onclick="scrollDebugBottom()" style="background:#333;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">↓ 底部</button>
       <button onclick="clearDebugTerminal()" style="background:#333;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">清空</button>
       <button onclick="toggleDebugTerminal()" style="background:#c22;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">关闭</button>
     </div>
