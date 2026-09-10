@@ -475,22 +475,6 @@ const SoundfontLoader = {
   lastTriggerTime: new Array(109).fill(0),
   MIN_TRIGGER_INTERVAL: 0.05, // 同音最小触发间隔50ms（解析时已合并，此为兜底）
   MIN_DURATION: 0.03, // 最小播放时间30ms
-  activeSources: new Array(109).fill(null),
-  // ===== 调试统计 =====
-  debug: {
-    playNoteCalls: 0,
-    playNoteIgnored: 0,
-    srcCreated: 0,
-    srcStopped: 0,
-    onendedFired: 0,
-    errors: 0,
-    lastReportTime: 0,
-    lastState: 'running',
-  },
-  timbreGain: { 'acoustic_grand_piano': 10.0, 'clavinet': 5.0 }, // 硬编码音色增益：三角钢琴1000%, 古钢琴500%
-  lastTriggerTime: new Array(109).fill(0),
-  MIN_TRIGGER_INTERVAL: 0.05, // 同音最小触发间隔50ms（解析时已合并，此为兜底）
-  MIN_DURATION: 0.03, // 最小播放时间30ms // 每个midi音当前活跃的节点
 
   init(){
     const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -669,8 +653,18 @@ const SoundfontLoader = {
       console.warn('[AudioDebug] activeSources数量异常:', activeCount, '超过88个钢琴键！');
     }
     // 异常检测：srcCreated远大于onendedFired，说明节点泄漏
-    if(this.debug.srcCreated - this.debug.onendedFired > 100){
-      console.warn('[AudioDebug] 节点泄漏嫌疑: 创建', this.debug.srcCreated, 'onended', this.debug.onendedFired, '差值', this.debug.srcCreated - this.debug.onendedFired);
+    const leakCount = this.debug.srcCreated - this.debug.onendedFired;
+    if(leakCount > 100){
+      console.warn('[AudioDebug] 节点泄漏嫌疑: 创建', this.debug.srcCreated, 'onended', this.debug.onendedFired, '差值', leakCount);
+    }
+    // 内存监控（Chrome支持）
+    if(performance.memory){
+      const usedMB = (performance.memory.usedJSHeapSize / 1048576).toFixed(1);
+      const totalMB = (performance.memory.jsHeapSizeLimit / 1048576).toFixed(0);
+      console.log('[AudioDebug] 内存使用:', usedMB + 'MB / ' + totalMB + 'MB');
+      if(performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit > 0.8){
+        console.warn('[AudioDebug] 内存使用超过80%，可能导致GC频繁和卡顿!');
+      }
     }
   },
 
@@ -746,7 +740,6 @@ const SoundfontLoader = {
         this.activeSources[midi] = {src, gain: g};
         src.onended = () => {
           this.debug.onendedFired++;
-          try{ src.disconnect(); g.disconnect(); }catch(e){}
           if(this.activeSources[midi] && this.activeSources[midi].src === src) this.activeSources[midi] = null;
         };
         return;
