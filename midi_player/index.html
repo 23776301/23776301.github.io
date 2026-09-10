@@ -328,12 +328,13 @@ function _openDebugDB() {
 }
 
 // 保存日志到IndexedDB
-// 节流：普通log最多每2秒落盘一次，避免高频调试输出反过来拖慢主线程/撑爆磁盘
+// 节流：只保证 error 必存；warn/log 每 3 秒最多落盘一条，
+// 避免高频告警每帧写 IDB 反过来拖慢主线程
 let _lastSaveTime = 0;
 function _saveDebugLog(msg, type) {
   if(!_debugDB) return;
   const now = Date.now();
-  if(type === 'log' && now - _lastSaveTime < 2000) return;
+  if(type !== 'error' && now - _lastSaveTime < 3000) return;
   _lastSaveTime = now;
   try {
     const tx = _debugDB.transaction(DEBUG_STORE, 'readwrite');
@@ -407,10 +408,19 @@ console.log = function(...args) {
   const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
   if(msg.includes('AudioDebug')) _appendDebug(msg, 'log');
 };
+// 高频告警折叠：同一类消息 1.5s 内只记录一次，其余计数汇总，避免刷屏与主线程开销
+const _warnFold = {};
 console.warn = function(...args) {
   _origWarn(...args);
   const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-  if(msg.includes('AudioDebug')) _appendDebug(msg, 'warn');
+  if(!msg.includes('AudioDebug')) return;
+  const key = msg.slice(0, 28);
+  const now = performance.now();
+  const rec = _warnFold[key] || (_warnFold[key] = {t: 0, n: 0});
+  if(now - rec.t < 1500){ rec.n++; return; }
+  const folded = rec.n > 0 ? ('（同类告警已折叠 ' + rec.n + ' 次）') : '';
+  rec.t = now; rec.n = 0;
+  _appendDebug(msg + folded, 'warn');
 };
 console.error = function(...args) {
   _origError(...args);
@@ -516,6 +526,10 @@ const AudioDebugMonitor = {
   maxFrameMs: 0,
   notesTriggered: 0,
   maxNotesFrame: 0,
+  skippedNotes: 0,
+  drawMsSum: 0,
+  maxDrawMs: 0,
+  maxVisible: 0,
   lastFrameAudioTime: 0,
   longTasks: 0,
   audioStalls: 0,
@@ -583,6 +597,13 @@ const AudioDebugMonitor = {
     if(notes > this.maxNotesFrame) this.maxNotesFrame = notes;
   },
 
+  // 每帧调用：记录 drawScene 耗时与可见音符数
+  drawFrame(ms, visible){
+    this.drawMsSum += ms;
+    if(ms > this.maxDrawMs) this.maxDrawMs = ms;
+    if(visible > this.maxVisible) this.maxVisible = visible;
+  },
+
   // 采样实际输出音量（RMS），用于探测"界面在跑但没声音"
   sampleRms(){
     if(!outputAnalyser) return;
@@ -642,7 +663,8 @@ const AudioDebugMonitor = {
 
     console.log('[AudioDebug] [1s] fps=' + (this.frames / winSec).toFixed(0) +
       ' schedMs(avg/max)=' + (this.frames ? (this.frameMsSum / this.frames).toFixed(1) : '0') + '/' + this.maxFrameMs.toFixed(1) +
-      ' notes/s=' + this.notesTriggered + ' maxNotesFrame=' + this.maxNotesFrame +
+      ' drawMs(avg/max)=' + (this.frames ? (this.drawMsSum / this.frames).toFixed(1) : '0') + '/' + this.maxDrawMs.toFixed(1) + ' maxVisible=' + this.maxVisible +
+      ' notes/s=' + this.notesTriggered + ' maxNotesFrame=' + this.maxNotesFrame + ' skipped/s=' + this.skippedNotes +
       ' calls=' + d.playNoteCalls + ' ignored=' + d.playNoteIgnored + ' miss=' + d.bufferMiss + ' synth=' + d.synthCalls +
       ' heap=' + heap + 'MB(Δ' + heapDelta + ')' +
       ' nodes(sampleLive/synthLive/live)=' + sampleLive + '/' + synthLive + '/' + liveNodes +
@@ -669,7 +691,8 @@ const AudioDebugMonitor = {
     this.lastLiveNodes = liveNodes;
     // 窗口统计清零
     this.frames = 0; this.frameMsSum = 0; this.maxFrameMs = 0;
-    this.notesTriggered = 0; this.maxNotesFrame = 0;
+    this.notesTriggered = 0; this.maxNotesFrame = 0; this.skippedNotes = 0;
+    this.drawMsSum = 0; this.maxDrawMs = 0; this.maxVisible = 0;
     this.rmsMinWindow = 1;
   }
 };
@@ -1785,8 +1808,7 @@ function playLoop(){
     nextNoteIndex++;
   }
   if(_skipped > 0){
-    console.warn('[AudioDebug] 追赶洪峰：跳过积压音符 ' + _skipped + ' 个（已落后 ' +
-      (currentTime - (allNotes[nextNoteIndex - 1] ? allNotes[nextNoteIndex - 1].time : currentTime)).toFixed(3) + 's）');
+    AudioDebugMonitor.skippedNotes += _skipped;
   }
   AudioDebugMonitor.frame(performance.now() - _frameT0, _trigCount);
 
@@ -1804,7 +1826,9 @@ function playLoop(){
     document.getElementById('statPlayed').textContent = '已播：' + played + '/' + total;
     document.getElementById('statPercent').textContent = (total > 0 ? (played / total * 100).toFixed(2) : '0.00') + '%';
   }
+  const _drawT0 = performance.now();
   drawScene(allNotes, leftIdx, rightIdx, currentTime);
+  AudioDebugMonitor.drawFrame(performance.now() - _drawT0, rightIdx - leftIdx);
   SoundfontLoader.debugReport();
 
   if(currentTime >= totalDuration){
