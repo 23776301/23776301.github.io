@@ -821,45 +821,32 @@ async function onTimbreChange(){
 (function(){
   const hint = document.getElementById('timbreHint');
   let midiBuf = null;
+  let defaultTimbreReady = false; // 默认音色（古钢琴）是否加载完成
+  let defaultTimbreTimeout = false; // 是否超时回退合成钢琴
+  let autoPlayTriggered = false; // 是否已触发自动播放（避免重复播放）
+
+  // 轻量Toast提示
+  function showToast(msg){
+    let t = document.getElementById('toastMsg');
+    if(!t){
+      t = document.createElement('div');
+      t.id = 'toastMsg';
+      t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:10000;max-width:90%;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.display = 'block';
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.display = 'none'; }, 4000);
+  }
   // 默认预加载的音色：古钢琴、三角钢琴、电钢琴2（其他音色用户切换时再现场下载）
   const PRELOAD_TIMBRES = ['acoustic_grand_piano', 'electric_piano_2'];
-  // 1. 优先加载古钢琴（默认音色），预解码后自动播放
-  SoundfontLoader.load('clavinet', (p, msg) => {
-    if(hint) hint.textContent = msg + ' ' + Math.round(p * 100) + '%';
-  }).then(async () => {
-    if(hint) hint.textContent = '当前音色：古钢琴 ✓ 预解码中…';
-    await SoundfontLoader.predecodeAll();
-    if(hint) hint.textContent = '当前音色：古钢琴 ✓ 就绪';
-    if(midiBuf) tryAutoPlay();
-    // 后台预加载另外两个常用音色（不阻塞播放）
-    let loadedCount = 0;
-    for(const name of PRELOAD_TIMBRES){
-      try{
-        await SoundfontLoader.load(name, null);
-        loadedCount++;
-        if(hint) hint.textContent = '当前音色：古钢琴 ✓ 已缓存' + loadedCount + '/' + PRELOAD_TIMBRES.length + '个常用音色';
-      }catch(e){}
-    }
-    if(hint) hint.textContent = '当前音色：古钢琴 ✓ 常用音色已缓存';
-  }).catch(e => {
-    if(hint) hint.textContent = '音色加载失败，使用合成钢琴';
-    SoundfontLoader.current = '__synth__';
-    if(midiBuf) tryAutoPlay();
-  });
-  // 2. 优先加载MIDI，解析后立即启用按钮
-  AssetCache.fetch('midi/Rush E3.mid').then(r => {
-    if(!r.ok) throw new Error('MIDI加载失败');
-    return r.arrayBuffer();
-  }).then(buf => {
-    midiBuf = buf;
-    parseAndPlayMidi(buf, 'Rush E3.mid');
-    tryAutoPlay();
-  }).catch(e => {
-    if(hint) hint.textContent = 'MIDI加载失败：' + e.message;
-  });
-  // 3. 自动播放（需用户交互）
+
+  // 尝试自动播放：需默认音色就绪或超时回退
   function tryAutoPlay(){
-    if(!midiBuf) return;
+    if(!midiBuf || autoPlayTriggered) return;
+    if(!defaultTimbreReady && !defaultTimbreTimeout) return; // 等待音色加载或超时
+    autoPlayTriggered = true;
     initAudio();
     if(audioCtx.state === 'suspended'){
       const startOnInteract = () => {
@@ -874,6 +861,58 @@ async function onTimbreChange(){
       startPlay();
     }
   }
+
+  // 3秒超时：古钢琴未加载完成则回退合成钢琴
+  setTimeout(() => {
+    if(!defaultTimbreReady){
+      defaultTimbreTimeout = true;
+      SoundfontLoader.current = '__synth__';
+      if(hint) hint.textContent = '古钢琴音色加载超时，回退合成钢琴';
+      // 弹出提示
+      showToast('古钢琴音色加载失败，回退为合成钢琴，现在开始播放');
+      if(midiBuf) tryAutoPlay();
+    }
+  }, 3000);
+
+  // 1. 优先加载古钢琴（默认音色），预解码后自动播放
+  SoundfontLoader.load('clavinet', (p, msg) => {
+    if(hint && !defaultTimbreTimeout) hint.textContent = msg + ' ' + Math.round(p * 100) + '%';
+  }).then(async () => {
+    if(defaultTimbreTimeout) return; // 已超时回退，不再切换
+    defaultTimbreReady = true;
+    if(hint) hint.textContent = '当前音色：古钢琴 ✓ 预解码中…';
+    await SoundfontLoader.predecodeAll();
+    if(hint) hint.textContent = '当前音色：古钢琴 ✓ 就绪';
+    if(midiBuf) tryAutoPlay();
+    // 后台预加载另外两个常用音色（不阻塞播放）
+    let loadedCount = 0;
+    for(const name of PRELOAD_TIMBRES){
+      try{
+        await SoundfontLoader.load(name, null);
+        loadedCount++;
+        if(hint && !defaultTimbreTimeout) hint.textContent = '当前音色：古钢琴 ✓ 已缓存' + loadedCount + '/' + PRELOAD_TIMBRES.length + '个常用音色';
+      }catch(e){}
+    }
+    if(hint && !defaultTimbreTimeout) hint.textContent = '当前音色：古钢琴 ✓ 常用音色已缓存';
+  }).catch(e => {
+    if(defaultTimbreTimeout) return;
+    defaultTimbreTimeout = true;
+    if(hint) hint.textContent = '音色加载失败，使用合成钢琴';
+    SoundfontLoader.current = '__synth__';
+    showToast('古钢琴音色加载失败，回退为合成钢琴，现在开始播放');
+    if(midiBuf) tryAutoPlay();
+  });
+  // 2. 优先加载MIDI，解析后立即启用按钮
+  AssetCache.fetch('midi/Rush E3.mid').then(r => {
+    if(!r.ok) throw new Error('MIDI加载失败');
+    return r.arrayBuffer();
+  }).then(buf => {
+    midiBuf = buf;
+    parseAndPlayMidi(buf, 'Rush E3.mid');
+    tryAutoPlay();
+  }).catch(e => {
+    if(hint) hint.textContent = 'MIDI加载失败：' + e.message;
+  });
 })();
 
 // 加载谱子列表
