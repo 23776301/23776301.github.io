@@ -328,18 +328,25 @@ function _openDebugDB() {
 }
 
 // 保存日志到IndexedDB
+// 节流：普通log最多每2秒落盘一次，避免高频调试输出反过来拖慢主线程/撑爆磁盘
+let _lastSaveTime = 0;
 function _saveDebugLog(msg, type) {
   if(!_debugDB) return;
+  const now = Date.now();
+  if(type === 'log' && now - _lastSaveTime < 2000) return;
+  _lastSaveTime = now;
   try {
     const tx = _debugDB.transaction(DEBUG_STORE, 'readwrite');
     const store = tx.objectStore(DEBUG_STORE);
-    store.add({msg, type, time: Date.now()});
+    store.add({msg, type, time: now});
   } catch(e) {}
 }
 
 // 从IndexedDB加载历史日志
 function _loadDebugLogs() {
   if(!_debugDB) return;
+  if(!_debugContentEl) _debugContentEl = document.getElementById('debugTerminalContent');
+  if(!_debugContentEl) return;
   const tx = _debugDB.transaction(DEBUG_STORE, 'readonly');
   const store = tx.objectStore(DEBUG_STORE);
   const req = store.getAll();
@@ -355,12 +362,22 @@ function _loadDebugLogs() {
         line.textContent = '[' + time + '] ' + log.msg;
         _debugContentEl.appendChild(line);
       });
+      while(_debugContentEl.childElementCount > 300){
+        _debugContentEl.removeChild(_debugContentEl.firstChild);
+      }
       _debugContentEl.scrollTop = _debugContentEl.scrollHeight;
     }
   };
 }
 
-_openDebugDB().then(() => _loadDebugLogs());
+_openDebugDB().then(() => {
+  // 调试终端DOM在脚本之后才存在，轮询等待
+  const tryLoad = () => {
+    if(document.getElementById('debugTerminalContent')) _loadDebugLogs();
+    else setTimeout(tryLoad, 200);
+  };
+  tryLoad();
+});
 
 function _appendDebug(msg, type) {
   if(!_debugContentEl) {
@@ -374,6 +391,10 @@ function _appendDebug(msg, type) {
   line.textContent = '[' + time + '] ' + msg;
   if(_debugContentEl) {
     _debugContentEl.appendChild(line);
+    // 限制DOM行数，防止调试输出本身造成内存/渲染压力
+    while(_debugContentEl.childElementCount > 300){
+      _debugContentEl.removeChild(_debugContentEl.firstChild);
+    }
     _debugContentEl.scrollTop = _debugContentEl.scrollHeight;
   }
   _saveDebugLog(msg, type);
@@ -419,18 +440,199 @@ function clearDebugTerminal() {
  * ========================================================== */
 let audioCtx = null;
 let masterGain = null;
+let outputAnalyser = null;
 
 function initAudio(){
   if(audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = audioCtx.createGain();
   masterGain.gain.value = 0.7;
-  masterGain.connect(audioCtx.destination);
+  // 在 master 与 destination 之间插一个 Analyser，用于探测"实际输出是否静音"
+  outputAnalyser = audioCtx.createAnalyser();
+  outputAnalyser.fftSize = 2048;
+  masterGain.connect(outputAnalyser);
+  outputAnalyser.connect(audioCtx.destination);
   // 监听AudioContext状态变化
   audioCtx.addEventListener('statechange', () => {
     console.warn('[AudioDebug] AudioContext状态变化:', audioCtx.state, '时间:', audioCtx.currentTime.toFixed(2));
   });
+  console.warn('[AudioDebug] AudioContext已创建 sampleRate=' + audioCtx.sampleRate +
+    ' baseLatency=' + (audioCtx.baseLatency != null ? (audioCtx.baseLatency * 1000).toFixed(1) + 'ms' : 'N/A') +
+    ' outputLatency=' + (audioCtx.outputLatency != null ? (audioCtx.outputLatency * 1000).toFixed(1) + 'ms' : 'N/A') +
+    ' state=' + audioCtx.state);
+  AudioDebugMonitor.init();
 }
+
+/* ============================================================
+ * 1.5 性能诊断监控（重点排查：音频线程过载 / 节点泄漏 / GC / 主线程长任务）
+ * ========================================================== */
+const AudioDebugMonitor = {
+  inited: false,
+  lastReport: 0,
+  frames: 0,          // 本次统计窗口内 playLoop 帧数
+  frameMsSum: 0,
+  maxFrameMs: 0,
+  notesTriggered: 0,
+  maxNotesFrame: 0,
+  lastFrameAudioTime: 0,
+  longTasks: 0,
+  audioStalls: 0,
+  lastAudioTime: 0,
+  lastWall: 0,
+  lastHeap: null,
+  rc: null,
+  rcAvg: 0,
+  rcPeak: 0,
+  rcUnderrun: 0,
+  rmsLast: 0,
+  rmsMinWindow: 1,
+  lastLoudTime: 0,
+  _rmsBuf: null,
+  lastLiveNodes: null,
+  liveGrowthReports: 0,
+
+  init(){
+    if(this.inited) return;
+    this.inited = true;
+    this.lastAudioTime = audioCtx ? audioCtx.currentTime : 0;
+    this.lastWall = performance.now();
+
+    // AudioRenderCapacity：直接反映音频渲染线程负载，是判断"UI不卡但声音卡"的关键指标
+    try{
+      if(audioCtx && audioCtx.renderCapacity){
+        this.rc = audioCtx.renderCapacity;
+        this.rc.onupdate = (e) => {
+          this.rcAvg = e.averageLoad;
+          this.rcPeak = Math.max(this.rcPeak, e.peakLoad);
+          this.rcUnderrun = Math.max(this.rcUnderrun, e.underrunRatio);
+          if(e.peakLoad > 0.9 || e.underrunRatio > 0.02){
+            console.warn('[AudioDebug] 音频渲染线程过载! avg=' + e.averageLoad.toFixed(3) +
+              ' peak=' + e.peakLoad.toFixed(3) + ' underrunRatio=' + e.underrunRatio.toFixed(4));
+          }
+        };
+        this.rc.start({updateInterval: 1});
+        console.warn('[AudioDebug] renderCapacity 已启用');
+      } else {
+        console.warn('[AudioDebug] 当前浏览器不支持 renderCapacity（建议Chrome 116+）');
+      }
+    }catch(e){ console.warn('[AudioDebug] renderCapacity 启动失败:', e.message || e); }
+
+    // 主线程长任务监控（>50ms），判断GC/解析是否阻塞主线程
+    try{
+      if(window.PerformanceObserver){
+        new PerformanceObserver((list) => {
+          for(const entry of list.getEntries()){
+            this.longTasks++;
+            if(entry.duration > 100){
+              console.warn('[AudioDebug] 主线程长任务 ' + entry.duration.toFixed(0) + 'ms');
+            }
+          }
+        }).observe({entryTypes: ['longtask']});
+      }
+    }catch(e){}
+  },
+
+  // 每帧调用：记录帧耗时与触发音符数
+  frame(ms, notes){
+    this.frames++;
+    this.frameMsSum += ms;
+    if(ms > this.maxFrameMs) this.maxFrameMs = ms;
+    this.notesTriggered += notes;
+    if(notes > this.maxNotesFrame) this.maxNotesFrame = notes;
+  },
+
+  // 采样实际输出音量（RMS），用于探测"界面在跑但没声音"
+  sampleRms(){
+    if(!outputAnalyser) return;
+    const buf = this._rmsBuf || (this._rmsBuf = new Float32Array(outputAnalyser.fftSize));
+    outputAnalyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for(let i = 0; i < buf.length; i++){ const v = buf[i]; sum += v * v; }
+    const rms = Math.sqrt(sum / buf.length);
+    this.rmsLast = rms;
+    if(rms < this.rmsMinWindow) this.rmsMinWindow = rms;
+    if(rms > 0.001) this.lastLoudTime = performance.now();
+  },
+
+  // 每秒汇总一次
+  report(){
+    if(typeof SoundfontLoader === 'undefined') return;
+    const now = performance.now();
+    if(now - this.lastReport < 1000) return;
+    const winSec = (now - this.lastReport) / 1000;
+    this.lastReport = now;
+
+    const at = audioCtx ? audioCtx.currentTime : 0;
+    const wallDelta = now - this.lastWall;
+    const audioDeltaMs = (at - this.lastAudioTime) * 1000;
+    // 音频时钟停摆检测：真实时间在走，但 audioCtx.currentTime 几乎不前进
+    if(wallDelta > 1200 && audioDeltaMs < wallDelta * 0.3){
+      this.audioStalls++;
+      console.warn('[AudioDebug] 音频时钟疑似停摆! wall+' + wallDelta.toFixed(0) +
+        'ms 但 audioTime+' + audioDeltaMs.toFixed(0) + 'ms state=' + (audioCtx ? audioCtx.state : 'null'));
+    }
+    this.lastWall = now;
+    this.lastAudioTime = at;
+
+    const d = SoundfontLoader.debug;
+    const liveNodes = d.srcCreated - d.onendedFired;
+    const activeKeys = SoundfontLoader.activeSources.filter(s => s !== null).length;
+    const heap = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) : 'N/A';
+    let heapDelta = 'N/A';
+    if(performance.memory){
+      if(this.lastHeap != null) heapDelta = ((performance.memory.usedJSHeapSize - this.lastHeap) / 1048576).toFixed(1);
+      this.lastHeap = performance.memory.usedJSHeapSize;
+    }
+    const rcStr = this.rc ? ('rcAvg=' + this.rcAvg.toFixed(3) + ' rcPeak=' + this.rcPeak.toFixed(3) + ' rcUnder=' + this.rcUnderrun.toFixed(4)) : 'rc=N/A';
+
+    // 输出静音探测：正在播放且本窗口触发过音符，但实际输出持续为0
+    const playing = (typeof isPlaying !== 'undefined') && isPlaying;
+    const silentSec = this.lastLoudTime ? (now - this.lastLoudTime) / 1000 : 0;
+    if(playing && this.notesTriggered > 0 && silentSec > 1.5){
+      console.warn('[AudioDebug] ★输出静音 ' + silentSec.toFixed(1) + 's 但仍在触发音符! rms=' +
+        this.rmsLast.toFixed(6) + ' minRms=' + this.rmsMinWindow.toFixed(6) +
+        ' state=' + (audioCtx ? audioCtx.state : 'null') +
+        ' liveNodes=' + liveNodes + ' activeKeys=' + activeKeys +
+        ' created=' + d.srcCreated + ' ended=' + d.onendedFired);
+    }
+
+    console.log('[AudioDebug] [1s] fps=' + (this.frames / winSec).toFixed(0) +
+      ' schedMs(avg/max)=' + (this.frames ? (this.frameMsSum / this.frames).toFixed(1) : '0') + '/' + this.maxFrameMs.toFixed(1) +
+      ' notes/s=' + this.notesTriggered + ' maxNotesFrame=' + this.maxNotesFrame +
+      ' calls=' + d.playNoteCalls + ' ignored=' + d.playNoteIgnored + ' miss=' + d.bufferMiss + ' synth=' + d.synthCalls +
+      ' heap=' + heap + 'MB(Δ' + heapDelta + ')' +
+      ' nodes(created/ended/live)=' + d.srcCreated + '/' + d.onendedFired + '/' + liveNodes +
+      ' peakLive=' + d.peakLive +
+      ' synthVoices=' + SoundfontLoader.synthVoices.length +
+      ' activeKeys=' + activeKeys +
+      ' pendingDisconnect=' + d.pendingDisconnect +
+      ' rms=' + this.rmsLast.toFixed(5) + ' minRms=' + this.rmsMinWindow.toFixed(5) + ' silent=' + silentSec.toFixed(1) + 's' +
+      ' longTasks=' + this.longTasks + ' audioStalls=' + this.audioStalls +
+      ' state=' + (audioCtx ? audioCtx.state : 'null') + ' ctxTime=' + at.toFixed(1) +
+      ' ' + rcStr);
+
+    if(liveNodes > d.peakLive) d.peakLive = liveNodes;
+    // 存活节点持续增长 = 泄漏信号（onended 未触发 / disconnect 未执行）
+    if(this.lastLiveNodes != null && liveNodes > this.lastLiveNodes + 50){
+      this.liveGrowthReports++;
+      if(this.liveGrowthReports >= 3){
+        console.warn('[AudioDebug] 存活节点持续增长! live=' + liveNodes +
+          '（疑似泄漏：onended未触发或disconnect未执行）');
+        this.liveGrowthReports = 0;
+      }
+    } else {
+      this.liveGrowthReports = 0;
+    }
+    this.lastLiveNodes = liveNodes;
+    // 窗口统计清零
+    this.frames = 0; this.frameMsSum = 0; this.maxFrameMs = 0;
+    this.notesTriggered = 0; this.maxNotesFrame = 0;
+    this.rmsMinWindow = 1;
+  }
+};
+setInterval(() => AudioDebugMonitor.report(), 1000);
+setInterval(() => AudioDebugMonitor.sampleRms(), 200);
+
 
 /* ============================================================
  * 2. 音色加载器（Soundfont + Cache API）
@@ -464,6 +666,7 @@ const SoundfontLoader = {
   loading: null,
   noteToMidi: {},
   activeSources: new Array(109).fill(null),
+  synthVoices: [], // 合成钢琴分支的振荡器，登记以便 stopAll 能停掉
   // ===== 调试统计 =====
   debug: {
     playNoteCalls: 0,
@@ -474,6 +677,10 @@ const SoundfontLoader = {
     errors: 0,
     lastReportTime: 0,
     lastState: 'running',
+    peakLive: 0,          // 同时存活节点数峰值（音频线程过载关键指标）
+    pendingDisconnect: 0, // 等待setTimeout断开的旧节点数
+    bufferMiss: 0,        // 音色buffer未就绪导致未发声的次数
+    synthCalls: 0,        // 回退合成钢琴次数
   },
   timbreGain: { 'acoustic_grand_piano': 10.0, 'clavinet': 5.0 }, // 硬编码音色增益：三角钢琴1000%, 古钢琴500%
   lastTriggerTime: new Array(109).fill(0),
@@ -610,6 +817,15 @@ const SoundfontLoader = {
     }
     this.debug.srcStopped += stopped;
     if(stopped > 0) console.log('[AudioDebug] stopAll停止了', stopped, '个节点，时间:', t.toFixed(2));
+    // 合成钢琴分支的振荡器也必须停掉
+    if(this.synthVoices.length){
+      const n = this.synthVoices.length;
+      for(const v of this.synthVoices){
+        try{ v.oscs.forEach(o => o.stop(t + 0.02)); }catch(e){}
+      }
+      this.synthVoices.length = 0;
+      console.log('[AudioDebug] stopAll停止了', n, '个合成钢琴voice');
+    }
     this.lastTriggerTime.fill(0);
   },
 
@@ -665,6 +881,7 @@ const SoundfontLoader = {
     if(this.current !== '__synth__'){
       const entry = this.loaded[this.current];
       const buffer = entry ? entry.buffers[midi] : null;
+      if(!buffer) this.debug.bufferMiss++;
       // 调试：首次buffer为null时打印详细信息
       if(!buffer && !this._debugBufferNullLogged){
         this._debugBufferNullLogged = true;
@@ -684,7 +901,11 @@ const SoundfontLoader = {
             prev.src.stop(t + 0.02);
             // 延迟disconnect，等淡出完成
             const oldSrc = prev.src, oldGain = prev.gain;
-            setTimeout(() => { try{ oldSrc.disconnect(); oldGain.disconnect(); }catch(e){} }, 50);
+            this.debug.pendingDisconnect++;
+            setTimeout(() => {
+              try{ oldSrc.disconnect(); oldGain.disconnect(); }catch(e){}
+              this.debug.pendingDisconnect--;
+            }, 50);
           }catch(e){}
         }
         let src, g;
@@ -730,19 +951,30 @@ const SoundfontLoader = {
     this.debug.synthCalls = (this.debug.synthCalls || 0) + 1;
     const f = 440 * Math.pow(2, (midi - 69) / 12);
     const t0 = audioCtx.currentTime;
+    const synthDur = Math.max(duration, this.MIN_DURATION);
     const env = audioCtx.createGain();
     env.gain.setValueAtTime(0, t0);
     env.gain.linearRampToValueAtTime(0.4 * velocity, t0 + 0.008);
-    env.gain.exponentialRampToValueAtTime(0.0008, t0 + duration);
+    env.gain.exponentialRampToValueAtTime(0.0008, t0 + synthDur);
     env.connect(masterGain);
     const specs = [[1, 0.9, "triangle"], [2, 0.35, "sine"], [3, 0.18, "sine"]];
+    const oscs = [];
     for(const [mult, amp, wf] of specs){
       const o = audioCtx.createOscillator();
       o.type = wf; o.frequency.value = f * mult;
       const g = audioCtx.createGain(); g.gain.value = amp;
       o.connect(g); g.connect(env);
-      o.start(t0); o.stop(t0 + duration + 0.2);
+      o.start(t0); o.stop(t0 + synthDur + 0.2);
+      oscs.push(o);
     }
+    // 登记 voice，并在结束时清理，避免振荡器累积
+    const voice = { oscs, env };
+    this.synthVoices.push(voice);
+    oscs[oscs.length - 1].onended = () => {
+      try{ env.disconnect(); oscs.forEach(o => o.disconnect()); }catch(e){}
+      const idx = this.synthVoices.indexOf(voice);
+      if(idx >= 0) this.synthVoices.splice(idx, 1);
+    };
   }
 };
 SoundfontLoader.init();
@@ -1149,6 +1381,8 @@ function togglePlay(){
 
 function startPlay(){
   if(!allNotes.length) return;
+  // 防止重复启动导致多个 rAF 循环同时推进 nextNoteIndex
+  if(rafId) cancelAnimationFrame(rafId);
   isPlaying = true;
   playStartTime = audioCtx.currentTime - currentTime / playSpeed;
   nextNoteIndex = allNotes.findIndex(n => n.time >= currentTime);
@@ -1160,6 +1394,9 @@ function startPlay(){
 function pausePlay(){
   isPlaying = false;
   if(rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  // 已经排程到音频线程的音符不会自己停，必须显式停止
+  SoundfontLoader.stopAll();
   currentTime = (audioCtx.currentTime - playStartTime) * playSpeed;
   document.getElementById('playBtn').textContent = '▶ 播放';
 }
@@ -1167,6 +1404,9 @@ function pausePlay(){
 function stopPlay(){
   isPlaying = false;
   if(rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  // 停止所有已排程/正在播放的音符
+  SoundfontLoader.stopAll();
   currentTime = 0;
   nextNoteIndex = 0;
   activeNotes = [];
@@ -1405,19 +1645,35 @@ function lowerBound(arr, target){
 
 function playLoop(){
   if(!isPlaying) return;
+  const _frameT0 = performance.now();
   const now = audioCtx.currentTime;
+
+  // 帧间隔跳变检测：主线程被阻塞（GC/长任务）会导致rAF延迟，
+  // 随后一帧内堆积触发大量音符，瞬间灌爆音频线程
+  if(AudioDebugMonitor.lastFrameAudioTime){
+    const jump = now - AudioDebugMonitor.lastFrameAudioTime;
+    if(jump > 0.08){
+      console.warn('[AudioDebug] 帧间隔跳变 ' + (jump * 1000).toFixed(0) +
+        'ms（主线程阻塞?） 本帧将追赶音符');
+    }
+  }
+  AudioDebugMonitor.lastFrameAudioTime = now;
+
   currentTime = (now - playStartTime) * playSpeed;
 
   // 触发到时间的音符（同一帧同音合并，最多88个同时触发）
   const triggeredThisFrame = new Set();
+  let _trigCount = 0;
   while(nextNoteIndex < allNotes.length && allNotes[nextNoteIndex].time <= currentTime){
     const note = allNotes[nextNoteIndex];
     if(!triggeredThisFrame.has(note.midi)){
       triggeredThisFrame.add(note.midi);
+      _trigCount++;
       SoundfontLoader.playNote(note.midi, note.velocity, note.duration / playSpeed);
     }
     nextNoteIndex++;
   }
+  AudioDebugMonitor.frame(performance.now() - _frameT0, _trigCount);
 
   // 计算可见音符范围：二分查找定位区间，不slice（避免大数组分配）
   const fallDuration = 2.0 / fallSpeedMultiplier;
