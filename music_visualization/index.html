@@ -1163,49 +1163,180 @@ function updateDualRangeFill(dr){ if(!dr) return;
 }
 
 /* ============================================================
-   画布交互
+   画布交互：移动 / 四角自由缩放 / 两指等比缩放
    ============================================================ */
-let _drag=null;
+let _drag=null;                 // { mode:'move'|'resize', el, ... }
+let _pinch=null;                // { el, startDist, startW, startH }
+const _pointers=new Map();      // pointerId -> 画布像素坐标
+
 function canvasPos(e){
   const rect=canvas.getBoundingClientRect();
   return { x:(e.clientX-rect.left)/rect.width*canvas.width, y:(e.clientY-rect.top)/rect.height*canvas.height };
 }
-canvas.addEventListener('pointerdown',e=>{
-  const {x:mx,y:my}=canvasPos(e);
-  let hit=null;
-  for(let i=CFG.elements.length-1;i>=0;i--){
-    const el=CFG.elements[i]; const p=el.params;
-    const ew=canvas.width*p.w/100, eh=canvas.height*p.h/100;
-    const ex=canvas.width*p.x/100-ew/2, ey=canvas.height*p.y/100-eh/2;
-    if(mx>=ex&&mx<=ex+ew&&my>=ey&&my<=ey+eh){ hit=el; break; }
+// 画布像素坐标 -> 元素世界坐标（逆缩放变换，保证缩放后命中/拖动仍准确）
+function worldPoint(mx,my){
+  const z=CFG.canvas.zoom, cx=canvas.width/2, cy=canvas.height/2;
+  return { x: cx+(mx-cx)/z, y: cy+(my-cy)/z };
+}
+function worldRect(p){
+  const ew=canvas.width*p.w/100, eh=canvas.height*p.h/100;
+  return { x:canvas.width*p.x/100-ew/2, y:canvas.height*p.y/100-eh/2, w:ew, h:eh };
+}
+// 元素在画布像素坐标下的矩形（用于命中检测，已考虑缩放）
+function screenRect(p){
+  const r=worldRect(p), z=CFG.canvas.zoom, cx=canvas.width/2, cy=canvas.height/2;
+  const x1=cx+(r.x-cx)*z, y1=cy+(r.y-cy)*z;
+  const x2=cx+(r.x+r.w-cx)*z, y2=cy+(r.y+r.h-cy)*z;
+  return { x:Math.min(x1,x2), y:Math.min(y1,y2), w:Math.abs(x2-x1), h:Math.abs(y2-y1) };
+}
+const HANDLE_CURSOR={ nw:'nwse-resize', se:'nwse-resize', ne:'nesw-resize', sw:'nesw-resize' };
+function getHandleAt(wx,wy,p){
+  const r=worldRect(p);
+  const hit=16/Math.max(0.05, CFG.canvas.zoom);
+  const corners={ nw:[r.x,r.y], ne:[r.x+r.w,r.y], sw:[r.x,r.y+r.h], se:[r.x+r.w,r.y+r.h] };
+  for(const k in corners){
+    const [hx,hy]=corners[k];
+    if(Math.abs(wx-hx)<=hit && Math.abs(wy-hy)<=hit) return k;
   }
+  return null;
+}
+function selectElement(el){
+  CFG.selectedId=el.id;
+  document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
+  document.querySelector('.ibtn[data-tool="props"]')?.classList.add('active');
+  _lastTool='props';
+  document.getElementById('mobilePreview').classList.remove('active');
+  renderProps();
+}
+function clampNum(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+// 拖动/缩放期间轻量同步属性面板数值控件，避免整面板重建
+function syncField(field, value, digits){
+  const input=document.getElementById('propsBody').querySelector('[data-field="'+field+'"]');
+  if(!input) return;
+  input.value=value;
+  const v=input.parentElement.querySelector('.val');
+  if(v) v.textContent=Number(value).toFixed(digits);
+}
+function hitElementAt(mx,my){
+  for(let i=CFG.elements.length-1;i>=0;i--){
+    const r=screenRect(CFG.elements[i].params);
+    if(mx>=r.x&&mx<=r.x+r.w&&my>=r.y&&my<=r.y+r.h) return CFG.elements[i];
+  }
+  return null;
+}
+
+canvas.addEventListener('pointerdown',e=>{
+  const pt=canvasPos(e);
+  _pointers.set(e.pointerId, pt);
+  // 两指：等比缩放（长宽同比）
+  if(_pointers.size===2){
+    const pts=[..._pointers.values()];
+    const mx=(pts[0].x+pts[1].x)/2, my=(pts[0].y+pts[1].y)/2;
+    const el=getSelected() || hitElementAt(mx,my);
+    if(el){
+      selectElement(el);
+      _pinch={ el, startDist:Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y) || 1,
+               startW:el.params.w, startH:el.params.h };
+    }
+    _drag=null;
+    e.preventDefault();
+    return;
+  }
+  if(_pointers.size>2) return;
+
+  const wpt=worldPoint(pt.x,pt.y);
+  const sel=getSelected();
+  if(sel){
+    const h=getHandleAt(wpt.x,wpt.y,sel.params);
+    if(h){
+      _drag={ mode:'resize', el:sel, handle:h, rect:worldRect(sel.params) };
+      try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
+      e.preventDefault();
+      return;
+    }
+  }
+  const hit=hitElementAt(pt.x,pt.y);
   if(hit){
-    CFG.selectedId=hit.id; renderProps();
-    document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
-    document.querySelector('.ibtn[data-tool="props"]')?.classList.add('active');
-    _lastTool='props';
-    document.getElementById('mobilePreview').classList.remove('active');
-    _drag={el:hit,offX:mx-canvas.width*hit.params.x/100,offY:my-canvas.height*hit.params.y/100};
+    selectElement(hit);
+    _drag={ mode:'move', el:hit,
+            offX:wpt.x-canvas.width*hit.params.x/100,
+            offY:wpt.y-canvas.height*hit.params.y/100 };
     try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
     e.preventDefault();
-  } else { CFG.selectedId=null; renderProps(); }
+  } else {
+    CFG.selectedId=null; renderProps();
+  }
 });
+
 canvas.addEventListener('pointermove',e=>{
-  if(!_drag) return;
-  const {x:mx,y:my}=canvasPos(e);
-  const p=_drag.el.params;
-  p.x=(mx-_drag.offX)/canvas.width*100;
-  p.y=(my-_drag.offY)/canvas.height*100;
-  // 拖动期间只同步 X/Y 控件，避免每帧重建整个属性面板
-  const body=document.getElementById('propsBody');
-  const xr=body.querySelector('[data-field="x"]'), yr=body.querySelector('[data-field="y"]');
-  if(xr){ xr.value=p.x; const v=xr.parentElement.querySelector('.val'); if(v) v.textContent=p.x.toFixed(1); }
-  if(yr){ yr.value=p.y; const v=yr.parentElement.querySelector('.val'); if(v) v.textContent=p.y.toFixed(1); }
-  e.preventDefault();
+  if(_pointers.has(e.pointerId)) _pointers.set(e.pointerId, canvasPos(e));
+  const pt=canvasPos(e);
+
+  // 两指等比缩放
+  if(_pinch && _pointers.size>=2){
+    const pts=[..._pointers.values()];
+    const d=Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y) || 1;
+    const f=d/_pinch.startDist;
+    const p=_pinch.el.params;
+    p.w=clampNum(_pinch.startW*f, 2, 100);
+    p.h=clampNum(_pinch.startH*f, 2, 100);
+    syncField('w', p.w, 1); syncField('h', p.h, 1);
+    e.preventDefault();
+    return;
+  }
+
+  // 四角自由（非等比）缩放
+  if(_drag && _drag.mode==='resize'){
+    const wpt=worldPoint(pt.x,pt.y);
+    const { handle, rect }=_drag;
+    let left=rect.x, top=rect.y, right=rect.x+rect.w, bottom=rect.y+rect.h;
+    const minW=canvas.width*0.02, minH=canvas.height*0.02;
+    if(handle.indexOf('w')>=0) left=clampNum(left, right-canvas.width, right-minW);
+    if(handle.indexOf('e')>=0) right=clampNum(right, left+minW, left+canvas.width);
+    if(handle.indexOf('n')>=0) top=clampNum(top, bottom-canvas.height, bottom-minH);
+    if(handle.indexOf('s')>=0) bottom=clampNum(bottom, top+minH, top+canvas.height);
+    const p=_drag.el.params;
+    p.w=(right-left)/canvas.width*100;
+    p.h=(bottom-top)/canvas.height*100;
+    p.x=((left+right)/2)/canvas.width*100;
+    p.y=((top+bottom)/2)/canvas.height*100;
+    syncField('w', p.w, 1); syncField('h', p.h, 1);
+    syncField('x', p.x, 1); syncField('y', p.y, 1);
+    e.preventDefault();
+    return;
+  }
+
+  // 移动
+  if(_drag && _drag.mode==='move'){
+    const wpt=worldPoint(pt.x,pt.y);
+    const p=_drag.el.params;
+    p.x=(wpt.x-_drag.offX)/canvas.width*100;
+    p.y=(wpt.y-_drag.offY)/canvas.height*100;
+    syncField('x', p.x, 1); syncField('y', p.y, 1);
+    e.preventDefault();
+    return;
+  }
+
+  // 悬停：命中四角显示缩放光标，命中元素显示移动光标
+  const wpt=worldPoint(pt.x,pt.y);
+  const sel=getSelected();
+  const h=sel?getHandleAt(wpt.x,wpt.y,sel.params):null;
+  if(h) canvas.style.cursor=HANDLE_CURSOR[h];
+  else if(hitElementAt(pt.x,pt.y)) canvas.style.cursor='move';
+  else canvas.style.cursor='default';
 });
-function endDrag(){ if(_drag){ _drag=null; scheduleSave(); renderProps(); } }
-canvas.addEventListener('pointerup',endDrag);
-canvas.addEventListener('pointercancel',endDrag);
+
+function onPointerEnd(e){
+  _pointers.delete(e.pointerId);
+  let changed=false;
+  if(_pinch && _pointers.size<2){ _pinch=null; changed=true; }
+  if(_drag && _pointers.size===0){ _drag=null; changed=true; }
+  if(changed){ scheduleSave(); renderProps(); }
+  if(_pointers.size===0) canvas.style.cursor='default';
+}
+canvas.addEventListener('pointerup',onPointerEnd);
+canvas.addEventListener('pointercancel',onPointerEnd);
+canvas.addEventListener('pointerleave',()=>{ if(!_drag&&!_pinch) canvas.style.cursor='default'; });
 
 /* ============================================================
    画布比例 & 缩放
