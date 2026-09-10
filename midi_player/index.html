@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIDI 播放器 · 88键可视化</title>
+<style>
+:root{
+  --bg:#0d0d14; --panel:#16161f; --border:#2a2a3a; --text:#e8e8f0;
+  --dim:#8a8aa0; --accent:#8b5cf6; --accent2:#6366f1; --ok:#2fbf6f; --warn:#e8b64c;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh;overflow-x:hidden}
+.container{max-width:1200px;margin:0 auto;padding:16px}
+h1{font-size:22px;font-weight:700;margin-bottom:4px}
+.subtitle{color:var(--dim);font-size:13px;margin-bottom:16px}
+.layout{display:grid;grid-template-columns:340px 1fr;gap:16px}
+@media(max-width:800px){
+  .layout{grid-template-columns:1fr}
+  .container{padding:0}
+  h1,.subtitle{display:none}
+}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+.panel h2{font-size:14px;font-weight:600;margin-bottom:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+
+/* 菜单按钮（左侧边缘，可拖拽，自动淡出） */
+.menu-btn{
+  display:none;
+  position:fixed;left:0;top:66.67%;transform:translateY(-50%);
+  z-index:2001;
+  width:44px;height:44px;
+  border-radius:50%;
+  background:rgba(22,22,31,.85);border:1px solid var(--border);
+  color:var(--text);font-size:18px;cursor:grab;
+  align-items:center;justify-content:center;
+  backdrop-filter:blur(8px);
+  touch-action:none;user-select:none;
+  transition:opacity .4s ease, transform .4s ease, left .3s ease;
+  opacity:1;
+}
+.menu-btn.faded{opacity:0.5}
+.menu-btn:active{cursor:grabbing}
+.menu-btn.hidden-btn{display:none !important}
+@media(max-width:800px){.menu-btn{display:flex}}
+
+/* 移动端抽屉面板 */
+@media(max-width:800px){
+  .control-panel{
+    position:fixed;top:0;left:0;z-index:1000;
+    width:100vw;max-height:66.67vh;
+    overflow-y:auto;
+    border-radius:0 0 16px 16px;
+    transform:translateX(-105%);
+    transition:transform .25s ease;
+    box-shadow:4px 0 20px rgba(0,0,0,.5);
+  }
+  .control-panel.open{transform:translateX(0)}
+  /* 右侧容器固定全屏 */
+  .layout > div:last-child{
+    position:fixed;inset:0;display:flex;flex-direction:column;
+  }
+  .top-bar{flex-shrink:0}
+  .visual-panel{
+    flex:1;border-radius:0;border:none;padding:0;
+    min-height:0;position:relative;
+  }
+  #visualCanvas{height:100% !important;border-radius:0}
+  .overlay-mask{
+    display:none;position:fixed;inset:0;z-index:999;
+    background:rgba(0,0,0,.4);
+  }
+  .overlay-mask.show{display:block}
+}
+
+/* 失焦暂停遮罩 */
+.pause-overlay{
+  display:none;position:fixed;inset:0;z-index:2000;
+  background:rgba(0,0,0,.75);backdrop-filter:blur(4px);
+  flex-direction:column;align-items:center;justify-content:center;gap:20px;
+}
+.pause-overlay.show{display:flex}
+.pause-overlay .pause-title{font-size:20px;font-weight:600;color:var(--text)}
+.pause-overlay .pause-desc{font-size:14px;color:var(--dim)}
+.pause-overlay .pause-btn{
+  padding:14px 36px;font-size:16px;font-weight:600;
+  background:var(--accent);border:none;border-radius:10px;color:#fff;
+  cursor:pointer;transition:transform .1s;
+}
+.pause-overlay .pause-btn:hover{transform:scale(1.05)}
+.pause-overlay .pause-btn:active{transform:scale(0.98)}
+}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--text);font-size:13px;cursor:pointer;transition:all .15s;min-height:40px}
+.btn:hover{background:rgba(255,255,255,.08)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.primary:hover{background:#7c3aed}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.speed-btn{border-radius:10px !important;border:none !important;background:rgba(124,58,237,.15) !important;color:#c4b5fd !important}
+.speed-btn.active{background:var(--accent) !important;color:#fff !important;font-weight:600}
+.speed-btn:hover{background:rgba(124,58,237,.3) !important}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+
+/* 顶部控制栏（可视化区上方） */
+.top-bar{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:12px;padding:8px 10px;margin-bottom:8px;
+}
+.top-bar-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.top-bar .btn{padding:4px 6px;min-height:28px;font-size:11px;border-radius:10px;border:none;white-space:nowrap;flex-shrink:0}
+.top-bar .top-bar-row:nth-child(2) .btn:nth-child(1),.top-bar .top-bar-row:nth-child(2) .btn:nth-child(2){width:52px;flex:0 0 52px}
+.top-bar select{padding:4px 8px;font-size:12px;border-radius:10px;width:140px;flex:0 0 auto;flex-shrink:0;min-height:28px}
+.top-bar .song-name{font-size:11px;color:var(--dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.top-bar .progress-wrap{margin:4px 0 0}
+.top-bar .progress-bar{height:8px}
+.top-bar .time-row{font-size:11px;margin-top:2px}
+@media(max-width:800px){
+  .top-bar{border-radius:0;border-left:none;border-right:none;border-top:none;margin-bottom:0}
+}
+.row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.row label{font-size:12px;color:var(--dim);min-width:60px}
+.row input[type=range]{flex:1;accent-color:var(--accent);height:8px;border-radius:4px;cursor:pointer}
+.row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.row input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #fff}
+.row input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:4px;background:rgba(255,255,255,.1)}
+.row input[type=range]::-moz-range-track{height:8px;border-radius:4px;background:rgba(255,255,255,.1)}
+.row .val{font-size:12px;color:var(--text);min-width:40px;text-align:right}
+select{flex:1;background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);border-radius:12px;padding:10px 12px;font-size:13px;outline:none;cursor:pointer}
+select:focus{border-color:var(--accent)}
+.hint{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5}
+.progress-wrap{margin:12px 0}
+.progress-bar{height:6px;background:#e5e5e5;border-radius:3px;overflow:hidden;cursor:pointer}
+.progress-fill{height:100%;background:var(--accent);width:0%;transition:width .1s linear}
+.time-row{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:4px}
+#visualCanvas{width:100%;height:500px;background:#0a0a10;border-radius:8px;display:block}
+.file-info{font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6}
+.file-info b{color:var(--text)}
+.timbre-hint{font-size:11px;color:var(--dim);margin-top:4px;min-height:16px}
+</style>
+</head>
+<body>
+<!-- 移动端菜单按钮 -->
+<button class="menu-btn" onclick="toggleMenu()">☰</button>
+<!-- 移动端遮罩 -->
+<div class="overlay-mask" id="overlayMask" onclick="toggleMenu()"></div>
+<!-- 失焦暂停遮罩 -->
+<div class="pause-overlay" id="pauseOverlay">
+  <div class="pause-title">浏览器因失去焦点播放自动暂停</div>
+  <div class="pause-desc">可在菜单中禁用此选项</div>
+  <button class="pause-btn" onclick="resumeFromPause()">▶ 继续播放</button>
+</div>
+<div class="container">
+  <h1>MIDI 播放器</h1>
+  <p class="subtitle">88 键钢琴可视化 · 多音色 · 变速播放</p>
+
+  <div class="layout">
+    <!-- 左侧控制面板（仅设置项） -->
+    <div class="panel control-panel" id="controlPanel">
+      <h2>播放设置</h2>
+      <div class="row">
+        <label>失焦暂停</label>
+        <label style="flex:1;display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="blurPauseToggle" onchange="onBlurPauseToggle()" style="width:20px;height:20px;accent-color:var(--accent);border-radius:6px;cursor:pointer">
+          <span style="font-size:12px;color:var(--dim)">切后台自动暂停</span>
+        </label>
+      </div>
+      <div class="row">
+        <label>音乐倍速</label>
+        <div style="flex:1;display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn speed-btn" data-speed="0.2" onclick="setSpeed(0.2)" style="padding:4px 8px;min-height:28px;font-size:11px">0.2x</button>
+          <button class="btn speed-btn" data-speed="0.5" onclick="setSpeed(0.5)" style="padding:4px 8px;min-height:28px;font-size:11px">0.5x</button>
+          <button class="btn speed-btn active" data-speed="1" onclick="setSpeed(1)" style="padding:4px 8px;min-height:28px;font-size:11px">1x</button>
+          <button class="btn speed-btn" data-speed="1.2" onclick="setSpeed(1.2)" style="padding:4px 8px;min-height:28px;font-size:11px">1.2x</button>
+          <button class="btn speed-btn" data-speed="1.5" onclick="setSpeed(1.5)" style="padding:4px 8px;min-height:28px;font-size:11px">1.5x</button>
+          <button class="btn speed-btn" data-speed="2" onclick="setSpeed(2)" style="padding:4px 8px;min-height:28px;font-size:11px">2x</button>
+        </div>
+      </div>
+      <div class="row">
+        <label>下落流速</label>
+        <input type="range" id="fallSpeedSlider" min="0.2" max="5" step="0.1" value="1" oninput="onFallSpeedChange()">
+        <span class="val" id="fallSpeedVal">1.0x</span>
+      </div>
+      <div class="row">
+        <label>音量</label>
+        <input type="range" id="volSlider" min="0" max="1" step="0.01" value="0.7" oninput="onVolChange()">
+        <span class="val" id="volVal">70%</span>
+      </div>
+
+      <h2 style="margin-top:20px">音色</h2>
+      <div class="row">
+        <select id="timbreSel" onchange="onTimbreChange()">
+          <option value="__synth__">合成钢琴</option>
+          <optgroup label="键盘">
+            <option value="acoustic_grand_piano">三角钢琴</option>
+            <option value="bright_acoustic_piano">亮音钢琴</option>
+            <option value="electric_grand_piano">电三角钢琴</option>
+            <option value="electric_piano_1">电钢琴1</option>
+            <option value="electric_piano_2">电钢琴2</option>
+            <option value="honkytonk_piano">酒吧钢琴</option>
+            <option value="harpsichord">大键琴</option>
+            <option value="clavinet" selected>古钢琴</option>
+          </optgroup>
+          <optgroup label="风琴/打击">
+            <option value="drawbar_organ">拉杆风琴</option>
+            <option value="percussive_organ">打击风琴</option>
+            <option value="rock_organ">摇滚风琴</option>
+            <option value="church_organ">教堂管风琴</option>
+            <option value="celesta">钢片琴</option>
+            <option value="vibraphone">颤音琴</option>
+            <option value="marimba">马林巴</option>
+            <option value="xylophone">木琴</option>
+            <option value="tubular_bells">管钟</option>
+          </optgroup>
+          <optgroup label="吉他/贝斯">
+            <option value="acoustic_guitar_nylon">古典吉他</option>
+            <option value="acoustic_guitar_steel">民谣吉他</option>
+            <option value="electric_guitar_jazz">爵士电吉他</option>
+            <option value="electric_guitar_clean">清音电吉他</option>
+            <option value="overdriven_guitar">过载吉他</option>
+            <option value="distortion_guitar">失真吉他</option>
+            <option value="acoustic_bass">原声贝斯</option>
+            <option value="electric_bass_finger">指弹电贝斯</option>
+            <option value="electric_bass_pick">拨片电贝斯</option>
+            <option value="fretless_bass">无品贝斯</option>
+          </optgroup>
+          <optgroup label="弦乐">
+            <option value="violin">小提琴</option>
+            <option value="viola">中提琴</option>
+            <option value="cello">大提琴</option>
+            <option value="contrabass">低音提琴</option>
+            <option value="pizzicato_strings">拨弦弦乐</option>
+            <option value="orchestral_harp">竖琴</option>
+            <option value="string_ensemble_1">弦乐合奏1</option>
+            <option value="string_ensemble_2">弦乐合奏2</option>
+          </optgroup>
+          <optgroup label="铜管/木管">
+            <option value="trumpet">小号</option>
+            <option value="trombone">长号</option>
+            <option value="french_horn">圆号</option>
+            <option value="tuba">大号</option>
+            <option value="brass_ensemble">铜管合奏</option>
+            <option value="soprano_sax">高音萨克斯</option>
+            <option value="alto_sax">中音萨克斯</option>
+            <option value="tenor_sax">次中音萨克斯</option>
+            <option value="baritone_sax">上低音萨克斯</option>
+            <option value="oboe">双簧管</option>
+            <option value="bassoon">巴松管</option>
+            <option value="clarinet">单簧管</option>
+            <option value="piccolo">短笛</option>
+            <option value="flute">长笛</option>
+            <option value="recorder">竖笛</option>
+            <option value="pan_flute">排箫</option>
+          </optgroup>
+          <optgroup label="合成器">
+            <option value="lead_1_square">方波主音</option>
+            <option value="lead_2_sawtooth">锯齿主音</option>
+            <option value="lead_7_fifths">五度主音</option>
+            <option value="pad_1_new_age">新世纪垫音</option>
+            <option value="pad_2_warm">温暖垫音</option>
+            <option value="pad_4_choir">合唱垫音</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="timbre-hint" id="timbreHint">正在加载音色…</div>
+    </div>
+
+    <!-- 右侧：顶部控制栏 + 可视化 -->
+    <div>
+      <div class="top-bar">
+        <div class="top-bar-row">
+          <button class="btn primary" onclick="document.getElementById('midiFile').click()" style="white-space:nowrap;flex-shrink:0">📁 上传MIDI</button>
+          <input type="file" id="midiFile" accept=".mid,.midi" style="display:none" onchange="onMidiFile(event)">
+          <select id="songSel" onchange="onSongChange(this.value)" style="flex:1">
+            <option value="">加载谱库…</option>
+          </select>
+        </div>
+        <div class="top-bar-row" style="margin-top:4px">
+          <button class="btn primary" id="playBtn" onclick="togglePlay()" disabled style="flex:1">▶ 播放</button>
+          <button class="btn primary" onclick="replayPlay()" disabled style="flex:1">↻ 重播</button>
+          <button class="btn primary" id="loopBtn" onclick="toggleLoop()" disabled style="flex:1">→ 顺序播放</button>
+          <button class="btn" onclick="openManageModal()" style="flex:1">✏️ 管理谱面</button>
+        </div>
+        <div class="progress-wrap">
+          <div class="time-row">
+            <span id="curTime">0:00</span>
+            <span id="totalTime">0:00</span>
+          </div>
+          <div class="progress-bar" id="progressBar" onmousedown="startSeek(event)" ontouchstart="startSeek(event)">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+        </div>
+        <div class="stats-bar" style="font-size:10px;color:var(--dim);margin-top:3px;display:flex;justify-content:space-between">
+          <span><span id="statTracks">轨道：-</span> · <span id="statTotal">音符：-</span></span>
+          <span><span id="statPlayed">已播：-/-</span> · <span id="statPercent">0.00%</span></span>
+        </div>
+        <div id="fileInfo" style="display:none"></div>
+      </div>
+      <div class="panel visual-panel" style="padding:12px">
+        <canvas id="visualCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js"></script>
+<script>
+/* ============================================================
+ * 1. 音频上下文
+ * ========================================================== */
+let audioCtx = null;
+let masterGain = null;
+
+function initAudio(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.7;
+  masterGain.connect(audioCtx.destination);
+}
+
+/* ============================================================
+ * 2. 音色加载器（Soundfont + Cache API）
+ * ========================================================== */
+const SoundfontLoader = {
+  cacheName: 'midi-player-soundfont-cache-v1',
+  cdnBase: 'https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@master/FluidR3_GM/',
+  loaded: {},
+  current: '__synth__',
+  loading: null,
+  noteToMidi: {},
+  activeSources: new Array(109).fill(null),
+  timbreGain: { 'acoustic_grand_piano': 10.0, 'clavinet': 5.0 }, // 硬编码音色增益：三角钢琴1000%, 古钢琴500%
+  lastTriggerTime: new Array(109).fill(0),
+  MIN_TRIGGER_INTERVAL: 0.05, // 同音最小触发间隔50ms（解析时已合并，此为兜底）
+  MIN_DURATION: 0.03, // 最小播放时间30ms
+  activeSources: new Array(109).fill(null),
+  timbreGain: { 'acoustic_grand_piano': 10.0, 'clavinet': 5.0 }, // 硬编码音色增益：三角钢琴1000%, 古钢琴500%
+  lastTriggerTime: new Array(109).fill(0),
+  MIN_TRIGGER_INTERVAL: 0.05, // 同音最小触发间隔50ms（解析时已合并，此为兜底）
+  MIN_DURATION: 0.03, // 最小播放时间30ms // 每个midi音当前活跃的节点
+
+  init(){
+    const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    for(let oct = 0; oct <= 8; oct++){
+      for(let i = 0; i < 12; i++){
+        const midi = oct * 12 + i + 12;
+        if(midi >= 21 && midi <= 108) this.noteToMidi[names[i] + oct] = midi;
+      }
+    }
+  },
+
+  async load(name, onProgress){
+    if(name === '__synth__'){ this.current = '__synth__'; return; }
+    if(this.loaded[name] && this.loaded[name].ready){ this.current = name; return; }
+    if(this.loading) await this.loading;
+    this.loading = this._doLoad(name, onProgress);
+    await this.loading;
+    this.loading = null;
+    this.current = name;
+  },
+
+  async _doLoad(name, onProgress){
+    const url = this.cdnBase + name + '-ogg.js';
+    if(onProgress) onProgress(0, '正在下载音色…');
+    let text = null;
+    try{
+      const cache = await caches.open(this.cacheName);
+      const cached = await cache.match(url);
+      if(cached){ text = await cached.text(); if(onProgress) onProgress(0.5, '从缓存读取音色…'); }
+    }catch(e){}
+    if(!text){
+      const resp = await fetch(url, {mode: 'cors'});
+      if(!resp.ok) throw new Error('下载失败 HTTP ' + resp.status);
+      text = await resp.text();
+      try{ const cache = await caches.open(this.cacheName); await cache.put(url, new Response(text, {headers:{'Content-Type':'application/javascript'}})); }catch(e){}
+      if(onProgress) onProgress(0.5, '下载完成，解析中…');
+    }
+    const MIDI = { Soundfont: {} };
+    const fn = new Function('MIDI', text + '\nreturn MIDI.Soundfont["' + name + '"];');
+    const raw = fn(MIDI);
+    if(!raw) throw new Error('音色数据解析失败');
+    this.loaded[name] = { raw: raw, buffers: {}, ready: true };
+    if(onProgress) onProgress(1, '音色加载完成');
+  },
+
+  async _getBuffer(name, midi){
+    const entry = this.loaded[name];
+    if(!entry) return null;
+    if(entry.buffers[midi]) return entry.buffers[midi];
+    const noteName = this._midiToNote(midi);
+    let dataUri = entry.raw[noteName];
+    if(!dataUri){
+      let bestDist = 999, bestKey = null;
+      for(const k in entry.raw){
+        const m = this.noteToMidi[k];
+        if(m && Math.abs(m - midi) < bestDist){ bestDist = Math.abs(m - midi); bestKey = k; }
+      }
+      if(bestKey) dataUri = entry.raw[bestKey];
+    }
+    if(!dataUri) return null;
+    const base64 = dataUri.split(',')[1];
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for(let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const buffer = await audioCtx.decodeAudioData(bytes.buffer);
+    entry.buffers[midi] = buffer;
+    return buffer;
+  },
+
+  _midiToNote(midi){
+    const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    return names[midi % 12] + Math.floor(midi / 12 - 1);
+  },
+
+  // 预解码当前音色的所有88个音
+  async predecodeAll(){
+    if(this.current === '__synth__') return;
+    // 分批解码，每批8个，避免同时解码88个导致主线程阻塞、音频时间线暂停
+    const batchSize = 8;
+    const midis = [];
+    for(let midi = 21; midi <= 108; midi++) midis.push(midi);
+    for(let i = 0; i < midis.length; i += batchSize){
+      const batch = midis.slice(i, i + batchSize);
+      await Promise.all(batch.map(m => this._getBuffer(this.current, m)));
+    }
+  },
+
+  // 并发预加载所有音色（直接调用_doLoad绕过单加载锁，自动缓存）
+  async preloadAll(onProgress){
+    const sel = document.getElementById('timbreSel');
+    const allNames = [];
+    for(let i = 0; i < sel.options.length; i++){
+      const v = sel.options[i].value;
+      if(v !== '__synth__') allNames.push(v);
+    }
+    // 优先加载的音色
+    const priority = ['clavinet', 'acoustic_grand_piano'];
+    const rest = allNames.filter(n => !priority.includes(n));
+    let done = 0;
+    const total = allNames.length;
+    // 先加载优先音色（串行，确保立即可用）
+    for(const name of priority){
+      if(!this.loaded[name] || !this.loaded[name].ready){
+        try{ await this._doLoad(name, null); }catch(e){}
+      }
+      done++;
+      if(onProgress) onProgress(done/total, '预加载音色 ' + done + '/' + total);
+    }
+    // 并发加载其余音色（每批4个并发）
+    const batchSize = 4;
+    for(let i = 0; i < rest.length; i += batchSize){
+      const batch = rest.slice(i, i + batchSize);
+      await Promise.all(batch.map(async name => {
+        if(!this.loaded[name] || !this.loaded[name].ready){
+          try{ await this._doLoad(name, null); }catch(e){}
+        }
+      }));
+      done += batch.length;
+      if(onProgress) onProgress(done/total, '预加载音色 ' + done + '/' + total);
+    }
+  },
+
+  // 停止所有正在播放的音符（切换音色时调用）
+  stopAll(){
+    const t = audioCtx ? audioCtx.currentTime : 0;
+    for(let i = 0; i < this.activeSources.length; i++){
+      const s = this.activeSources[i];
+      if(s){
+        try{
+          s.gain.gain.cancelScheduledValues(t);
+          s.gain.gain.setValueAtTime(s.gain.gain.value, t);
+          s.gain.gain.linearRampToValueAtTime(0, t + 0.01);
+          s.src.stop(t + 0.02);
+        }catch(e){}
+        this.activeSources[i] = null;
+      }
+    }
+    this.lastTriggerTime.fill(0);
+  },
+
+  playNote(midi, velocity, duration){
+    if(!audioCtx) return;
+    const t = audioCtx.currentTime;
+    // 同音节流：30ms内的重复触发忽略，人耳分辨不出
+    if(t - this.lastTriggerTime[midi] < this.MIN_TRIGGER_INTERVAL) return;
+    this.lastTriggerTime[midi] = t;
+    // 最小播放时间30ms，避免极短音符频繁切换
+    const effDuration = Math.max(duration, this.MIN_DURATION);
+    if(this.current !== '__synth__'){
+      const entry = this.loaded[this.current];
+      const buffer = entry ? entry.buffers[midi] : null;
+      if(buffer){
+        // 同音新音符触发：打断上一个，10ms快速淡出
+        const prev = this.activeSources[midi];
+        if(prev){
+          try{
+            prev.gain.gain.cancelScheduledValues(t);
+            prev.gain.gain.setValueAtTime(prev.gain.gain.value, t);
+            prev.gain.gain.linearRampToValueAtTime(0, t + 0.01);
+            prev.src.stop(t + 0.02);
+          }catch(e){}
+        }
+        const src = audioCtx.createBufferSource();
+        src.buffer = buffer;
+        const g = audioCtx.createGain();
+        const release = 0.02;
+        const tg = this.timbreGain[this.current] || 3.0; // 未配置的音色默认300%增益
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.4 * velocity * tg, t + 0.005);
+        g.gain.setValueAtTime(0.4 * velocity * tg, t + Math.max(0.01, effDuration - release));
+        g.gain.linearRampToValueAtTime(0, t + effDuration);
+        src.connect(g); g.connect(masterGain);
+        src.start();
+        src.stop(t + effDuration + 0.05);
+        this.activeSources[midi] = {src, gain: g};
+        src.onended = () => {
+          if(this.activeSources[midi] && this.activeSources[midi].src === src) this.activeSources[midi] = null;
+        };
+        return;
+      }
+      // buffer未就绪时回退合成钢琴
+    }
+    // 回退：合成钢琴
+    const f = 440 * Math.pow(2, (midi - 69) / 12);
+    const t0 = audioCtx.currentTime;
+    const env = audioCtx.createGain();
+    env.gain.setValueAtTime(0, t0);
+    env.gain.linearRampToValueAtTime(0.4 * velocity, t0 + 0.008);
+    env.gain.exponentialRampToValueAtTime(0.0008, t0 + duration);
+    env.connect(masterGain);
+    const specs = [[1, 0.9, "triangle"], [2, 0.35, "sine"], [3, 0.18, "sine"]];
+    for(const [mult, amp, wf] of specs){
+      const o = audioCtx.createOscillator();
+      o.type = wf; o.frequency.value = f * mult;
+      const g = audioCtx.createGain(); g.gain.value = amp;
+      o.connect(g); g.connect(env);
+      o.start(t0); o.stop(t0 + duration + 0.2);
+    }
+  }
+};
+SoundfontLoader.init();
+
+async function onTimbreChange(){
+  const sel = document.getElementById('timbreSel');
+  const name = sel.value;
+  const hint = document.getElementById('timbreHint');
+  initAudio();
+  // 切换音色前停止所有正在播放的音符，避免新旧音色叠加导致音量暴增
+  SoundfontLoader.stopAll();
+  if(name === '__synth__'){
+    SoundfontLoader.current = '__synth__';
+    hint.textContent = '当前：合成钢琴';
+    return;
+  }
+  hint.textContent = '正在下载音色… 0%';
+  try{
+    await SoundfontLoader.load(name, (p, msg) => { hint.textContent = msg + ' ' + Math.round(p * 100) + '%'; });
+    hint.textContent = '当前音色：' + sel.options[sel.selectedIndex].text + ' ✓ 预解码中…';
+    await SoundfontLoader.predecodeAll();
+    hint.textContent = '当前音色：' + sel.options[sel.selectedIndex].text + ' ✓ 就绪';
+  }catch(e){
+    hint.textContent = '音色加载失败：' + e.message + '，已回退合成钢琴';
+    sel.value = '__synth__';
+    SoundfontLoader.current = '__synth__';
+  }
+}
+
+// 先加载MIDI（立即解析、启用按钮），音色后台并行加载
+(function(){
+  const hint = document.getElementById('timbreHint');
+  let midiBuf = null;
+  // 1. 优先加载古钢琴+三角钢琴，然后并发预加载所有音色
+  SoundfontLoader.load('clavinet', (p, msg) => {
+    if(hint) hint.textContent = msg + ' ' + Math.round(p * 100) + '%';
+  }).then(async () => {
+    if(hint) hint.textContent = '当前音色：古钢琴 ✓ 预解码中…';
+    await SoundfontLoader.predecodeAll();
+    if(hint) hint.textContent = '当前音色：古钢琴 ✓ 就绪';
+    if(midiBuf) tryAutoPlay();
+    // 后台并发预加载所有音色（不阻塞播放）
+    SoundfontLoader.preloadAll((p, msg) => {
+      if(hint && !hint.textContent.includes('就绪')) hint.textContent = msg + ' ' + Math.round(p * 100) + '%';
+    }).then(() => {
+      if(hint) hint.textContent = '当前音色：古钢琴 ✓ 全部音色已缓存';
+    }).catch(()=>{});
+  }).catch(e => {
+    if(hint) hint.textContent = '音色加载失败，使用合成钢琴';
+    SoundfontLoader.current = '__synth__';
+    if(midiBuf) tryAutoPlay();
+  });
+  // 2. 优先加载MIDI，解析后立即启用按钮
+  fetch('midi/Rush E3.mid').then(r => {
+    if(!r.ok) throw new Error('MIDI加载失败');
+    return r.arrayBuffer();
+  }).then(buf => {
+    midiBuf = buf;
+    parseAndPlayMidi(buf, 'Rush E3.mid');
+    tryAutoPlay();
+  }).catch(e => {
+    if(hint) hint.textContent = 'MIDI加载失败：' + e.message;
+  });
+  // 3. 自动播放（需用户交互）
+  function tryAutoPlay(){
+    if(!midiBuf) return;
+    initAudio();
+    if(audioCtx.state === 'suspended'){
+      const startOnInteract = () => {
+        audioCtx.resume();
+        startPlay();
+        document.removeEventListener('click', startOnInteract);
+        document.removeEventListener('touchstart', startOnInteract);
+      };
+      document.addEventListener('click', startOnInteract);
+      document.addEventListener('touchstart', startOnInteract);
+    } else {
+      startPlay();
+    }
+  }
+})();
+
+// 加载谱子列表
+// IndexedDB：存储用户上传的 MIDI
+const DB_NAME = 'midi-player-db';
+const STORE = 'user-songs';
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if(!req.result.objectStoreNames.contains(STORE)){
+        req.result.createObjectStore(STORE, {keyPath: 'name'});
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function saveUserSong(name, buf){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put({name, data: buf});
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function getUserSongs(){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function deleteUserSong(name){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(name);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function getUserSong(name){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(name);
+    req.onsuccess = () => resolve(req.result ? req.result.data : null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// 内置谱默认音色配置：谱子文件名 -> 音色id
+const songDefaultTimbre = {
+  'Rush E3.mid': 'clavinet', // 古钢琴
+  'The_Sound_of_Silence.mid': 'electric_piano_2', // 电钢琴2
+};
+
+async function loadSongList(){
+  const sel = document.getElementById('songSel');
+  sel.innerHTML = '';
+  // 内置谱
+  try{
+    const resp = await fetch('midi/list.json');
+    if(resp.ok){
+      const list = await resp.json();
+      list.forEach(song => {
+        const opt = document.createElement('option');
+        opt.value = 'builtin:' + song.file;
+        opt.textContent = song.name;
+        sel.appendChild(opt);
+      });
+    }
+  }catch(e){}
+  // 用户上传谱
+  try{
+    const userSongs = await getUserSongs();
+    userSongs.forEach(song => {
+      const opt = document.createElement('option');
+      opt.value = 'user:' + song.name;
+      opt.textContent = song.name;
+      sel.appendChild(opt);
+    });
+  }catch(e){}
+}
+loadSongList();
+
+async function openManageModal(){
+  const modal = document.getElementById('manageModal');
+  const list = document.getElementById('manageList');
+  list.innerHTML = '<div style="color:#888;text-align:center;padding:20px">加载中…</div>';
+  modal.style.display = 'flex';
+
+  let html = '';
+  // 用户上传谱（置上方，可删除）
+  try{
+    const userSongs = await getUserSongs();
+    html += '<div style="color:#888;font-size:12px;margin:8px 0">我的上传</div>';
+    if(userSongs.length === 0){
+      html += '<div style="color:#666;text-align:center;padding:16px">暂无上传谱面</div>';
+    }
+    userSongs.forEach(s => {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#252540;border-radius:6px;margin-bottom:4px"><span style="color:#ddd;font-size:14px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + s.name + '</span><button class="del-song-btn" data-name="' + s.name.replace(/"/g, '&quot;') + '" style="background:none;border:none;color:#ff6b6b;font-size:16px;cursor:pointer;padding:4px 8px" title="删除">🗑</button></div>';
+    });
+  }catch(e){}
+  // 内置谱（置下方，不可删除）
+  try{
+    const resp = await fetch('midi/list.json');
+    if(resp.ok){
+      const builtin = await resp.json();
+      html += '<div style="color:#888;font-size:12px;margin:16px 0 8px">内置谱面</div>';
+      builtin.forEach(s => {
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#1e1e30;border-radius:6px;margin-bottom:4px"><span style="color:#aaa;font-size:14px">' + s.name + '</span><span style="color:#555;font-size:12px">内置</span></div>';
+      });
+    }
+  }catch(e){}
+  list.innerHTML = html;
+  // 绑定删除按钮事件（在innerHTML设置之后）
+  list.querySelectorAll('.del-song-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteSong(btn.dataset.name));
+  });
+}
+function closeManageModal(){
+  document.getElementById('manageModal').style.display = 'none';
+}
+async function deleteSong(name){
+  await deleteUserSong(name);
+  await loadSongList();
+  openManageModal(); // 刷新列表
+}
+
+async function onSongChange(val){
+  if(!val) return;
+  stopPlay();
+  try{
+    let buf, name;
+    if(val.startsWith('builtin:')){
+      const file = val.substring(8);
+      const resp = await fetch(file);
+      if(!resp.ok) throw new Error('加载失败 HTTP ' + resp.status);
+      buf = await resp.arrayBuffer();
+      name = file.split('/').pop();
+    } else if(val.startsWith('user:')){
+      name = val.substring(5);
+      buf = await getUserSong(name);
+      if(!buf) throw new Error('本地缓存中未找到');
+    }
+    parseAndPlayMidi(buf, name);
+    // 内置谱自动切换默认音色
+    if(val.startsWith('builtin:')){
+      const file = val.substring(8);
+      const fname = file.split('/').pop();
+      const defaultTimbre = songDefaultTimbre[fname];
+      if(defaultTimbre){
+        const timbreSel = document.getElementById('timbreSel');
+        if(timbreSel.value !== defaultTimbre){
+          timbreSel.value = defaultTimbre;
+          onTimbreChange();
+        }
+      }
+    }
+    // 切换后自动播放，关闭失焦遮罩
+    document.getElementById('pauseOverlay').classList.remove('show');
+    wasPlayingBeforeBlur = false;
+    initAudio();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    startPlay();
+  }catch(e){
+    document.getElementById('fileInfo').textContent = '谱子加载失败：' + e.message;
+  }
+}
+
+// 通用：解析MIDI并准备播放
+function parseAndPlayMidi(buf, filename){
+  const midi = new Midi(buf);
+  midiData = midi;
+  allNotes = [];
+  let maxTime = 0;
+  midi.tracks.forEach(track => {
+    track.notes.forEach(note => {
+      allNotes.push({midi: note.midi, time: note.time, duration: note.duration, velocity: note.velocity});
+      if(note.time + note.duration > maxTime) maxTime = note.time + note.duration;
+    });
+  });
+  allNotes.sort((a, b) => a.time - b.time);
+  totalDuration = maxTime;
+  document.getElementById('statTracks').textContent = '轨道：' + midi.tracks.length;
+  document.getElementById('statTotal').textContent = '音符：' + allNotes.length;
+  document.getElementById('statPlayed').textContent = '已播：0/' + allNotes.length;
+  document.getElementById('statPercent').textContent = '0.00%';
+  document.getElementById('playBtn').disabled = false;
+  document.querySelector('button[onclick="replayPlay()"]').disabled = false;
+  document.getElementById('loopBtn').disabled = false;
+  document.getElementById('totalTime').textContent = formatTime(totalDuration);
+  currentTime = 0;
+  nextNoteIndex = 0;
+  updateProgress();
+  drawScene([], 0);
+}
+
+/* ============================================================
+ * 3. MIDI 解析
+ * ========================================================== */
+let midiData = null;
+let allNotes = []; // {midi, time, duration, velocity}
+let totalDuration = 0;
+
+function onMidiFile(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async function(e){
+    try{
+      stopPlay();
+      const buf = e.target.result;
+      parseAndPlayMidi(buf, file.name);
+      // 上传后自动播放，关闭失焦遮罩
+      document.getElementById('pauseOverlay').classList.remove('show');
+      wasPlayingBeforeBlur = false;
+      initAudio();
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      startPlay();
+      // 保存到 IndexedDB 并刷新播放列表
+      try{
+        await saveUserSong(file.name, buf);
+        await loadSongList();
+
+        // 选中刚上传的
+        const sel = document.getElementById('songSel');
+        for(let i=0;i<sel.options.length;i++){
+          if(sel.options[i].value === 'user:' + file.name){
+            sel.selectedIndex = i; break;
+          }
+        }
+      }catch(err){
+        console.warn('保存到本地缓存失败:', err);
+      }
+    }catch(err){
+      document.getElementById('fileInfo').textContent = '解析失败：' + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
+}
+
+function formatTime(sec){
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+/* ============================================================
+ * 4. 播放控制
+ * ========================================================== */
+let isPlaying = false;
+let lastStatUpdate = 0;
+let currentTime = 0;
+let playStartTime = 0;
+let playSpeed = 1;
+let nextNoteIndex = 0;
+let rafId = null;
+let activeNotes = [];
+const activeKeySet = new Set();
+let loopEnabled = false;
+
+function togglePlay(){
+  initAudio();
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  if(isPlaying){
+    pausePlay();
+  } else {
+    startPlay();
+  }
+}
+
+function startPlay(){
+  if(!allNotes.length) return;
+  isPlaying = true;
+  playStartTime = audioCtx.currentTime - currentTime / playSpeed;
+  nextNoteIndex = allNotes.findIndex(n => n.time >= currentTime);
+  if(nextNoteIndex === -1) nextNoteIndex = allNotes.length;
+  document.getElementById('playBtn').textContent = '⏸ 暂停';
+  rafId = requestAnimationFrame(playLoop);
+}
+
+function pausePlay(){
+  isPlaying = false;
+  if(rafId) cancelAnimationFrame(rafId);
+  currentTime = (audioCtx.currentTime - playStartTime) * playSpeed;
+  document.getElementById('playBtn').textContent = '▶ 播放';
+}
+
+function stopPlay(){
+  isPlaying = false;
+  if(rafId) cancelAnimationFrame(rafId);
+  currentTime = 0;
+  nextNoteIndex = 0;
+  activeNotes = [];
+  document.getElementById('playBtn').textContent = '▶ 播放';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('curTime').textContent = '0:00';
+  if(allNotes.length > 0){
+    document.getElementById('statPlayed').textContent = '已播：0/' + allNotes.length;
+    document.getElementById('statPercent').textContent = '0.00%';
+  }
+  drawScene([]);
+}
+
+function replayPlay(){
+  stopPlay();
+  setTimeout(() => startPlay(), 50);
+}
+
+function toggleLoop(){
+  loopEnabled = !loopEnabled;
+  const btn = document.getElementById('loopBtn');
+  btn.textContent = loopEnabled ? '🔁 单曲循环' : '→ 顺序播放';
+}
+
+function toggleMenu(){
+  const panel = document.getElementById('controlPanel');
+  const mask = document.getElementById('overlayMask');
+  const btn = document.querySelector('.menu-btn');
+  const isOpen = panel.classList.toggle('open');
+  mask.classList.toggle('show', isOpen);
+  if(btn){
+    if(isOpen){
+      btn.classList.add('hidden-btn');
+    } else {
+      btn.classList.remove('hidden-btn');
+      showMenuBtn();
+    }
+  }
+}
+
+// 菜单按钮：拖拽 + 自动淡出
+(function(){
+  const btn = document.querySelector('.menu-btn');
+  if(!btn) return;
+  let fadeTimer = null;
+  function showMenuBtn(){
+    btn.classList.remove('faded');
+    if(fadeTimer) clearTimeout(fadeTimer);
+    fadeTimer = setTimeout(() => btn.classList.add('faded'), 2000);
+  }
+  window.showMenuBtn = showMenuBtn;
+  // 初始显示，1秒后淡出
+  showMenuBtn();
+  // 页面任意交互时显现
+  document.addEventListener('touchstart', () => { if(!btn.classList.contains('hidden-btn')) showMenuBtn(); }, {passive:true});
+  document.addEventListener('mousemove', () => { if(!btn.classList.contains('hidden-btn')) showMenuBtn(); });
+
+  const saved = localStorage.getItem('menuBtnPos');
+  if(saved){
+    try{
+      const pos = JSON.parse(saved);
+      btn.style.left = pos.x + 'px';
+      btn.style.top = pos.y + 'px';
+      btn.style.right = 'auto';
+      btn.style.transform = 'none';
+    }catch(e){}
+  }
+  let isDragging = false, moved = false;
+  let startX, startY, startLeft, startTop;
+  function onDown(e){
+    isDragging = true; moved = false;
+    const p = e.touches ? e.touches[0] : e;
+    startX = p.clientX; startY = p.clientY;
+    startLeft = btn.offsetLeft; startTop = btn.offsetTop;
+    btn.style.transition = 'none'; // 拖动时禁用过渡，确保跟手
+    btn.classList.remove('faded'); // 拖动时保持不透明
+    if(fadeTimer) clearTimeout(fadeTimer);
+    e.preventDefault();
+  }
+  function onMove(e){
+    if(!isDragging) return;
+    const p = e.touches ? e.touches[0] : e;
+    const dx = p.clientX - startX, dy = p.clientY - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+    let nl = Math.max(0, Math.min(window.innerWidth - btn.offsetWidth, startLeft + dx));
+    let nt = Math.max(0, Math.min(window.innerHeight - btn.offsetHeight, startTop + dy));
+    btn.style.left = nl + 'px'; btn.style.top = nt + 'px'; btn.style.right = 'auto';
+    btn.style.transform = 'none';
+    e.preventDefault();
+  }
+  function onUp(){
+    if(!isDragging) return;
+    isDragging = false;
+    if(moved){
+      // 恢复transition用于吸附动画
+      btn.style.transition = '';
+      // 自动吸附左右侧：以屏幕中轴线为分界
+      const centerX = btn.offsetLeft + btn.offsetWidth / 2;
+      const screenCenter = window.innerWidth / 2;
+      let snapX;
+      if(centerX < screenCenter){
+        snapX = 4;
+      } else {
+        snapX = window.innerWidth - btn.offsetWidth - 4;
+      }
+      btn.style.left = snapX + 'px';
+      localStorage.setItem('menuBtnPos', JSON.stringify({x: snapX, y: btn.offsetTop}));
+      showMenuBtn();
+    } else {
+      btn.style.transition = '';
+      toggleMenu();
+    }
+  }
+  btn.addEventListener('mousedown', onDown);
+  btn.addEventListener('touchstart', onDown, {passive:false});
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('touchmove', onMove, {passive:false});
+  document.addEventListener('mouseup', onUp);
+  document.addEventListener('touchend', onUp);
+})();
+
+// 失焦自动暂停
+let wasPlayingBeforeBlur = false;
+let blurPauseEnabled = true;
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden && blurPauseEnabled){
+    if(isPlaying){
+      wasPlayingBeforeBlur = true;
+      pausePlay();
+      document.getElementById('pauseOverlay').classList.add('show');
+    }
+  }
+});
+
+function onBlurPauseToggle(){
+  blurPauseEnabled = document.getElementById('blurPauseToggle').checked;
+  localStorage.setItem('blurPauseEnabled', blurPauseEnabled ? '1' : '0');
+}
+// 恢复设置：移动端默认开启，PC端默认关闭
+(function(){
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth <= 800;
+  const saved = localStorage.getItem('blurPauseEnabled');
+  if(saved !== null){
+    // 用户有手动设置，优先用用户设置
+    blurPauseEnabled = saved === '1';
+  } else {
+    // 无设置时按设备默认
+    blurPauseEnabled = isMobile;
+  }
+  document.getElementById('blurPauseToggle').checked = blurPauseEnabled;
+})();
+
+function resumeFromPause(){
+  document.getElementById('pauseOverlay').classList.remove('show');
+  if(wasPlayingBeforeBlur && totalDuration > 0){
+    initAudio();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    startPlay();
+  }
+  wasPlayingBeforeBlur = false;
+}
+
+// 进度条拖拽
+let isSeeking = false;
+function startSeek(event){
+  if(!totalDuration) return;
+  isSeeking = true;
+  event.preventDefault();
+  doSeek(event);
+  document.addEventListener('mousemove', doSeek);
+  document.addEventListener('mouseup', endSeek);
+  document.addEventListener('touchmove', doSeek, {passive:false});
+  document.addEventListener('touchend', endSeek);
+}
+function doSeek(event){
+  if(!totalDuration) return;
+  event.preventDefault();
+  const bar = document.getElementById('progressBar');
+  const rect = bar.getBoundingClientRect();
+  const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+  const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  currentTime = pct * totalDuration;
+  if(isPlaying){
+    playStartTime = audioCtx.currentTime - currentTime / playSpeed;
+    nextNoteIndex = allNotes.findIndex(n => n.time >= currentTime);
+    if(nextNoteIndex === -1) nextNoteIndex = allNotes.length;
+  }
+  updateProgress();
+  // 拖拽时也更新可视化
+  const fallDur = 2.0 / fallSpeedMultiplier;
+  const visibleNotes = allNotes.filter(n =>
+    n.time + n.duration > currentTime - 0.1 && n.time < currentTime + fallDur
+  );
+  drawScene(visibleNotes, currentTime);
+}
+function endSeek(){
+  isSeeking = false;
+  document.removeEventListener('mousemove', doSeek);
+  document.removeEventListener('mouseup', endSeek);
+  document.removeEventListener('touchmove', doSeek);
+  document.removeEventListener('touchend', endSeek);
+}
+
+function setSpeed(speed){
+  playSpeed = speed;
+  document.querySelectorAll('.speed-btn').forEach(b => {
+    b.classList.toggle('active', parseFloat(b.dataset.speed) === speed);
+  });
+  if(isPlaying){
+    playStartTime = audioCtx.currentTime - currentTime / playSpeed;
+  }
+}
+
+let fallSpeedMultiplier = 1.0;
+function onFallSpeedChange(){
+  fallSpeedMultiplier = parseFloat(document.getElementById('fallSpeedSlider').value);
+  document.getElementById('fallSpeedVal').textContent = fallSpeedMultiplier.toFixed(1) + 'x';
+}
+
+function onVolChange(){
+  const v = parseFloat(document.getElementById('volSlider').value);
+  document.getElementById('volVal').textContent = Math.round(v * 100) + '%';
+  if(masterGain) masterGain.gain.value = v;
+}
+
+// 二分查找：第一个 time >= target 的索引
+function lowerBound(arr, target){
+  let lo = 0, hi = arr.length;
+  while(lo < hi){
+    const mid = (lo + hi) >> 1;
+    if(arr[mid].time < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function playLoop(){
+  if(!isPlaying) return;
+  const now = audioCtx.currentTime;
+  currentTime = (now - playStartTime) * playSpeed;
+
+  // 触发到时间的音符（同一帧同音合并，最多88个同时触发）
+  const triggeredThisFrame = new Set();
+  while(nextNoteIndex < allNotes.length && allNotes[nextNoteIndex].time <= currentTime){
+    const note = allNotes[nextNoteIndex];
+    if(!triggeredThisFrame.has(note.midi)){
+      triggeredThisFrame.add(note.midi);
+      SoundfontLoader.playNote(note.midi, note.velocity, note.duration / playSpeed);
+    }
+    nextNoteIndex++;
+  }
+
+  // 计算可见音符范围：二分查找定位区间，不slice（避免大数组分配）
+  const fallDuration = 2.0 / fallSpeedMultiplier;
+  const leftIdx = lowerBound(allNotes, currentTime - fallDuration);
+  const rightIdx = lowerBound(allNotes, currentTime + fallDuration);
+
+  updateProgress();
+  // 统计信息每100ms更新一次，不每帧更新
+  if(!lastStatUpdate || now - lastStatUpdate > 0.1){
+    lastStatUpdate = now;
+    const played = nextNoteIndex;
+    const total = allNotes.length;
+    document.getElementById('statPlayed').textContent = '已播：' + played + '/' + total;
+    document.getElementById('statPercent').textContent = (total > 0 ? (played / total * 100).toFixed(2) : '0.00') + '%';
+  }
+  drawScene(allNotes, leftIdx, rightIdx, currentTime);
+
+  if(currentTime >= totalDuration){
+    if(loopEnabled){
+      currentTime = 0;
+      nextNoteIndex = 0;
+      playStartTime = audioCtx.currentTime;
+    } else {
+      // 顺序播放：自动播下一首
+      const sel = document.getElementById('songSel');
+      const nextIdx = sel.selectedIndex + 1;
+      if(nextIdx < sel.options.length){
+        sel.selectedIndex = nextIdx;
+        onSongChange(sel.value);
+        return;
+      } else {
+        stopPlay();
+        return;
+      }
+    }
+  }
+  rafId = requestAnimationFrame(playLoop);
+}
+
+function updateProgress(){
+  const pct = totalDuration ? (currentTime / totalDuration) * 100 : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('curTime').textContent = formatTime(currentTime);
+}
+
+/* ============================================================
+ * 5. Canvas 可视化：88键钢琴 + 下落音符
+ * ========================================================== */
+const canvas = document.getElementById('visualCanvas');
+const ctx = canvas.getContext('2d');
+let C = { w: 800, h: 500 };
+let cachedLayout = null;
+let keyByMidi = null;       // midi -> key，O(1)查找
+let staticCanvas = null;    // 离屏canvas：预渲染静态元素
+let staticCtx = null;
+
+function resizeCanvas(){
+  const r = canvas.getBoundingClientRect();
+  canvas.width = Math.max(320, Math.floor(r.width * devicePixelRatio));
+  canvas.height = Math.max(320, Math.floor(r.height * devicePixelRatio));
+  C.w = canvas.width; C.h = canvas.height;
+  // 重新计算布局和映射
+  cachedLayout = getKeyLayout();
+  keyByMidi = new Array(109).fill(null);
+  cachedLayout.keys.forEach(k => { keyByMidi[k.midi] = k; });
+  // 预渲染静态元素到离屏canvas
+  renderStatic();
+  drawScene(allNotes, 0, 0, 0);
+}
+window.addEventListener('resize', resizeCanvas);
+
+// 预渲染静态元素（背景、轨道线、琴键、音名）
+function renderStatic(){
+  if(!staticCanvas) staticCanvas = document.createElement('canvas');
+  staticCanvas.width = C.w; staticCanvas.height = C.h;
+  const sctx = staticCanvas.getContext('2d');
+  const layout = cachedLayout;
+  const keyAreaH = 80 * devicePixelRatio;
+  const keyTop = C.h - keyAreaH;
+  const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  // 背景
+  sctx.fillStyle = '#0a0a10';
+  sctx.fillRect(0, 0, C.w, C.h);
+  // 轨道线
+  sctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  sctx.lineWidth = 1;
+  layout.keys.forEach(k => {
+    if(!k.isBlack){
+      sctx.beginPath();
+      sctx.moveTo(k.x, 0);
+      sctx.lineTo(k.x, keyTop);
+      sctx.stroke();
+    }
+  });
+  // 白键
+  layout.keys.forEach(k => {
+    if(k.isBlack) return;
+    sctx.fillStyle = '#f0f0f0';
+    sctx.fillRect(k.x, keyTop, k.w - 1, keyAreaH);
+    sctx.strokeStyle = '#ccc';
+    sctx.strokeRect(k.x, keyTop, k.w - 1, keyAreaH);
+  });
+  // 黑键
+  layout.keys.forEach(k => {
+    if(!k.isBlack) return;
+    sctx.fillStyle = '#1a1a1a';
+    sctx.fillRect(k.x, keyTop, k.w, keyAreaH * 0.62);
+  });
+  // 音名：字母大、数字下标小，同一水平线
+  const whiteW = layout.whiteW;
+  const fontSize = Math.max(5 * devicePixelRatio, Math.min(8 * devicePixelRatio, whiteW * 0.55));
+  const smallFont = fontSize * 0.7;
+  sctx.fillStyle = 'rgba(0,0,0,0.45)';
+  sctx.textAlign = 'left';
+  layout.keys.forEach(k => {
+    if(k.isBlack) return;
+    const name = noteNames[k.midi % 12];
+    const oct = Math.floor(k.midi / 12) - 1;
+    const baseY = C.h - 3 * devicePixelRatio;
+    // 字母
+    sctx.font = `${fontSize}px sans-serif`;
+    const letterW = fontSize * 0.55;
+    const startX = k.x + k.w / 2 - letterW * 0.8;
+    sctx.fillText(name, startX, baseY);
+    // 数字（下标，更小更靠下）
+    sctx.font = `${smallFont}px sans-serif`;
+    sctx.fillText(String(oct), startX + letterW * 0.9, baseY + smallFont * 0.3);
+  });
+}
+
+// 88键布局
+const WHITE_KEYS = [0,2,4,5,7,9,11];
+const BLACK_KEYS = [1,3,6,8,10];
+function isBlackKey(midi){ return BLACK_KEYS.includes(midi % 12); }
+function getKeyLayout(){
+  const keys = [];
+  let whiteIdx = 0;
+  for(let midi = 21; midi <= 108; midi++){
+    if(!isBlackKey(midi)){
+      keys.push({midi, x: whiteIdx, isBlack: false});
+      whiteIdx++;
+    }
+  }
+  const totalWhite = whiteIdx;
+  const whiteW = C.w / totalWhite;
+  const blackW = whiteW * 0.6;
+  const result = [];
+  whiteIdx = 0;
+  for(let midi = 21; midi <= 108; midi++){
+    if(!isBlackKey(midi)){
+      result.push({midi, x: whiteIdx * whiteW, w: whiteW, isBlack: false});
+      whiteIdx++;
+    } else {
+      result.push({midi, x: whiteIdx * whiteW - blackW / 2, w: blackW, isBlack: true});
+    }
+  }
+  return {keys: result, whiteW, blackW, totalWhite};
+}
+
+function drawScene(notes, startIdx, endIdx, curTime){
+  curTime = curTime || 0;
+  // 直接贴预渲染的静态层
+  ctx.drawImage(staticCanvas, 0, 0);
+  const keyAreaH = 80 * devicePixelRatio;
+  const keyTop = C.h - keyAreaH;
+  const fallDuration = 2.0 / fallSpeedMultiplier;
+  const invFallDur = 1 / fallDuration;
+  const minH = 6 * devicePixelRatio;
+  const radius = 3 * devicePixelRatio;
+  // 复用Set，不每帧新建
+  activeKeySet.clear();
+
+  // 按颜色分组：三组velocity，每组一个path，一次fill
+  const colors = ['#4f46e5', '#6366f1', '#8b5cf6'];
+  const paths = [new Path2D(), new Path2D(), new Path2D()];
+  let hasAny = false;
+
+  // 裁剪到琴键以上区域，音符沉入琴键时不遮盖
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, C.w, keyTop);
+  ctx.clip();
+
+  for(let i = startIdx; i < endIdx; i++){
+    const n = notes[i];
+    const key = keyByMidi[n.midi];
+    if(!key) continue;
+    const timeUntilStart = n.time - curTime;
+    // 记录当前正在播放的键
+    if(timeUntilStart <= 0 && n.time + n.duration >= curTime){
+      activeKeySet.add(n.midi);
+    }
+    const noteH = n.duration * invFallDur * keyTop;
+    const h = noteH < minH ? minH : noteH;
+    const bottomY = keyTop - timeUntilStart * invFallDur * keyTop;
+    const y = bottomY - h;
+    // 整个音符沉入琴键后才消失
+    if(y > keyTop || bottomY <= 0) continue;
+    const ci = n.velocity > 0.7 ? 2 : (n.velocity > 0.4 ? 1 : 0);
+    paths[ci].roundRect(key.x + 1, y, key.w - 2, h, radius);
+    hasAny = true;
+  }
+  ctx.restore();
+
+  if(hasAny){
+    for(let c = 0; c < 3; c++){
+      ctx.fillStyle = colors[c];
+      ctx.fill(paths[c]);
+    }
+  }
+
+  // 按键高亮
+  if(activeKeySet.size > 0){
+    ctx.fillStyle = 'rgba(139,92,246,0.7)';
+    activeKeySet.forEach(midi => {
+      const key = keyByMidi[midi];
+      if(!key) return;
+      if(key.isBlack){
+        ctx.fillRect(key.x, keyTop, key.w, keyAreaH * 0.62);
+      } else {
+        ctx.fillRect(key.x, keyTop, key.w - 1, keyAreaH);
+      }
+    });
+  }
+}
+
+// 初始化
+resizeCanvas();
+document.getElementById('playBtn').addEventListener('click', () => {});
+</script>
+<!-- 谱面管理弹窗 -->
+<div id="manageModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:3000;align-items:center;justify-content:center">
+  <div style="background:#1a1a2e;border-radius:12px;padding:20px;width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;color:#fff">谱面管理</h3>
+      <button onclick="closeManageModal()" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div id="manageList" style="overflow-y:auto;flex:1"></div>
+  </div>
+</div>
+</body>
+</html>
