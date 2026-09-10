@@ -19,8 +19,10 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
   .layout{grid-template-columns:1fr}
   .container{padding:0}
   h1,.subtitle{display:none}
+  body{overflow:hidden;height:100vh}
 }
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+.visual-panel{padding:12px}
 .panel h2{font-size:14px;font-weight:600;margin-bottom:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
 
 /* 菜单按钮（左侧边缘，可拖拽，自动淡出） */
@@ -293,7 +295,7 @@ select:focus{border-color:var(--accent)}
         </div>
         <div id="fileInfo" style="display:none"></div>
       </div>
-      <div class="panel visual-panel" style="padding:12px">
+      <div class="panel visual-panel">
         <canvas id="visualCanvas"></canvas>
       </div>
     </div>
