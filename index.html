@@ -19,8 +19,13 @@ a{text-decoration:none;color:inherit}
 .social a{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid var(--line);border-radius:50%;color:var(--muted);transition:all .2s}
 .social a:hover{border-color:var(--accent);color:var(--text);background:var(--hover)}
 .social a svg{width:16px;height:16px}
-.grid{flex:1;display:flex;flex-wrap:wrap;gap:20px;justify-content:center;align-content:center;padding:40px 24px 60px;max-width:1080px;margin:0 auto;width:100%}
-.card{flex:1 1 260px;max-width:340px;min-width:240px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px 24px;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s;display:flex;flex-direction:column;gap:10px}
+.grid{flex:1;display:grid;gap:20px;justify-content:center;align-content:center;padding:40px 24px 60px;max-width:1080px;margin:0 auto;width:100%}
+/* 自适应布局：1-3个横排，4个2x2，5-6个3x2，7-9个3x3 */
+.grid.cards-1,.grid.cards-2,.grid.cards-3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));max-width:1080px}
+.grid.cards-4{grid-template-columns:repeat(2,1fr);max-width:720px}
+.grid.cards-5,.grid.cards-6{grid-template-columns:repeat(3,1fr);max-width:1080px}
+.grid.cards-7,.grid.cards-8,.grid.cards-9{grid-template-columns:repeat(3,1fr);max-width:1080px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px 24px;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s;display:flex;flex-direction:column;gap:10px;min-width:0}
 .card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 12px 32px rgba(0,0,0,.35)}
 .card .ico{width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px}
 .card h2{font-size:17px;font-weight:600}
@@ -39,7 +44,7 @@ a{text-decoration:none;color:inherit}
 footer{border-top:1px solid var(--line);padding:16px 24px;text-align:center;font-size:11px;color:var(--muted)}
 footer a{color:var(--accent)}
 footer a:hover{text-decoration:underline}
-@media(max-width:600px){.hero{padding-top:32px}.grid{padding:24px 16px 40px;gap:14px}.card{flex:1 1 100%;max-width:none}.social{flex-wrap:wrap}}
+@media(max-width:600px){.hero{padding-top:32px}.grid{padding:24px 16px 40px;gap:14px;grid-template-columns:1fr !important;max-width:none !important}.card{min-width:0}.social{flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -90,5 +95,14 @@ footer a:hover{text-decoration:underline}
 </div>
 <footer>teecatt · Powered by GitHub Pages · <a href="https://github.com/teecatt" target="_blank" rel="noopener">GitHub</a></footer>
 
+<script>
+// 根据卡片数量自动设置布局class
+(function(){
+  const grid = document.querySelector('.grid');
+  if(!grid) return;
+  const count = grid.querySelectorAll('.card').length;
+  grid.classList.add('cards-' + Math.min(count, 9));
+})();
+</script>
 </body>
 </html>
