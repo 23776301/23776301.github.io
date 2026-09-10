@@ -319,6 +319,23 @@ function initAudio(){
 /* ============================================================
  * 2. 音色加载器（Soundfont + Cache API）
  * ========================================================== */
+// 静态资源缓存（MIDI谱、list.json等），版本化缓存名
+const AssetCache = {
+  cacheName: 'midi-player-assets-v1',
+  async fetch(url) {
+    try {
+      const cache = await caches.open(this.cacheName);
+      const cached = await cache.match(url);
+      if (cached) return cached.clone();
+      const resp = await fetch(url);
+      if (resp.ok) cache.put(url, resp.clone());
+      return resp;
+    } catch(e) {
+      return fetch(url); // Cache API不可用时回退普通fetch
+    }
+  }
+};
+
 const SoundfontLoader = {
   cacheName: 'midi-player-soundfont-cache-v1',
   cdnBase: 'https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@master/FluidR3_GM/',
@@ -587,7 +604,7 @@ async function onTimbreChange(){
     if(midiBuf) tryAutoPlay();
   });
   // 2. 优先加载MIDI，解析后立即启用按钮
-  fetch('midi/Rush E3.mid').then(r => {
+  AssetCache.fetch('midi/Rush E3.mid').then(r => {
     if(!r.ok) throw new Error('MIDI加载失败');
     return r.arrayBuffer();
   }).then(buf => {
@@ -680,7 +697,7 @@ async function loadSongList(){
   sel.innerHTML = '';
   // 内置谱
   try{
-    const resp = await fetch('midi/list.json');
+    const resp = await AssetCache.fetch('midi/list.json');
     if(resp.ok){
       const list = await resp.json();
       list.forEach(song => {
@@ -724,7 +741,7 @@ async function openManageModal(){
   }catch(e){}
   // 内置谱（置下方，不可删除）
   try{
-    const resp = await fetch('midi/list.json');
+    const resp = await AssetCache.fetch('midi/list.json');
     if(resp.ok){
       const builtin = await resp.json();
       html += '<div style="color:#888;font-size:12px;margin:16px 0 8px">内置谱面</div>';
@@ -755,7 +772,7 @@ async function onSongChange(val){
     let buf, name;
     if(val.startsWith('builtin:')){
       const file = val.substring(8);
-      const resp = await fetch(file);
+      const resp = await AssetCache.fetch(file);
       if(!resp.ok) throw new Error('加载失败 HTTP ' + resp.status);
       buf = await resp.arrayBuffer();
       name = file.split('/').pop();

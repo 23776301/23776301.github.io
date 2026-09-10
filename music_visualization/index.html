@@ -262,6 +262,23 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 </div>
 
 <script>
+// 静态资源缓存（示例音频等），版本化缓存名
+const AssetCache = {
+  cacheName: 'music-viz-assets-v1',
+  async fetch(url) {
+    try {
+      const cache = await caches.open(this.cacheName);
+      const cached = await cache.match(url);
+      if (cached) return cached.clone();
+      const resp = await fetch(url);
+      if (resp.ok) cache.put(url, resp.clone());
+      return resp;
+    } catch(e) {
+      return fetch(url);
+    }
+  }
+};
+
 "use strict";
 const canvas = document.getElementById('mainCanvas');
 const ctx = canvas.getContext('2d');
@@ -1255,7 +1272,7 @@ requestAnimationFrame(render);
 // 保持默认100%缩放，不自动适配
 
 // 自动加载演示音频
-fetch('demo.ogg').then(r=>r.blob()).then(blob=>{
+AssetCache.fetch('demo.ogg').then(r=>r.blob()).then(blob=>{
   const file=new File([blob],'demo.ogg',{type:'audio/ogg'});
   loadAudio(file);
 }).catch(()=>{});
