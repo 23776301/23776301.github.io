@@ -53,7 +53,7 @@
 - **多元素叠加**：可同时添加多个效果，按 `y` 排序绘制，支持选中/拖动/删除。
 - 画布比例预设：16:9（1280×720）、9:16、1:1、4:5、4:3。
 - 画布缩放（0.1×–2×）与「适配」按钮（重置为 100%）。
-- 画布内点击选中元素、拖动移动；选中时显示虚线框与四角手柄。
+- 画布内点击选中元素、拖动移动；选中时显示虚线框与四角手柄，可拖角自由（非等比）缩放，触摸端支持两指夹捏等比缩放。
 - 背景：纯色 / 线性渐变 / 径向渐变 / 图片（模糊 + 暗化）。
 - 配色：纯色 / 渐变 / 彩虹，渐变支持多色增删排序。
 - **配置持久化**：画布、元素、音量、循环、平滑等自动存 `localStorage`，刷新不丢。
@@ -247,7 +247,10 @@ index.html
 
 - **元素库**：左侧面板按分类列出效果缩略图，点击即追加一个新元素。
 - **属性面板**：右侧（移动端底部抽屉）分组展示参数。
-- **画布**：Pointer Events 统一鼠标/触摸——`pointerdown` 命中检测并 `setPointerCapture`，`pointermove` 更新位置，`pointerup`/`pointercancel` 结束；画布设置 `touch-action:none` 防止触摸滚动。
+- **画布**：Pointer Events 统一鼠标/触摸——`pointerdown` 命中检测并 `setPointerCapture`，`pointermove` 更新，`pointerup`/`pointercancel` 结束；画布设置 `touch-action:none` 防止触摸滚动。
+- **移动**：拖动元素本体，按 `worldPoint()` 逆缩放换算，缩放下位置依然准确。
+- **四角缩放**：悬停四角显示 `nwse/nesw-resize` 光标，拖动对应角可**自由非等比**改变宽高（对角固定，宽高限制 2%–100%），类似 Windows 窗口缩放。
+- **两指夹捏**：触摸端双指按距离比**等比**缩放选中元素（长宽同比）。
 - **选中反馈**：选中元素绘制虚线框与四角手柄；点击空白处取消选中。
 - **元素库/背景**：底部「背景」工具页配置画布背景。
 - **缩放**：工具栏 `− / + / ⛶ 适配`，标签实时显示百分比。
@@ -314,7 +317,7 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 3. **图层与混合**：图层顺序 UI、`globalCompositeOperation` 混合模式、元素成组。
 4. **导出**：`canvas.captureStream()` + `MediaRecorder` 录制 WebM；或逐帧导出 PNG 序列；用 `OfflineAudioContext` 离线渲染保证稳定帧率。
 5. **预设分享**：导入/导出 JSON 预设，压缩进 URL hash 分享。
-6. **响应式与 DPR**：画布按 `devicePixelRatio` 与容器自适应，增加缩放手柄。
+6. **响应式与 DPR**：画布按 `devicePixelRatio` 与容器自适应。
 7. **性能预算与降级**：监测帧率/丢帧，动态降低 `barCount`、关闭发光/模糊。
 8. **可测试性**：拆分为 `audio.js`/`visualizers.js`/`app.js`，对纯函数（`multiColor`、`envStep`、`getFreqBars`）做单元测试，Playwright 做视觉回归。
 9. **无障碍与键盘**：ARIA 标注、更多快捷键（删除/复制/切换元素）。
