@@ -617,7 +617,9 @@ const AudioDebugMonitor = {
     this.lastAudioTime = at;
 
     const d = SoundfontLoader.debug;
-    const liveNodes = d.srcCreated - d.onendedFired;
+    const sampleLive = d.srcCreated - d.onendedFired;
+    const synthLive = SoundfontLoader.synthVoices.length;
+    const liveNodes = sampleLive + synthLive;
     const activeKeys = SoundfontLoader.activeSources.filter(s => s !== null).length;
     const heap = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) : 'N/A';
     let heapDelta = 'N/A';
@@ -643,9 +645,8 @@ const AudioDebugMonitor = {
       ' notes/s=' + this.notesTriggered + ' maxNotesFrame=' + this.maxNotesFrame +
       ' calls=' + d.playNoteCalls + ' ignored=' + d.playNoteIgnored + ' miss=' + d.bufferMiss + ' synth=' + d.synthCalls +
       ' heap=' + heap + 'MB(Δ' + heapDelta + ')' +
-      ' nodes(created/ended/live)=' + d.srcCreated + '/' + d.onendedFired + '/' + liveNodes +
-      ' peakLive=' + d.peakLive +
-      ' synthVoices=' + SoundfontLoader.synthVoices.length +
+      ' nodes(sampleLive/synthLive/live)=' + sampleLive + '/' + synthLive + '/' + liveNodes +
+      ' peakLive=' + d.peakLive + ' stolen=' + d.voicesStolen +
       ' activeKeys=' + activeKeys +
       ' pendingDisconnect=' + d.pendingDisconnect +
       ' rms=' + this.rmsLast.toFixed(5) + ' minRms=' + this.rmsMinWindow.toFixed(5) + ' silent=' + silentSec.toFixed(1) + 's' +
@@ -709,6 +710,9 @@ const SoundfontLoader = {
   noteToMidi: {},
   activeSources: new Array(109).fill(null),
   synthVoices: [], // 合成钢琴分支的振荡器，登记以便 stopAll 能停掉
+  activeSynth: {}, // midi -> synth voice，用于同音打断
+  activeVoices: [], // 全局活跃voice（sample+synth），用于复音上限与抢占
+  MAX_VOICES: 128,  // 全局复音上限，防止音频线程过载
   // ===== 调试统计 =====
   debug: {
     playNoteCalls: 0,
@@ -723,6 +727,7 @@ const SoundfontLoader = {
     pendingDisconnect: 0, // 等待setTimeout断开的旧节点数
     bufferMiss: 0,        // 音色buffer未就绪导致未发声的次数
     synthCalls: 0,        // 回退合成钢琴次数
+    voicesStolen: 0,      // 因复音上限被抢占的voice数
   },
   timbreGain: { 'acoustic_grand_piano': 10.0, 'clavinet': 5.0 }, // 硬编码音色增益：三角钢琴1000%, 古钢琴500%
 
@@ -837,6 +842,43 @@ const SoundfontLoader = {
     }
   },
 
+  // ===== 全局复音管理：注册/注销/抢占 =====
+  _registerVoice(v){
+    v._start = audioCtx ? audioCtx.currentTime : 0;
+    this.activeVoices.push(v);
+    // 超过上限则抢占最早开始的voice，保证音频线程活跃voice有界
+    while(this.activeVoices.length > this.MAX_VOICES){
+      this._stealOldest();
+    }
+  },
+  _unregisterVoice(v){
+    const i = this.activeVoices.indexOf(v);
+    if(i >= 0) this.activeVoices.splice(i, 1);
+  },
+  _stealOldest(){
+    if(!this.activeVoices.length) return;
+    let oldest = this.activeVoices[0];
+    for(const v of this.activeVoices){ if(v._start < oldest._start) oldest = v; }
+    const t = audioCtx ? audioCtx.currentTime : 0;
+    try{
+      if(oldest.kind === 'sample'){
+        oldest.gain.gain.cancelScheduledValues(t);
+        oldest.gain.gain.setValueAtTime(oldest.gain.gain.value, t);
+        oldest.gain.gain.linearRampToValueAtTime(0, t + 0.005);
+        oldest.src.stop(t + 0.01);
+      } else if(oldest.kind === 'synth'){
+        oldest.env.gain.cancelScheduledValues(t);
+        oldest.env.gain.setValueAtTime(oldest.env.gain.value, t);
+        oldest.env.gain.linearRampToValueAtTime(0, t + 0.005);
+        oldest.oscs.forEach(o => { try{ o.stop(t + 0.01); }catch(e){} });
+      }
+    }catch(e){}
+    this.debug.voicesStolen++;
+    this._unregisterVoice(oldest);
+    if(oldest.kind === 'synth' && this.activeSynth[oldest.midi] === oldest) delete this.activeSynth[oldest.midi];
+    if(oldest.kind === 'sample' && this.activeSources[oldest.midi] && this.activeSources[oldest.midi].src === oldest.src) this.activeSources[oldest.midi] = null;
+  },
+
   // 停止所有正在播放的音符（切换音色时调用）
   stopAll(){
     const t = audioCtx ? audioCtx.currentTime : 0;
@@ -865,6 +907,8 @@ const SoundfontLoader = {
       this.synthVoices.length = 0;
       console.log('[AudioDebug] stopAll停止了', n, '个合成钢琴voice');
     }
+    this.activeSynth = {};
+    this.activeVoices.length = 0;
   },
 
   // 定期音频状态报告（每5秒一次）
@@ -913,7 +957,9 @@ const SoundfontLoader = {
     const d = Math.max(duration, 0.001);
     if(this.current !== '__synth__'){
       const entry = this.loaded[this.current];
-      const buffer = entry ? entry.buffers[midi] : null;
+      // 超出钢琴范围的音符映射到最近有效键，避免永远 miss
+      const keyMidi = midi >= 21 && midi <= 108 ? midi : (midi < 21 ? 21 : 108);
+      const buffer = entry ? entry.buffers[keyMidi] : null;
       if(!buffer) this.debug.bufferMiss++;
       // 调试：首次buffer为null时打印详细信息
       if(!buffer && !this._debugBufferNullLogged){
@@ -925,7 +971,7 @@ const SoundfontLoader = {
       }
       if(buffer){
         // 同音新音符触发：打断上一个，10ms快速淡出
-        const prev = this.activeSources[midi];
+        const prev = this.activeSources[keyMidi];
         if(prev){
           try{
             prev.gain.gain.cancelScheduledValues(t);
@@ -939,6 +985,7 @@ const SoundfontLoader = {
               try{ oldSrc.disconnect(); oldGain.disconnect(); }catch(e){}
               this.debug.pendingDisconnect--;
             }, 50);
+            this._unregisterVoice(prev);
           }catch(e){}
         }
         let src, g;
@@ -964,12 +1011,15 @@ const SoundfontLoader = {
         src.connect(g); g.connect(masterGain);
         src.start();
         src.stop(t + d + 0.05);
-        this.activeSources[midi] = {src, gain: g};
+        const voice = {kind: 'sample', midi: keyMidi, src, gain: g};
+        this.activeSources[keyMidi] = voice;
+        this._registerVoice(voice);
         src.onended = () => {
           this.debug.onendedFired++;
+          this._unregisterVoice(voice);
           // 主动断开连接，帮助GC回收
           try{ src.disconnect(); g.disconnect(); }catch(e){}
-          if(this.activeSources[midi] && this.activeSources[midi].src === src) this.activeSources[midi] = null;
+          if(this.activeSources[keyMidi] && this.activeSources[keyMidi].src === src) this.activeSources[keyMidi] = null;
           // 解除闭包引用
           src.onended = null;
         };
@@ -985,6 +1035,19 @@ const SoundfontLoader = {
         '说明音色加载失败或buffer为null，时间=', t.toFixed(2));
     }
     this.debug.synthCalls = (this.debug.synthCalls || 0) + 1;
+    // 同音打断：与 sample 分支一致，避免同音叠加导致 voice 爆炸
+    const prevS = this.activeSynth[midi];
+    if(prevS){
+      try{
+        const st = audioCtx.currentTime;
+        prevS.env.gain.cancelScheduledValues(st);
+        prevS.env.gain.setValueAtTime(prevS.env.gain.value, st);
+        prevS.env.gain.linearRampToValueAtTime(0, st + 0.01);
+        prevS.oscs.forEach(o => { try{ o.stop(st + 0.02); }catch(e){} });
+      }catch(e){}
+      this._unregisterVoice(prevS);
+      delete this.activeSynth[midi];
+    }
     const f = 440 * Math.pow(2, (midi - 69) / 12);
     const t0 = audioCtx.currentTime;
     const synthDur = Math.max(duration, 0.001); // 真实时长，仅 1ms epsilon
@@ -1004,12 +1067,16 @@ const SoundfontLoader = {
       oscs.push(o);
     }
     // 登记 voice，并在结束时清理，避免振荡器累积
-    const voice = { oscs, env };
+    const voice = { kind: 'synth', midi, oscs, env };
     this.synthVoices.push(voice);
+    this.activeSynth[midi] = voice;
+    this._registerVoice(voice);
     oscs[oscs.length - 1].onended = () => {
       try{ env.disconnect(); oscs.forEach(o => o.disconnect()); }catch(e){}
       const idx = this.synthVoices.indexOf(voice);
       if(idx >= 0) this.synthVoices.splice(idx, 1);
+      this._unregisterVoice(voice);
+      if(this.activeSynth[midi] === voice) delete this.activeSynth[midi];
     };
   }
 };
@@ -1089,6 +1156,7 @@ async function onTimbreChange(){
     if(defaultTimbreFallback || defaultTimbreReady) return;
     defaultTimbreFallback = true;
     SoundfontLoader.current = '__synth__';
+    console.warn('[AudioDebug] 回退合成钢琴，原因：' + reason);
     if(hint) hint.textContent = '当前：合成钢琴';
     showToast(reason + '，回退为合成钢琴，现在开始播放');
     if(midiBuf) tryAutoPlay();
@@ -1121,6 +1189,7 @@ async function onTimbreChange(){
         try{ await SoundfontLoader._doLoad(name, null); }catch(e){}
       }
     }catch(e){
+      console.warn('[AudioDebug] 默认音色加载失败 name=' + timbreName + ' 错误=' + (e && e.message ? e.message : e));
       fallbackToSynth('音色加载失败');
     }
   }
@@ -1698,12 +1767,26 @@ function playLoop(){
   currentTime = (now - playStartTime) * playSpeed;
 
   // 触发到时间的音符（不做同音合并，每个音符事件都触发）
+  // 追赶洪峰抑制：若一帧待触发音符过多（音频时钟曾停摆导致积压），
+  // 只触发上限内的音符并快进跳过剩余积压，避免瞬间创建海量节点灌爆音频线程
+  const MAX_TRIGGER_PER_FRAME = 256;
   let _trigCount = 0;
+  let _skipped = 0;
   while(nextNoteIndex < allNotes.length && allNotes[nextNoteIndex].time <= currentTime){
+    if(_trigCount >= MAX_TRIGGER_PER_FRAME){
+      while(nextNoteIndex < allNotes.length && allNotes[nextNoteIndex].time <= currentTime){
+        nextNoteIndex++; _skipped++;
+      }
+      break;
+    }
     const note = allNotes[nextNoteIndex];
     _trigCount++;
     SoundfontLoader.playNote(note.midi, note.velocity, note.duration / playSpeed);
     nextNoteIndex++;
+  }
+  if(_skipped > 0){
+    console.warn('[AudioDebug] 追赶洪峰：跳过积压音符 ' + _skipped + ' 个（已落后 ' +
+      (currentTime - (allNotes[nextNoteIndex - 1] ? allNotes[nextNoteIndex - 1].time : currentTime)).toFixed(3) + 's）');
   }
   AudioDebugMonitor.frame(performance.now() - _frameT0, _trigCount);
 
