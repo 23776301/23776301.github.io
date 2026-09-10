@@ -210,6 +210,14 @@ select:focus{border-color:var(--accent)}
         <input type="range" id="volSlider" min="0" max="1" step="0.01" value="0.7" oninput="onVolChange()">
         <span class="val" id="volVal">70%</span>
       </div>
+      <div class="row">
+        <label>配色</label>
+        <div style="flex:1;display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn speed-btn palette-btn" data-palette="A" onclick="setPalette('A')" style="padding:4px 10px;min-height:28px;font-size:11px">A</button>
+          <button class="btn speed-btn palette-btn" data-palette="B" onclick="setPalette('B')" style="padding:4px 10px;min-height:28px;font-size:11px">B</button>
+          <button class="btn speed-btn palette-btn active" data-palette="C" onclick="setPalette('C')" style="padding:4px 10px;min-height:28px;font-size:11px">C</button>
+        </div>
+      </div>
 
       <h2 style="margin-top:20px">音色</h2>
       <div class="row">
@@ -1992,6 +2000,39 @@ let keyByMidi = null;       // midi -> key，O(1)查找
 let staticCanvas = null;    // 离屏canvas：预渲染静态元素
 let staticCtx = null;
 
+// 三种配色：色相区分黑白键，明度区分力度（各 5 级，轻→重）
+const PALETTES = {
+  A: { // 冷蓝紫 × 暖粉红
+    white: ['#38bdf8', '#3b82f6', '#6366f1', '#8b5cf6', '#c026d3'],
+    black: ['#fbcfe8', '#f9a8d4', '#f472b6', '#ef4444', '#b91c1c']
+  },
+  B: { // 青蓝 × 琥珀红
+    white: ['#22d3ee', '#38bdf8', '#3b82f6', '#6366f1', '#8b5cf6'],
+    black: ['#fde68a', '#fbbf24', '#fb923c', '#f97316', '#ef4444']
+  },
+  C: { // 青绿 × 品红
+    white: ['#5eead4', '#2dd4bf', '#22d3ee', '#38bdf8', '#3b82f6'],
+    black: ['#f9a8d4', '#f472b6', '#ec4899', '#db2777', '#be185d']
+  }
+};
+let currentPalette = 'C';
+function setPalette(name){
+  if(!PALETTES[name]) return;
+  currentPalette = name;
+  try{ localStorage.setItem('palette', name); }catch(e){}
+  document.querySelectorAll('.palette-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.palette === name);
+  });
+  if(typeof allNotes !== 'undefined') drawScene(allNotes, 0, 0, currentTime);
+}
+// 恢复上次选择
+(function(){
+  try{
+    const saved = localStorage.getItem('palette');
+    if(saved && PALETTES[saved]) currentPalette = saved;
+  }catch(e){}
+})();
+
 function resizeCanvas(){
   const r = canvas.getBoundingClientRect();
   canvas.width = Math.max(320, Math.floor(r.width * devicePixelRatio));
@@ -2116,9 +2157,13 @@ function drawScene(notes, startIdx, endIdx, curTime){
   // 复用Set，不每帧新建
   activeKeySet.clear();
 
-  // 按颜色分组：三组velocity，每组一个path，一次fill
-  const colors = ['#4f46e5', '#6366f1', '#8b5cf6'];
-  const paths = [new Path2D(), new Path2D(), new Path2D()];
+  // 颜色双维度：色相区分黑白键，明度区分力度（各 5 级，轻→重）
+  const _pal = PALETTES[currentPalette] || PALETTES.C;
+  const palettes = [_pal.white, _pal.black];
+  const paths = [[], []];
+  for(let p = 0; p < 2; p++){
+    for(let c = 0; c < 5; c++) paths[p].push(new Path2D());
+  }
   let hasAny = false;
 
   // 裁剪到琴键以上区域，音符沉入琴键时不遮盖
@@ -2151,17 +2196,20 @@ function drawScene(notes, startIdx, endIdx, curTime){
     const y = bottomY - h;
     // 整个音符沉入琴键后才消失
     if(y > keyTop || bottomY <= 0) continue;
-    const ci = n.velocity > 0.7 ? 2 : (n.velocity > 0.4 ? 1 : 0);
-    if(useRound) paths[ci].roundRect(key.x + 1, y, key.w - 2, h, radius);
-    else paths[ci].rect(key.x + 1, y, key.w - 2, h);
+    const pi = isBlackKey(n.midi) ? 1 : 0;
+    const ci = Math.min(4, Math.floor(n.velocity * 5));
+    if(useRound) paths[pi][ci].roundRect(key.x + 1, y, key.w - 2, h, radius);
+    else paths[pi][ci].rect(key.x + 1, y, key.w - 2, h);
     hasAny = true;
   }
   ctx.restore();
 
   if(hasAny){
-    for(let c = 0; c < 3; c++){
-      ctx.fillStyle = colors[c];
-      ctx.fill(paths[c]);
+    for(let p = 0; p < 2; p++){
+      for(let c = 0; c < 5; c++){
+        ctx.fillStyle = palettes[p][c];
+        ctx.fill(paths[p][c]);
+      }
     }
   }
 
@@ -2190,6 +2238,7 @@ function drawScene(notes, startIdx, endIdx, curTime){
 
 // 初始化
 resizeCanvas();
+setPalette(currentPalette); // 同步按钮选中态并按恢复的配色重绘
 document.getElementById('playBtn').addEventListener('click', () => {});
 </script>
 <!-- 谱面管理弹窗 -->
