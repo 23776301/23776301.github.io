@@ -421,11 +421,18 @@ console.error = function(...args) {
   if(msg.includes('AudioDebug')) _appendDebug(msg, 'error');
 };
 
-function toggleDebugTerminal() {
+function showDebugTerminal(){
   const el = document.getElementById('debugTerminal');
+  if(!el) return;
   if(el.style.display === 'none' || el.style.display === '') {
     el.style.display = 'flex';
     applyDebugAppearance();
+  }
+}
+function toggleDebugTerminal() {
+  const el = document.getElementById('debugTerminal');
+  if(el.style.display === 'none' || el.style.display === '') {
+    showDebugTerminal();
   } else {
     el.style.display = 'none';
   }
@@ -539,26 +546,45 @@ function initAudio(){
 /* ============================================================
  * 1.5 性能诊断监控（重点排查：音频线程过载 / 节点泄漏 / GC / 主线程长任务）
  * ========================================================== */
-/* 渲染质量自适应：默认完整渲染；仅当"连续多秒"出现丢帧/丢音频时才临时降级，
-   连续多秒无丢帧后自动恢复。高性能设备不会降级，也就不会闪烁。 */
-const RenderQuality = {
+/* 性能仲裁：2 秒窗口。窗口内累计的性能问题（严重丢帧/音符积压/音频时钟停摆/时间戳异常）
+   达到阈值 -> 同时降级渲染与音频；窗口内问题低于阈值 -> 恢复完整渲染与播放。 */
+const PerfArbiter = {
   degraded: false,
-  badSeconds: 0,
-  goodSeconds: 0,
-  BAD_THRESHOLD: 3,   // 连续 3 秒有丢帧/丢音频才降级
-  GOOD_THRESHOLD: 5,  // 连续 5 秒无丢帧才恢复
-  evaluate(dropped){
-    if(dropped){ this.badSeconds++; this.goodSeconds = 0; }
-    else { this.goodSeconds++; this.badSeconds = 0; }
-    if(!this.degraded && this.badSeconds >= this.BAD_THRESHOLD){
+  windowSize: 2,       // 仲裁窗口：2 秒
+  DEGRADE_AT: 3,       // 2 秒内累计问题次数达到该值 -> 降级
+  RECOVER_AT: 1,       // 2 秒内累计问题次数低于等于该值 -> 恢复
+  perSecond: [],
+  push(info){
+    this.perSecond.push(info);
+    while(this.perSecond.length > this.windowSize) this.perSecond.shift();
+    const total = this.perSecond.reduce((s, x) => s + x.total, 0);
+    if(!this.degraded && this.perSecond.length >= this.windowSize && total >= this.DEGRADE_AT){
       this.degraded = true;
-      console.warn('[AudioDebug] 持续丢帧/丢音频，启用降级渲染');
-    } else if(this.degraded && this.goodSeconds >= this.GOOD_THRESHOLD){
+      const parts = [];
+      if(info.drop) parts.push('丢帧' + info.drop);
+      if(info.backlog) parts.push('积压' + info.backlog);
+      if(info.stall) parts.push('音频停摆' + info.stall);
+      if(info.ts) parts.push('时间戳' + info.ts);
+      console.warn('[AudioDebug] 最近 ' + this.windowSize + ' 秒出现 ' + total +
+        ' 次性能问题（' + parts.join('、') + '），启用渲染+音频降级');
+      applyDegradation(true);
+      // 首次因性能仲裁降级时，主动弹出调试窗以便查看
+      if(typeof showDebugTerminal === 'function') showDebugTerminal();
+    } else if(this.degraded && this.perSecond.length >= this.windowSize && total <= this.RECOVER_AT){
       this.degraded = false;
-      console.log('[AudioDebug][OK] 已连续 ' + this.GOOD_THRESHOLD + ' 秒无丢帧，恢复完整渲染');
+      console.log('[AudioDebug][OK] 最近 ' + this.windowSize + ' 秒性能问题已低于阈值，恢复完整渲染与播放');
+      applyDegradation(false);
     }
   }
 };
+
+// 渲染 + 音频同步降级/恢复
+function applyDegradation(on){
+  // 音频：降低复音上限、提高同音重触发下限
+  SoundfontLoader.MAX_VOICES = on ? 64 : 128;
+  const base = SoundfontLoader.baseRetriggerFloor || 0;
+  SoundfontLoader.retriggerFloor = on ? Math.max(base, 0.03) : base;
+}
 
 const AudioDebugMonitor = {
   inited: false,
@@ -575,6 +601,9 @@ const AudioDebugMonitor = {
   lastFrameAudioTime: 0,
   longTasks: 0,
   audioStalls: 0,
+  severeDrops: 0,     // 本窗口内帧间隔 >100ms 的严重丢帧次数
+  timestampAnomalies: 0, // 音频时钟回退等时间戳异常次数
+  lastAt: 0,
   lastAudioTime: 0,
   lastWall: 0,
   lastHeap: null,
@@ -703,44 +732,36 @@ const AudioDebugMonitor = {
         ' created=' + d.srcCreated + ' ended=' + d.onendedFired);
     }
 
-    // 渲染质量评估：仅在播放中评估丢帧/丢音频，带滞回
+    // 本秒性能问题计数：严重丢帧 / 音符积压 / 音频时钟停摆 / 时间戳异常
+    const fps = this.frames / winSec;
+    const stallDelta = this.audioStalls - (this._lastStallCount || 0);
+    this._lastStallCount = this.audioStalls;
+    if(this.lastAt && at < this.lastAt - 0.001) this.timestampAnomalies++;
+    this.lastAt = at;
+    const info = {
+      drop: this.severeDrops,
+      backlog: this.skippedNotes > 0 ? 1 : 0,
+      stall: stallDelta,
+      ts: this.timestampAnomalies
+    };
+    info.total = info.drop + info.backlog + info.stall + info.ts;
     if(playing && this.frames > 0){
-      const fps = this.frames / winSec;
-      const stallDelta = this.audioStalls - (this._lastStallCount || 0);
-      this._lastStallCount = this.audioStalls;
-      const dropped = fps < 30 || stallDelta > 0 || this.skippedNotes > 0;
-      RenderQuality.evaluate(dropped);
+      PerfArbiter.push(info);
     }
-    // 音符积压 / 负载告警
+    // 具体告警（折叠机制会限频）
     if(playing && this.skippedNotes > 0){
       console.warn('[AudioDebug] 音符积压：本窗口跳过 ' + this.skippedNotes + ' 个');
     }
-    if(playing && this.frames > 0 && (this.frames / winSec) < 30){
-      console.warn('[AudioDebug] 帧率偏低 fps=' + (this.frames / winSec).toFixed(0) +
+    if(playing && this.frames > 0 && fps < 30){
+      console.warn('[AudioDebug] 帧率偏低 fps=' + fps.toFixed(0) +
         ' drawMs=' + (this.drawMsSum / this.frames).toFixed(1) +
         ' schedMs=' + (this.frameMsSum / this.frames).toFixed(1));
     }
+    // 清零本秒问题计数
+    this.severeDrops = 0;
+    this.timestampAnomalies = 0;
 
-    // 周期汇总降频为每 5 秒一条，且归类为 info（蓝色），减少刷屏
-    this.summaryCount = (this.summaryCount || 0) + 1;
-    if(this.summaryCount % 5 === 0){
-      console.log('[AudioDebug][INFO] [5s] fps=' + (this.frames / winSec).toFixed(0) +
-        ' degraded=' + (RenderQuality.degraded ? 1 : 0) +
-        ' schedMs(avg/max)=' + (this.frames ? (this.frameMsSum / this.frames).toFixed(1) : '0') + '/' + this.maxFrameMs.toFixed(1) +
-        ' drawMs(avg/max)=' + (this.frames ? (this.drawMsSum / this.frames).toFixed(1) : '0') + '/' + this.maxDrawMs.toFixed(1) + ' maxVisible=' + this.maxVisible +
-        ' notes/s=' + this.notesTriggered + ' maxNotesFrame=' + this.maxNotesFrame + ' skipped/s=' + this.skippedNotes +
-        ' calls=' + d.playNoteCalls + ' ignored=' + d.playNoteIgnored + ' miss=' + d.bufferMiss + ' synth=' + d.synthCalls +
-        ' heap=' + heap + 'MB(Δ' + heapDelta + ')' +
-        ' nodes(sampleLive/synthLive/live)=' + sampleLive + '/' + synthLive + '/' + liveNodes +
-        ' peakLive=' + d.peakLive + ' stolen=' + d.voicesStolen +
-        ' activeKeys=' + activeKeys +
-        ' pendingDisconnect=' + d.pendingDisconnect +
-        ' rms=' + this.rmsLast.toFixed(5) + ' minRms=' + this.rmsMinWindow.toFixed(5) + ' silent=' + silentSec.toFixed(1) + 's' +
-        ' longTasks=' + this.longTasks + ' audioStalls=' + this.audioStalls +
-        ' state=' + (audioCtx ? audioCtx.state : 'null') + ' ctxTime=' + at.toFixed(1) +
-        ' ' + rcStr);
-    }
-
+    // 不再输出周期性汇总；仅在异常/降级/恢复时输出 warn 或 info
     if(liveNodes > d.peakLive) d.peakLive = liveNodes;
     // 存活节点持续增长 = 泄漏信号（onended 未触发 / disconnect 未执行）
     if(this.lastLiveNodes != null && liveNodes > this.lastLiveNodes + 50){
@@ -803,6 +824,7 @@ const SoundfontLoader = {
   MAX_VOICES: 128,  // 全局复音上限，防止音频线程过载
   lastTriggerTime: new Array(109).fill(0), // 每音高上次触发时间（audio time）
   retriggerFloor: 0, // 自适应同音重触发下限（秒）；高密度谱面下 >0，用于限制节点创建率
+  baseRetriggerFloor: 0, // 未降级时的基准下限，降级/恢复时据此调整
   // ===== 调试统计 =====
   debug: {
     playNoteCalls: 0,
@@ -846,15 +868,15 @@ const SoundfontLoader = {
     // 统一转绝对路径作为缓存key，避免相对路径解析问题
     const absUrl = new URL(url, window.location.href).href;
     if(onProgress) onProgress(0, '正在下载音色…');
-    console.log('[AudioDebug][INFO] 下载音色 ' + name + ' ← ' + url);
     let text = null;
+    let fromCache = false;
     try{
       const cache = await caches.open(this.cacheName);
       // ignoreSearch忽略查询参数
       const cached = await cache.match(absUrl, {ignoreSearch: true});
       if(cached){
         text = await cached.text();
-        console.log('[AudioDebug][INFO] 音色 ' + name + ' 命中缓存 (' + (text.length/1024).toFixed(0) + 'KB)');
+        fromCache = true;
         if(onProgress) onProgress(0.5, '从缓存读取音色…');
       }
     }catch(e){}
@@ -862,7 +884,6 @@ const SoundfontLoader = {
       const resp = await fetch(url, {mode: 'cors'});
       if(!resp.ok) throw new Error('下载失败 HTTP ' + resp.status);
       text = await resp.text();
-      console.log('[AudioDebug][INFO] 音色 ' + name + ' 下载完成 (' + (text.length/1024).toFixed(0) + 'KB)');
       // 用resp.clone()缓存原始Response，保留正确headers
       try{
         const cache = await caches.open(this.cacheName);
@@ -884,7 +905,11 @@ const SoundfontLoader = {
     const raw = fn(MIDI);
     if(!raw) throw new Error('音色数据解析失败');
     this.loaded[name] = { raw: raw, buffers: {}, ready: true };
-    console.log('[AudioDebug][INFO] 音色 ' + name + ' 解析完成');
+    // 正常播放音色相关每个谱只打一条：缓存命中 vs 网络下载
+    if(onProgress){
+      console.log('[AudioDebug][INFO] 音色 ' + name +
+        (fromCache ? ' 从缓存加载并解析成功' : ' 下载并解析成功'));
+    }
     if(onProgress) onProgress(1, '音色加载完成');
   },
 
@@ -1491,11 +1516,12 @@ function parseAndPlayMidi(buf, filename){
   totalDuration = maxTime;
   // 根据整首谱面平均密度设置自适应同音重触发下限（仅高密度 black-MIDI 生效）
   const density = totalDuration > 0 ? allNotes.length / totalDuration : 0;
-  SoundfontLoader.retriggerFloor =
+  SoundfontLoader.baseRetriggerFloor =
     density <= 1000 ? 0 :
     density <= 3000 ? 0.008 :
     density <= 6000 ? 0.02 :
     density <= 12000 ? 0.035 : 0.05;
+  SoundfontLoader.retriggerFloor = SoundfontLoader.baseRetriggerFloor;
   SoundfontLoader.lastTriggerTime.fill(0);
   console.log('[AudioDebug][INFO] 谱面密度=' + density.toFixed(0) + ' 音符/s，自适应同音重触发下限=' +
     SoundfontLoader.retriggerFloor + 's');
@@ -1875,6 +1901,7 @@ function playLoop(){
   // 随后一帧内堆积触发大量音符，瞬间灌爆音频线程
   if(AudioDebugMonitor.lastFrameAudioTime){
     const jump = now - AudioDebugMonitor.lastFrameAudioTime;
+    if(jump > 0.1) AudioDebugMonitor.severeDrops++; // 严重丢帧（帧间隔 >100ms）
     if(jump > 0.08){
       console.warn('[AudioDebug] 帧间隔跳变 ' + (jump * 1000).toFixed(0) +
         'ms（主线程阻塞?） 本帧将追赶音符');
@@ -2100,12 +2127,12 @@ function drawScene(notes, startIdx, endIdx, curTime){
   ctx.rect(0, 0, C.w, keyTop);
   ctx.clip();
 
-  // ===== 渲染 LOD：默认完整绘制；仅当 RenderQuality 判定需要降级时才抽样 =====
+  // ===== 渲染 LOD：默认完整绘制；仅当 PerfArbiter 判定需要降级时才抽样 =====
   // 抽样基于"绝对音符索引取模"，保证同一音符在滚动中始终被画/不画，避免逐帧闪烁
   const visibleCount = endIdx - startIdx;
   const DRAW_BUDGET = 4000;
   let stride = 1;
-  if(RenderQuality.degraded && visibleCount > DRAW_BUDGET * 1.3){
+  if(PerfArbiter.degraded && visibleCount > DRAW_BUDGET * 1.3){
     // 量化到 2 的幂 + 1.3x 进入阈值，避免 stride 在边界反复跳变
     stride = 1 << Math.ceil(Math.log2(visibleCount / DRAW_BUDGET));
   }
