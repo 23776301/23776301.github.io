@@ -288,18 +288,13 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 
 ### 11.1 性能
 
-**已优化**
-
 - **每帧只取样一次频谱**：`getByteFrequencyData`/`getByteTimeDomainData` 移入 `render()`，所有元素复用。
-- **颜色彩虹模式**改为基于播放进度（`audio.currentTime`），暂停时冻结。
+- **拖动元素不重建面板**：`pointermove` 只同步 X/Y 控件，`pointerup` 才调用 `renderProps()`，避免逐帧 `innerHTML` 重建与事件重绑。
+- **颜色 LUT**：渐变模式按颜色数组缓存 256 级查表（`gradientLUT`），避免逐柱逐帧解析 hex。
+- **背景模糊去重**：`bgBlur > 0` 时只绘制一次模糊图。
+- **进度条节流**：`updateSeekUI()` 100ms 节流，不再每帧写 DOM。
+- **彩虹模式**基于播放进度（`audio.currentTime`），暂停时冻结。
 - **`smoothing` 全局化**：由 `CFG.smoothing` 统一控制，创建 analyser 时写入。
-
-**待优化（下一轮）**
-
-- **拖动元素时每帧重建属性面板**：`pointermove` 里仍调用 `renderProps()`，反复 `innerHTML` 重建。
-- **颜色逐帧解析 hex**：`multiColor → lerpColor → hexToRgb` 每柱每帧执行，`barCount` 高时开销显著。
-- **背景图片模糊时重复绘制**：`bgBlur > 0` 时仍先画清晰图再画模糊图。
-- **`updateSeekUI()` 每帧写 DOM**。
 
 ### 11.2 已知问题
 
@@ -315,7 +310,7 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 按“价值/成本”排序：
 
 1. **音频特征层**：在 `AnalyserNode` 之上加 `AudioFeatures`——分频段能量（bass/mid/treble）、节拍检测（低频能量滑动平均 + 自适应阈值 + 冷却，输出 beat 脉冲与 BPM）、频谱质心/谱通量，驱动“能量映射”配色与脉冲特效。
-2. **渲染性能**：颜色 LUT 预计算、拖动期间只改几何（rAF 节流，`pointerup` 再同步面板）、背景模糊去重、进度条节流。
+2. **渲染性能（进阶）**：离屏分层（背景/元素/UI 只重绘变化层），大量粒子/瀑布类可引入 WebGL 后端。
 3. **图层与混合**：图层顺序 UI、`globalCompositeOperation` 混合模式、元素成组。
 4. **导出**：`canvas.captureStream()` + `MediaRecorder` 录制 WebM；或逐帧导出 PNG 序列；用 `OfflineAudioContext` 离线渲染保证稳定帧率。
 5. **预设分享**：导入/导出 JSON 预设，压缩进 URL hash 分享。
