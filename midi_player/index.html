@@ -438,16 +438,20 @@ function initAudio(){
 // 静态资源缓存（MIDI谱、list.json等），版本化缓存名
 const AssetCache = {
   cacheName: 'midi-player-assets-v1',
+  // 统一转绝对路径，避免相对路径在不同URL下解析不同导致缓存失效
+  _abs(url){ return new URL(url, window.location.href).href; },
   async fetch(url) {
+    const absUrl = this._abs(url);
     try {
       const cache = await caches.open(this.cacheName);
-      const cached = await cache.match(url);
+      // ignoreSearch忽略查询参数，提高匹配率
+      const cached = await cache.match(absUrl, {ignoreSearch: true});
       if (cached) return cached.clone();
       const resp = await fetch(url);
-      if (resp.ok) cache.put(url, resp.clone());
+      if (resp.ok) cache.put(absUrl, resp.clone());
       return resp;
     } catch(e) {
-      return fetch(url); // Cache API不可用时回退普通fetch
+      return fetch(url);
     }
   }
 };
@@ -498,18 +502,34 @@ const SoundfontLoader = {
 
   async _doLoad(name, onProgress){
     const url = this.cdnBase + name + '-ogg.js';
+    // 统一转绝对路径作为缓存key，避免相对路径解析问题
+    const absUrl = new URL(url, window.location.href).href;
     if(onProgress) onProgress(0, '正在下载音色…');
     let text = null;
     try{
       const cache = await caches.open(this.cacheName);
-      const cached = await cache.match(url);
+      // ignoreSearch忽略查询参数
+      const cached = await cache.match(absUrl, {ignoreSearch: true});
       if(cached){ text = await cached.text(); if(onProgress) onProgress(0.5, '从缓存读取音色…'); }
     }catch(e){}
     if(!text){
       const resp = await fetch(url, {mode: 'cors'});
       if(!resp.ok) throw new Error('下载失败 HTTP ' + resp.status);
       text = await resp.text();
-      try{ const cache = await caches.open(this.cacheName); await cache.put(url, new Response(text, {headers:{'Content-Type':'application/javascript'}})); }catch(e){}
+      // 用resp.clone()缓存原始Response，保留正确headers
+      try{
+        const cache = await caches.open(this.cacheName);
+        await cache.put(absUrl, resp.clone());
+      }catch(e){
+        // 存储空间不足时，清理旧缓存后重试
+        try{
+          const cache = await caches.open(this.cacheName);
+          const keys = await cache.keys();
+          // 清理一半旧缓存
+          for(let i = 0; i < Math.floor(keys.length / 2); i++) await cache.delete(keys[i]);
+          await cache.put(absUrl, resp.clone());
+        }catch(e2){}
+      }
       if(onProgress) onProgress(0.5, '下载完成，解析中…');
     }
     const MIDI = { Soundfont: {} };
