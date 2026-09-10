@@ -65,7 +65,7 @@
 | `空格` | 播放 / 暂停 |
 | `Delete` | 删除选中元素 |
 
-> 说明：当前**没有**麦克风输入、全屏、FPS 显示、暗/亮主题与导出功能（见[路线图](#十二路线图深挖方向)）。
+> 说明：当前**没有**全屏、FPS 显示、暗/亮主题与导出功能（见[路线图](#十二路线图深挖方向)）。
 
 ---
 
@@ -304,7 +304,7 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 ### 11.2 已知问题
 
 - `rounded` 仅 `bars`、`innerRadius` 仅 `circle-radial`、`glow`/`lineWidth` 仅部分效果（属预期设计）。
-- 无导出（WebM/PNG 序列）、无麦克风输入、无 `devicePixelRatio` 适配。
+- 无导出（WebM/PNG 序列）、无 `devicePixelRatio` 适配。
 - 背景图片为 object URL，刷新后不恢复（自动回退为纯色）。
 - 多元素可叠加，但暂无图层顺序/混合模式的 UI。
 
@@ -320,10 +320,9 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 4. **导出**：`canvas.captureStream()` + `MediaRecorder` 录制 WebM；或逐帧导出 PNG 序列；用 `OfflineAudioContext` 离线渲染保证稳定帧率。
 5. **预设分享**：导入/导出 JSON 预设，压缩进 URL hash 分享。
 6. **响应式与 DPR**：画布按 `devicePixelRatio` 与容器自适应，增加缩放手柄。
-7. **麦克风输入**：`getUserMedia` + `createMediaStreamSource`。
-8. **性能预算与降级**：监测帧率/丢帧，动态降低 `barCount`、关闭发光/模糊。
-9. **可测试性**：拆分为 `audio.js`/`visualizers.js`/`app.js`，对纯函数（`multiColor`、`envStep`、`getFreqBars`）做单元测试，Playwright 做视觉回归。
-10. **无障碍与键盘**：ARIA 标注、更多快捷键（删除/复制/切换元素）。
+7. **性能预算与降级**：监测帧率/丢帧，动态降低 `barCount`、关闭发光/模糊。
+8. **可测试性**：拆分为 `audio.js`/`visualizers.js`/`app.js`，对纯函数（`multiColor`、`envStep`、`getFreqBars`）做单元测试，Playwright 做视觉回归。
+9. **无障碍与键盘**：ARIA 标注、更多快捷键（删除/复制/切换元素）。
 
 ---
 
