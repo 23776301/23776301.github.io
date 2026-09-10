@@ -541,6 +541,7 @@ const SoundfontLoader = {
   },
 
   async _getBuffer(name, midi){
+    if(!audioCtx) initAudio(); // 确保audioCtx已初始化，避免decodeAudioData失败
     const entry = this.loaded[name];
     if(!entry) return null;
     if(entry.buffers[midi]) return entry.buffers[midi];
@@ -587,41 +588,6 @@ const SoundfontLoader = {
     for(let i = 0; i < midis.length; i += batchSize){
       const batch = midis.slice(i, i + batchSize);
       await Promise.all(batch.map(m => this._getBuffer(this.current, m)));
-    }
-  },
-
-  // 并发预加载所有音色（直接调用_doLoad绕过单加载锁，自动缓存）
-  async preloadAll(onProgress){
-    const sel = document.getElementById('timbreSel');
-    const allNames = [];
-    for(let i = 0; i < sel.options.length; i++){
-      const v = sel.options[i].value;
-      if(v !== '__synth__') allNames.push(v);
-    }
-    // 优先加载的音色
-    const priority = ['clavinet', 'acoustic_grand_piano'];
-    const rest = allNames.filter(n => !priority.includes(n));
-    let done = 0;
-    const total = allNames.length;
-    // 先加载优先音色（串行，确保立即可用）
-    for(const name of priority){
-      if(!this.loaded[name] || !this.loaded[name].ready){
-        try{ await this._doLoad(name, null); }catch(e){}
-      }
-      done++;
-      if(onProgress) onProgress(done/total, '预加载音色 ' + done + '/' + total);
-    }
-    // 并发加载其余音色（每批4个并发）
-    const batchSize = 4;
-    for(let i = 0; i < rest.length; i += batchSize){
-      const batch = rest.slice(i, i + batchSize);
-      await Promise.all(batch.map(async name => {
-        if(!this.loaded[name] || !this.loaded[name].ready){
-          try{ await this._doLoad(name, null); }catch(e){}
-        }
-      }));
-      done += batch.length;
-      if(onProgress) onProgress(done/total, '预加载音色 ' + done + '/' + total);
     }
   },
 
