@@ -725,7 +725,6 @@ const SoundfontLoader = {
     synthCalls: 0,        // 回退合成钢琴次数
   },
   timbreGain: { 'acoustic_grand_piano': 10.0, 'clavinet': 5.0 }, // 硬编码音色增益：三角钢琴1000%, 古钢琴500%
-  MIN_DURATION: 0.03, // 最小播放时间30ms
 
   init(){
     const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -910,8 +909,8 @@ const SoundfontLoader = {
       }
     }
     // 不再做同音去重/合并：每个音符事件都必须发声
-    // 最小播放时间30ms，避免极短音符频繁切换
-    const effDuration = Math.max(duration, this.MIN_DURATION);
+    // 使用真实时长；仅用 1ms epsilon 防止 0/无效调度（不再强制 30ms）
+    const d = Math.max(duration, 0.001);
     if(this.current !== '__synth__'){
       const entry = this.loaded[this.current];
       const buffer = entry ? entry.buffers[midi] : null;
@@ -953,15 +952,18 @@ const SoundfontLoader = {
           console.error('[AudioDebug] 创建节点失败:', e, '已创建:', this.debug.srcCreated, '时间:', t.toFixed(2));
           return;
         }
-        const release = 0.02;
         const tg = this.timbreGain[this.current] || 3.0; // 未配置的音色默认300%增益
+        // 时长自适应包络：短音符按比例缩短起音/收尾，避免事件时间倒挂
+        const attack = Math.min(0.005, d * 0.5);
+        const release = Math.min(0.02, d * 0.5);
+        const peak = 0.4 * velocity * tg;
         g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(0.4 * velocity * tg, t + 0.005);
-        g.gain.setValueAtTime(0.4 * velocity * tg, t + Math.max(0.01, effDuration - release));
-        g.gain.linearRampToValueAtTime(0, t + effDuration);
+        g.gain.linearRampToValueAtTime(peak, t + attack);
+        g.gain.setValueAtTime(peak, t + Math.max(attack, d - release));
+        g.gain.linearRampToValueAtTime(0, t + d);
         src.connect(g); g.connect(masterGain);
         src.start();
-        src.stop(t + effDuration + 0.05);
+        src.stop(t + d + 0.05);
         this.activeSources[midi] = {src, gain: g};
         src.onended = () => {
           this.debug.onendedFired++;
@@ -985,10 +987,10 @@ const SoundfontLoader = {
     this.debug.synthCalls = (this.debug.synthCalls || 0) + 1;
     const f = 440 * Math.pow(2, (midi - 69) / 12);
     const t0 = audioCtx.currentTime;
-    const synthDur = Math.max(duration, this.MIN_DURATION);
+    const synthDur = Math.max(duration, 0.001); // 真实时长，仅 1ms epsilon
     const env = audioCtx.createGain();
     env.gain.setValueAtTime(0, t0);
-    env.gain.linearRampToValueAtTime(0.4 * velocity, t0 + 0.008);
+    env.gain.linearRampToValueAtTime(0.4 * velocity, t0 + Math.min(0.008, synthDur * 0.5));
     env.gain.exponentialRampToValueAtTime(0.0008, t0 + synthDur);
     env.connect(masterGain);
     const specs = [[1, 0.9, "triangle"], [2, 0.35, "sine"], [3, 0.18, "sine"]];
