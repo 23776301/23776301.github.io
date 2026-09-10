@@ -337,7 +337,7 @@ select:focus{border-color:var(--accent)}
           <span><span id="statPlayed">已播：-/-</span> · <span id="statPercent">0.00%</span></span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-          <span style="font-size:10px;color:var(--dim);flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px;line-height:1;"><span>配</span><span>色</span></span>
+          <span style="font-size:10px;color:var(--dim);flex-shrink:0;height:57px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;line-height:1;"><span>配</span><span>色</span><span>方</span><span>案</span></span>
           <div style="display:grid;grid-template-columns:auto auto;gap:5px;flex-shrink:0;">
             <button class="pal-btn palette-btn" data-palette="A" onclick="setPalette('A')" title="纯紫">A</button>
             <button class="pal-btn palette-btn" data-palette="B" onclick="setPalette('B')" title="青蓝×琥珀红">B</button>
@@ -2065,13 +2065,13 @@ const PALETTES = {
     white: ['#8b5cf6', '#8b5cf6', '#8b5cf6', '#8b5cf6', '#8b5cf6'],
     black: ['#8b5cf6', '#8b5cf6', '#8b5cf6', '#8b5cf6', '#8b5cf6']
   },
-  B: { // 青蓝 × 琥珀红
-    white: ['#22d3ee', '#38bdf8', '#3b82f6', '#6366f1', '#8b5cf6'],
-    black: ['#fde68a', '#fbbf24', '#fb923c', '#f97316', '#ef4444']
+  B: { // 浅蔚蓝 → 深紫黑（白键）；米色 → 暗红（黑键）
+    white: ['#dbeafe', '#93c5fd', '#60a5fa', '#6d28d9', '#3b0764'],
+    black: ['#fef3c7', '#fde68a', '#f59e0b', '#b91c1c', '#7f1d1d']
   },
-  C: { // 青绿 × 品红
-    white: ['#5eead4', '#2dd4bf', '#22d3ee', '#38bdf8', '#3b82f6'],
-    black: ['#f9a8d4', '#f472b6', '#ec4899', '#db2777', '#be185d']
+  C: { // 浅青白 → 深蓝（白键）；浅粉白 → 深品红（黑键）
+    white: ['#ccfbf1', '#5eead4', '#22d3ee', '#2563eb', '#1e3a8a'],
+    black: ['#fce7f3', '#f9a8d4', '#ec4899', '#be185d', '#831843']
   }
 };
 // ===== 自定义配色（四端颜色插值出 5 级）=====
