@@ -364,12 +364,21 @@ _openDebugDB().then(() => {
   }catch(e){}
 });
 
+// 日志颜色：蓝色 info（下载等）、绿色（正常/恢复）、黄色 warn、红色 error
+function _debugColor(type, msg) {
+  if(msg.indexOf('[INFO]') >= 0) return '#4ea1ff';
+  if(msg.indexOf('[OK]') >= 0) return '#2fbf6f';
+  if(type === 'warn') return '#ff0';
+  if(type === 'error') return '#f44';
+  return '#0f0';
+}
+
 function _appendDebug(msg, type) {
   if(!_debugContentEl) {
     _debugContentEl = document.getElementById('debugTerminalContent');
   }
   const time = new Date().toLocaleTimeString();
-  const color = type === 'warn' ? '#ff0' : type === 'error' ? '#f44' : '#0f0';
+  const color = _debugColor(type, msg);
   const line = document.createElement('div');
   line.style.color = color;
   line.style.wordBreak = 'break-all';
@@ -427,10 +436,13 @@ function applyDebugAppearance(){
   if(!el) return;
   const op = document.getElementById('dbgOpacity');
   const bl = document.getElementById('dbgBlur');
-  const alpha = op ? parseFloat(op.value) : 0.92;
-  const blur = bl ? parseFloat(bl.value) : 0;
+  const alpha = op ? parseFloat(op.value) : 0.1;
+  const blurPct = bl ? parseFloat(bl.value) : 30; // 0-100%
+  const blurPx = blurPct * 0.2;                   // 100% -> 20px
   el.style.background = 'rgba(0,0,0,' + alpha + ')';
-  const bf = blur > 0 ? ('blur(' + blur + 'px)') : 'none';
+  const header = el.firstElementChild;
+  if(header) header.style.background = 'rgba(30,30,30,' + Math.min(1, alpha + 0.08) + ')';
+  const bf = blurPx > 0 ? ('blur(' + blurPx.toFixed(1) + 'px)') : 'none';
   el.style.backdropFilter = bf;
   el.style.webkitBackdropFilter = bf;
 }
@@ -517,7 +529,7 @@ function initAudio(){
   audioCtx.addEventListener('statechange', () => {
     console.warn('[AudioDebug] AudioContext状态变化:', audioCtx.state, '时间:', audioCtx.currentTime.toFixed(2));
   });
-  console.warn('[AudioDebug] AudioContext已创建 sampleRate=' + audioCtx.sampleRate +
+  console.log('[AudioDebug][INFO] AudioContext已创建 sampleRate=' + audioCtx.sampleRate +
     ' baseLatency=' + (audioCtx.baseLatency != null ? (audioCtx.baseLatency * 1000).toFixed(1) + 'ms' : 'N/A') +
     ' outputLatency=' + (audioCtx.outputLatency != null ? (audioCtx.outputLatency * 1000).toFixed(1) + 'ms' : 'N/A') +
     ' state=' + audioCtx.state);
@@ -543,7 +555,7 @@ const RenderQuality = {
       console.warn('[AudioDebug] 持续丢帧/丢音频，启用降级渲染');
     } else if(this.degraded && this.goodSeconds >= this.GOOD_THRESHOLD){
       this.degraded = false;
-      console.warn('[AudioDebug] 已连续 ' + this.GOOD_THRESHOLD + ' 秒无丢帧，恢复完整渲染');
+      console.log('[AudioDebug][OK] 已连续 ' + this.GOOD_THRESHOLD + ' 秒无丢帧，恢复完整渲染');
     }
   }
 };
@@ -597,9 +609,9 @@ const AudioDebugMonitor = {
           }
         };
         this.rc.start({updateInterval: 1});
-        console.warn('[AudioDebug] renderCapacity 已启用');
+        console.log('[AudioDebug][INFO] renderCapacity 已启用');
       } else {
-        console.warn('[AudioDebug] 当前浏览器不支持 renderCapacity（建议Chrome 116+）');
+        console.log('[AudioDebug][INFO] 当前浏览器不支持 renderCapacity（建议Chrome 116+）');
       }
     }catch(e){ console.warn('[AudioDebug] renderCapacity 启动失败:', e.message || e); }
 
@@ -699,22 +711,35 @@ const AudioDebugMonitor = {
       const dropped = fps < 30 || stallDelta > 0 || this.skippedNotes > 0;
       RenderQuality.evaluate(dropped);
     }
+    // 音符积压 / 负载告警
+    if(playing && this.skippedNotes > 0){
+      console.warn('[AudioDebug] 音符积压：本窗口跳过 ' + this.skippedNotes + ' 个');
+    }
+    if(playing && this.frames > 0 && (this.frames / winSec) < 30){
+      console.warn('[AudioDebug] 帧率偏低 fps=' + (this.frames / winSec).toFixed(0) +
+        ' drawMs=' + (this.drawMsSum / this.frames).toFixed(1) +
+        ' schedMs=' + (this.frameMsSum / this.frames).toFixed(1));
+    }
 
-    console.log('[AudioDebug] [1s] fps=' + (this.frames / winSec).toFixed(0) +
-      ' degraded=' + (RenderQuality.degraded ? 1 : 0) +
-      ' schedMs(avg/max)=' + (this.frames ? (this.frameMsSum / this.frames).toFixed(1) : '0') + '/' + this.maxFrameMs.toFixed(1) +
-      ' drawMs(avg/max)=' + (this.frames ? (this.drawMsSum / this.frames).toFixed(1) : '0') + '/' + this.maxDrawMs.toFixed(1) + ' maxVisible=' + this.maxVisible +
-      ' notes/s=' + this.notesTriggered + ' maxNotesFrame=' + this.maxNotesFrame + ' skipped/s=' + this.skippedNotes +
-      ' calls=' + d.playNoteCalls + ' ignored=' + d.playNoteIgnored + ' miss=' + d.bufferMiss + ' synth=' + d.synthCalls +
-      ' heap=' + heap + 'MB(Δ' + heapDelta + ')' +
-      ' nodes(sampleLive/synthLive/live)=' + sampleLive + '/' + synthLive + '/' + liveNodes +
-      ' peakLive=' + d.peakLive + ' stolen=' + d.voicesStolen +
-      ' activeKeys=' + activeKeys +
-      ' pendingDisconnect=' + d.pendingDisconnect +
-      ' rms=' + this.rmsLast.toFixed(5) + ' minRms=' + this.rmsMinWindow.toFixed(5) + ' silent=' + silentSec.toFixed(1) + 's' +
-      ' longTasks=' + this.longTasks + ' audioStalls=' + this.audioStalls +
-      ' state=' + (audioCtx ? audioCtx.state : 'null') + ' ctxTime=' + at.toFixed(1) +
-      ' ' + rcStr);
+    // 周期汇总降频为每 5 秒一条，且归类为 info（蓝色），减少刷屏
+    this.summaryCount = (this.summaryCount || 0) + 1;
+    if(this.summaryCount % 5 === 0){
+      console.log('[AudioDebug][INFO] [5s] fps=' + (this.frames / winSec).toFixed(0) +
+        ' degraded=' + (RenderQuality.degraded ? 1 : 0) +
+        ' schedMs(avg/max)=' + (this.frames ? (this.frameMsSum / this.frames).toFixed(1) : '0') + '/' + this.maxFrameMs.toFixed(1) +
+        ' drawMs(avg/max)=' + (this.frames ? (this.drawMsSum / this.frames).toFixed(1) : '0') + '/' + this.maxDrawMs.toFixed(1) + ' maxVisible=' + this.maxVisible +
+        ' notes/s=' + this.notesTriggered + ' maxNotesFrame=' + this.maxNotesFrame + ' skipped/s=' + this.skippedNotes +
+        ' calls=' + d.playNoteCalls + ' ignored=' + d.playNoteIgnored + ' miss=' + d.bufferMiss + ' synth=' + d.synthCalls +
+        ' heap=' + heap + 'MB(Δ' + heapDelta + ')' +
+        ' nodes(sampleLive/synthLive/live)=' + sampleLive + '/' + synthLive + '/' + liveNodes +
+        ' peakLive=' + d.peakLive + ' stolen=' + d.voicesStolen +
+        ' activeKeys=' + activeKeys +
+        ' pendingDisconnect=' + d.pendingDisconnect +
+        ' rms=' + this.rmsLast.toFixed(5) + ' minRms=' + this.rmsMinWindow.toFixed(5) + ' silent=' + silentSec.toFixed(1) + 's' +
+        ' longTasks=' + this.longTasks + ' audioStalls=' + this.audioStalls +
+        ' state=' + (audioCtx ? audioCtx.state : 'null') + ' ctxTime=' + at.toFixed(1) +
+        ' ' + rcStr);
+    }
 
     if(liveNodes > d.peakLive) d.peakLive = liveNodes;
     // 存活节点持续增长 = 泄漏信号（onended 未触发 / disconnect 未执行）
@@ -821,17 +846,23 @@ const SoundfontLoader = {
     // 统一转绝对路径作为缓存key，避免相对路径解析问题
     const absUrl = new URL(url, window.location.href).href;
     if(onProgress) onProgress(0, '正在下载音色…');
+    console.log('[AudioDebug][INFO] 下载音色 ' + name + ' ← ' + url);
     let text = null;
     try{
       const cache = await caches.open(this.cacheName);
       // ignoreSearch忽略查询参数
       const cached = await cache.match(absUrl, {ignoreSearch: true});
-      if(cached){ text = await cached.text(); if(onProgress) onProgress(0.5, '从缓存读取音色…'); }
+      if(cached){
+        text = await cached.text();
+        console.log('[AudioDebug][INFO] 音色 ' + name + ' 命中缓存 (' + (text.length/1024).toFixed(0) + 'KB)');
+        if(onProgress) onProgress(0.5, '从缓存读取音色…');
+      }
     }catch(e){}
     if(!text){
       const resp = await fetch(url, {mode: 'cors'});
       if(!resp.ok) throw new Error('下载失败 HTTP ' + resp.status);
       text = await resp.text();
+      console.log('[AudioDebug][INFO] 音色 ' + name + ' 下载完成 (' + (text.length/1024).toFixed(0) + 'KB)');
       // 用resp.clone()缓存原始Response，保留正确headers
       try{
         const cache = await caches.open(this.cacheName);
@@ -853,6 +884,7 @@ const SoundfontLoader = {
     const raw = fn(MIDI);
     if(!raw) throw new Error('音色数据解析失败');
     this.loaded[name] = { raw: raw, buffers: {}, ready: true };
+    console.log('[AudioDebug][INFO] 音色 ' + name + ' 解析完成');
     if(onProgress) onProgress(1, '音色加载完成');
   },
 
@@ -962,7 +994,7 @@ const SoundfontLoader = {
       }
     }
     this.debug.srcStopped += stopped;
-    if(stopped > 0) console.log('[AudioDebug] stopAll停止了', stopped, '个节点，时间:', t.toFixed(2));
+    if(stopped > 0) console.log('[AudioDebug][INFO] stopAll停止了', stopped, '个节点');
     // 合成钢琴分支的振荡器也必须停掉
     if(this.synthVoices.length){
       const n = this.synthVoices.length;
@@ -970,26 +1002,18 @@ const SoundfontLoader = {
         try{ v.oscs.forEach(o => o.stop(t + 0.02)); }catch(e){}
       }
       this.synthVoices.length = 0;
-      console.log('[AudioDebug] stopAll停止了', n, '个合成钢琴voice');
+      console.log('[AudioDebug][INFO] stopAll停止了', n, '个合成钢琴voice');
     }
     this.activeSynth = {};
     this.activeVoices.length = 0;
     this.lastTriggerTime.fill(0);
   },
 
-  // 定期音频状态报告（每5秒一次）
+  // 定期节点泄漏检测（每5秒一次，仅异常时告警）
   debugReport(){
     const now = performance.now();
     if(now - this.debug.lastReportTime < 5000) return;
     this.debug.lastReportTime = now;
-    const activeCount = this.activeSources.filter(s => s !== null).length;
-    const t = audioCtx ? audioCtx.currentTime : 0;
-    // 用字符串拼接，避免控制台持有对象引用导致内存增长
-    const memInfo = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + 'MB' : 'N/A';
-    console.log('[AudioDebug] t=' + t.toFixed(1) + ' active=' + activeCount +
-      ' created=' + this.debug.srcCreated + ' ended=' + this.debug.onendedFired +
-      ' leak=' + (this.debug.srcCreated - this.debug.onendedFired) +
-      ' mem=' + memInfo + ' timbre=' + this.current);
     // 节点泄漏检测：阈值500，且只在差值比上次增长超过200时告警，避免频繁输出
     const leakCount = this.debug.srcCreated - this.debug.onendedFired;
     if(leakCount > 500 && leakCount - (this.debug.lastLeakWarn || 0) > 200){
@@ -1003,14 +1027,6 @@ const SoundfontLoader = {
     if(!audioCtx) return;
     const t = audioCtx.currentTime;
     this.debug.playNoteCalls++;
-    // 调试：首次调用时打印current音色
-    if(!this._debugCurrentLogged){
-      this._debugCurrentLogged = true;
-      console.warn('[AudioDebug] playNote首次调用 current=', this.current,
-        'loaded键数=', Object.keys(this.loaded).length,
-        'loaded[current]=', this.loaded[this.current] ? '存在' : 'undefined',
-        '时间=', t.toFixed(2));
-    }
     // 检测AudioContext状态异常
     if(audioCtx.state !== 'running'){
       if(this.debug.lastState !== audioCtx.state){
@@ -1268,10 +1284,12 @@ async function onTimbreChange(){
   }
 
   // 1. 先加载默认MIDI，解析后加载对应音色
+  console.log('[AudioDebug][INFO] 加载默认谱面 midi/' + DEFAULT_SONG);
   AssetCache.fetch('midi/' + DEFAULT_SONG).then(r => {
     if(!r.ok) throw new Error('MIDI加载失败');
     return r.arrayBuffer();
   }).then(buf => {
+    console.log('[AudioDebug][INFO] 默认谱面已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
     midiBuf = buf;
     parseAndPlayMidi(buf, DEFAULT_SONG);
     // 加载谱子对应的默认音色
@@ -1416,6 +1434,7 @@ async function deleteSong(name){
 async function onSongChange(val){
   if(!val) return;
   stopPlay();
+  console.log('[AudioDebug][INFO] 切换谱面 ' + val);
   try{
     let buf, name;
     if(val.startsWith('builtin:')){
@@ -1424,10 +1443,12 @@ async function onSongChange(val){
       if(!resp.ok) throw new Error('加载失败 HTTP ' + resp.status);
       buf = await resp.arrayBuffer();
       name = file.split('/').pop();
+      console.log('[AudioDebug][INFO] 谱面 ' + name + ' 已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
     } else if(val.startsWith('user:')){
       name = val.substring(5);
       buf = await getUserSong(name);
       if(!buf) throw new Error('本地缓存中未找到');
+      console.log('[AudioDebug][INFO] 本地谱面 ' + name + ' 已读取 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
     }
     parseAndPlayMidi(buf, name);
     // 内置谱自动切换默认音色
@@ -1476,7 +1497,7 @@ function parseAndPlayMidi(buf, filename){
     density <= 6000 ? 0.02 :
     density <= 12000 ? 0.035 : 0.05;
   SoundfontLoader.lastTriggerTime.fill(0);
-  console.log('[AudioDebug] 谱面密度=' + density.toFixed(0) + ' 音符/s，自适应同音重触发下限=' +
+  console.log('[AudioDebug][INFO] 谱面密度=' + density.toFixed(0) + ' 音符/s，自适应同音重触发下限=' +
     SoundfontLoader.retriggerFloor + 's');
   document.getElementById('statTracks').textContent = '轨道：' + midi.tracks.length;
   document.getElementById('statTotal').textContent = '音符：' + allNotes.length;
@@ -2156,14 +2177,14 @@ document.getElementById('playBtn').addEventListener('click', () => {});
 </div>
 
 <!-- ===== 调试终端面板 ===== -->
-<div id="debugTerminal" style="position:fixed;left:0;right:0;bottom:0;height:40%;background:rgba(0,0,0,0.92);z-index:9999;display:none;flex-direction:column;font-family:monospace;font-size:11px;border-top:1px solid #444;">
-  <div style="display:flex;align-items:center;gap:10px;padding:4px 8px;background:rgba(30,30,30,.85);border-bottom:1px solid #444;flex-wrap:wrap;">
+<div id="debugTerminal" style="position:fixed;left:0;right:0;bottom:0;height:40%;background:rgba(0,0,0,0.1);z-index:9999;display:none;flex-direction:column;font-family:monospace;font-size:11px;border-top:1px solid #444;">
+  <div style="display:flex;align-items:center;gap:10px;padding:4px 8px;background:rgba(30,30,30,.18);border-bottom:1px solid #444;flex-wrap:wrap;">
     <span style="color:#0f0;font-weight:bold;">DEBUG</span>
     <label style="color:#aaa;font-size:10px;display:flex;align-items:center;gap:4px;">透明
-      <input id="dbgOpacity" type="range" min="0.1" max="1" step="0.05" value="0.92" oninput="applyDebugAppearance()" style="width:64px;">
+      <input id="dbgOpacity" type="range" min="0.1" max="1" step="0.05" value="0.1" oninput="applyDebugAppearance()" style="width:64px;">
     </label>
     <label style="color:#aaa;font-size:10px;display:flex;align-items:center;gap:4px;">模糊
-      <input id="dbgBlur" type="range" min="0" max="20" step="1" value="0" oninput="applyDebugAppearance()" style="width:64px;">
+      <input id="dbgBlur" type="range" min="0" max="100" step="5" value="30" oninput="applyDebugAppearance()" style="width:64px;">
     </label>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;">
       <button id="debugCopyBtn" onclick="copyDebugTerminal()" style="background:#2a4;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">copy</button>
