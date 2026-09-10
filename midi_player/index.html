@@ -856,9 +856,9 @@ setInterval(() => AudioDebugMonitor.sampleRms(), 200);
 /* ============================================================
  * 2. 音色加载器（Soundfont + Cache API）
  * ========================================================== */
-// 静态资源缓存（MIDI谱、list.json等），版本化缓存名
+// 静态资源缓存（MIDI谱等），版本化缓存名
 const AssetCache = {
-  cacheName: 'midi-player-assets-v2',
+  cacheName: 'midi-player-assets-v1',
   // 统一转绝对路径，避免相对路径在不同URL下解析不同导致缓存失效
   _abs(url){ return new URL(url, window.location.href).href; },
   async fetch(url) {
@@ -874,8 +874,26 @@ const AssetCache = {
     } catch(e) {
       return fetch(url);
     }
+  },
+  // 列表等需要"每次最新"的资源：始终走网络，命中后更新缓存，避免旧列表残留
+  async fetchFresh(url) {
+    const absUrl = this._abs(url);
+    const resp = await fetch(url, {cache: 'no-store'});
+    try{
+      const cache = await caches.open(this.cacheName);
+      if(resp.ok) cache.put(absUrl, resp.clone());
+    }catch(e){}
+    return resp;
   }
 };
+// 清理旧版本资产缓存（例如曾用过的 v2），避免残留占用空间
+try{
+  if(window.caches && caches.keys){
+    caches.keys().then(keys => keys.forEach(k => {
+      if(k.indexOf('midi-player-assets-') === 0 && k !== AssetCache.cacheName) caches.delete(k);
+    })).catch(() => {});
+  }
+}catch(e){}
 
 const SoundfontLoader = {
   cacheName: 'midi-player-soundfont-cache-v1',
@@ -1455,7 +1473,7 @@ async function loadSongList(){
   sel.innerHTML = '';
   // 内置谱
   try{
-    const resp = await AssetCache.fetch('midi/list.json');
+    const resp = await AssetCache.fetchFresh('midi/list.json');
     if(resp.ok){
       const list = await resp.json();
       list.forEach(song => {
@@ -1499,7 +1517,7 @@ async function openManageModal(){
   }catch(e){}
   // 内置谱（置下方，不可删除）
   try{
-    const resp = await AssetCache.fetch('midi/list.json');
+    const resp = await AssetCache.fetchFresh('midi/list.json');
     if(resp.ok){
       const builtin = await resp.json();
       html += '<div style="color:#888;font-size:12px;margin:16px 0 8px">内置谱面</div>';
