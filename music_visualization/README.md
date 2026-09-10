@@ -50,19 +50,22 @@
 
 ### 1.3 其它
 
+- **多元素叠加**：可同时添加多个效果，按 `y` 排序绘制，支持选中/拖动/删除。
 - 画布比例预设：16:9（1280×720）、9:16、1:1、4:5、4:3。
 - 画布缩放（0.1×–2×）与「适配」按钮（重置为 100%）。
-- 画布内点击选中元素、拖动移动。
+- 画布内点击选中元素、拖动移动；选中时显示虚线框与四角手柄。
 - 背景：纯色 / 线性渐变 / 径向渐变 / 图片（模糊 + 暗化）。
 - 配色：纯色 / 渐变 / 彩虹，渐变支持多色增删排序。
+- **配置持久化**：画布、元素、音量、循环、平滑等自动存 `localStorage`，刷新不丢。
 
 ### 1.4 快捷键
 
 | 键 | 作用 |
 | --- | --- |
 | `空格` | 播放 / 暂停 |
+| `Delete` | 删除选中元素 |
 
-> 说明：当前**没有**麦克风输入、全屏、FPS 显示、暗/亮主题、配置持久化与导出功能（见[路线图](#十二路线图深挖方向)）。
+> 说明：当前**没有**麦克风输入、全屏、FPS 显示、暗/亮主题与导出功能（见[路线图](#十二路线图深挖方向)）。
 
 ---
 
@@ -104,6 +107,7 @@ index.html
 ├── <style>                     # 暗色主题、响应式、组件样式
 ├── AssetCache                  # Cache API 缓存（music-viz-assets-v1）
 ├── CFG                         # 全局配置（canvas / elements / audio）
+├── saveConfig / loadConfig     # localStorage 持久化（music-viz-config-v1）
 ├── VISUAL_STYLES               # 效果清单（id / name / cat）
 ├── defaultElementParams()      # 元素默认参数
 ├── 颜色工具                     # hexToRgb / rgbToHex / lerpColor / multiColor / elemColor
@@ -115,7 +119,7 @@ index.html
 ├── 音频控制                     # loadAudio / togglePlay / updateSeekUI
 ├── 元素库渲染                   # renderLibrary / thumbSVG
 ├── 属性面板                     # renderProps / colorEditorHTML / bindPropsFields
-├── 画布交互                     # mousedown / mousemove / mouseup
+├── 画布交互                     # pointerdown / pointermove / pointerup（鼠标+触摸）
 └── 画布比例与缩放               # setAspect / applyZoom
 ```
 
@@ -139,13 +143,15 @@ index.html
 - `DRAW` 是效果注册表：`DRAW[type] = function(ctx, p, W, H, el, dt)`。
 - 效果清单 `VISUAL_STYLES` 与 `DRAW` 分离，新增效果需同时登记两处。
 - 属性面板由参数声明式生成，不手写每个控件。
+- `saveConfig`/`loadConfig` 用 `localStorage` 持久化画布与元素（`scheduleSave` 防抖 300ms）；背景图片为 object URL，不跨会话保存。
 
 ---
 
 ## 四、音频分析
 
 - **节点**：`createMediaElementSource(audio)` → `AnalyserNode(fftSize=2048)` → `destination`。
-- **数据**：`getByteFrequencyData`（频域，长度 `frequencyBinCount = 1024`）与 `getByteTimeDomainData`（时域，长度 `fftSize = 2048`）。
+- **数据**：`getByteFrequencyData`（频域，长度 `frequencyBinCount = 1024`）与 `getByteTimeDomainData`（时域，长度 `fftSize = 2048`）。两者**每帧在 `render()` 中只取样一次**，所有元素复用同一份数据。
+- **平滑**：`smoothingTimeConstant` 为全局属性，由 `CFG.smoothing` 统一控制（默认 0.8），创建 analyser 时写入。
 - **频率范围裁剪**：`freqMin`/`freqMax` 映射到 bin 区间 `[minBin, maxBin]`，只在该区间取样。
 - **对数映射**：`logScale` 开启时按 `pow(i/n, 1.5)` 取样，低频分到更多柱子，更贴合听感；关闭则线性。
 - **包络跟随**：`getFreqBars` 对每个柱子维护 `el._env[i]`，用 `envStep` 做指数趋近：
@@ -167,12 +173,16 @@ index.html
 
 1. 计算 `dt`（钳制上限 0.1s，避免后台恢复跳变）。
 2. `drawBackground(CFG)` 绘制背景（不受缩放影响）。
-3. `ctx.save()` + 以画布中心为原点应用 `zoom` 缩放。
-4. 按 `y` 排序元素，逐个：
+3. 若存在 `AnalyserNode`，取样一次频域/时域数据到 `CFG.freq`/`CFG.wave`。
+4. `ctx.save()` + 以画布中心为原点应用 `zoom` 缩放。
+5. 按 `y` 排序元素，逐个：
    - `globalAlpha = opacity`；
-   - 平移到元素中心、应用 `rotation`、再平移回左上角；
+   - 平移到元素中心，按需 `scale(-1,1)`（`mirror` 水平镜像）与 `scale(1,-1)`（`invert` 垂直翻转），再应用 `rotation`，最后平移回左上角；
    - 调用 `DRAW[type](ctx, p, ew, eh, el, dt)`，其中 `ew = canvas.width * w/100`。
-5. `ctx.restore()`；`updateSeekUI()` 更新进度条。
+6. 绘制选中元素的虚线框与四角手柄（与元素同一坐标系）。
+7. `ctx.restore()`；`updateSeekUI()` 更新进度条。
+
+> `mirror` 与 `invert` 在渲染层统一处理，对**所有**效果生效，不再由单个效果各自实现。
 
 坐标系统：元素用**百分比**描述（`x/y` 为元素中心，`w/h` 为占画布比例），绘制时换算为像素。
 
@@ -199,15 +209,15 @@ index.html
 | `lineWidth` | 3 | 线宽 | 折线/波形类 |
 | `freqMin` / `freqMax` | 20 / 16000 | 频率范围（Hz） | 频域效果 |
 | `logScale` | true | 对数频率映射 | 频域效果 |
-| `invert` | false | 垂直翻转 | 仅 `bars` |
+| `invert` | false | 垂直翻转 | 全部（渲染层变换） |
 | `rounded` | true | 圆角柱 | 仅 `bars` |
 | `glow` / `glowBlur` | false / 12 | 发光 | `circle-wave`、`spectrum-line` |
 | `innerRadius` | 25 | 内圈半径（%） | 仅 `circle-radial` |
-| `mirror` | false | 镜像 | ⚠️ 未实现（占位参数） |
+| `mirror` | false | 水平镜像 | 全部（渲染层变换） |
 
 属性面板由 `rangeField` / `toggleField` / `dualRangeField` / `collapsible` / `colorEditorHTML` 生成，`bindPropsFields` 统一绑定事件。
 
-> ⚠️ 部分参数只在个别效果中生效（如 `invert`/`rounded` 仅 `bars`），而 `mirror` 目前是死参数；见[已知问题](#十一性能与已知问题)。
+> 部分参数只在个别效果中生效（如 `rounded` 仅 `bars`、`innerRadius` 仅 `circle-radial`），属预期设计；`mirror`/`invert` 已改为通用渲染变换。
 
 ---
 
@@ -235,13 +245,12 @@ index.html
 
 ## 九、交互
 
-- **元素库**：左侧面板按分类列出效果缩略图，点击即创建。
+- **元素库**：左侧面板按分类列出效果缩略图，点击即追加一个新元素。
 - **属性面板**：右侧（移动端底部抽屉）分组展示参数。
-- **画布**：`mousedown` 命中检测 → 选中并拖动；`mousemove` 更新位置；`mouseup` 结束。
+- **画布**：Pointer Events 统一鼠标/触摸——`pointerdown` 命中检测并 `setPointerCapture`，`pointermove` 更新位置，`pointerup`/`pointercancel` 结束；画布设置 `touch-action:none` 防止触摸滚动。
+- **选中反馈**：选中元素绘制虚线框与四角手柄；点击空白处取消选中。
 - **元素库/背景**：底部「背景」工具页配置画布背景。
 - **缩放**：工具栏 `− / + / ⛶ 适配`，标签实时显示百分比。
-
-> ⚠️ 画布拖动仅绑定了鼠标事件，**触摸设备无法拖动元素**。
 
 ---
 
@@ -279,23 +288,25 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 
 ### 11.1 性能
 
-- **拖动元素时每帧重建属性面板**：`mousemove` 里直接调用 `renderProps()`，会反复 `innerHTML` 重建并重绑事件，是当前最大热点。
+**已优化**
+
+- **每帧只取样一次频谱**：`getByteFrequencyData`/`getByteTimeDomainData` 移入 `render()`，所有元素复用。
+- **颜色彩虹模式**改为基于播放进度（`audio.currentTime`），暂停时冻结。
+- **`smoothing` 全局化**：由 `CFG.smoothing` 统一控制，创建 analyser 时写入。
+
+**待优化（下一轮）**
+
+- **拖动元素时每帧重建属性面板**：`pointermove` 里仍调用 `renderProps()`，反复 `innerHTML` 重建。
 - **颜色逐帧解析 hex**：`multiColor → lerpColor → hexToRgb` 每柱每帧执行，`barCount` 高时开销显著。
-- **每帧重复取频谱**：每个频域效果各自调用 `getByteFrequencyData` 并新建数组。
-- **背景图片模糊时重复绘制**：`bgBlur > 0` 时先画清晰图再画模糊图，清晰那次是浪费。
+- **背景图片模糊时重复绘制**：`bgBlur > 0` 时仍先画清晰图再画模糊图。
 - **`updateSeekUI()` 每帧写 DOM**。
 
-### 11.2 已知问题 / 死代码
+### 11.2 已知问题
 
-- `mirror` 参数暴露在 UI 但没有任何效果使用。
-- `rounded`/`invert` 仅 `bars` 生效；`innerRadius` 仅 `circle-radial`；`glow`/`lineWidth` 仅部分效果。
-- `circle-pulse` 忽略 `barCount`（写死 32）。
-- 选中框代码计算了坐标但未绘制任何内容。
-- `addElement()` 每次清空 `CFG.elements`，实际**同时只能存在一个效果**。
-- 画布拖动无触摸/指针支持。
-- `rainbow` 基于墙钟时间，暂停时仍在变化。
-- `smoothing` 是全局 analyser 属性，却放在元素参数中，且初始化未从参数写入。
-- 无配置持久化、无导出、无麦克风、无 DPR 适配。
+- `rounded` 仅 `bars`、`innerRadius` 仅 `circle-radial`、`glow`/`lineWidth` 仅部分效果（属预期设计）。
+- 无导出（WebM/PNG 序列）、无麦克风输入、无 `devicePixelRatio` 适配。
+- 背景图片为 object URL，刷新后不恢复（自动回退为纯色）。
+- 多元素可叠加，但暂无图层顺序/混合模式的 UI。
 
 ---
 
@@ -304,15 +315,15 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 按“价值/成本”排序：
 
 1. **音频特征层**：在 `AnalyserNode` 之上加 `AudioFeatures`——分频段能量（bass/mid/treble）、节拍检测（低频能量滑动平均 + 自适应阈值 + 冷却，输出 beat 脉冲与 BPM）、频谱质心/谱通量，驱动“能量映射”配色与脉冲特效。
-2. **渲染性能**：颜色 LUT 预计算、每帧单次取谱、拖动期间只改几何（rAF 节流，`mouseup` 再同步面板）、背景模糊去重。
-3. **多元素/图层**：真正的多效果叠加、图层顺序、`globalCompositeOperation` 混合模式。
+2. **渲染性能**：颜色 LUT 预计算、拖动期间只改几何（rAF 节流，`pointerup` 再同步面板）、背景模糊去重、进度条节流。
+3. **图层与混合**：图层顺序 UI、`globalCompositeOperation` 混合模式、元素成组。
 4. **导出**：`canvas.captureStream()` + `MediaRecorder` 录制 WebM；或逐帧导出 PNG 序列；用 `OfflineAudioContext` 离线渲染保证稳定帧率。
-5. **持久化与分享**：配置存 localStorage / 压缩进 URL hash，导入导出 JSON 预设。
-6. **响应式与 DPR**：画布按 `devicePixelRatio` 与容器自适应，Pointer Events 统一鼠标/触摸，增加缩放手柄。
+5. **预设分享**：导入/导出 JSON 预设，压缩进 URL hash 分享。
+6. **响应式与 DPR**：画布按 `devicePixelRatio` 与容器自适应，增加缩放手柄。
 7. **麦克风输入**：`getUserMedia` + `createMediaStreamSource`。
 8. **性能预算与降级**：监测帧率/丢帧，动态降低 `barCount`、关闭发光/模糊。
 9. **可测试性**：拆分为 `audio.js`/`visualizers.js`/`app.js`，对纯函数（`multiColor`、`envStep`、`getFreqBars`）做单元测试，Playwright 做视觉回归。
-10. **修正参数语义**：让 `mirror` 真正生效，或从 UI 移除；把 `smoothing` 提到全局设置。
+10. **无障碍与键盘**：ARIA 标注、更多快捷键（删除/复制/切换元素）。
 
 ---
 
