@@ -736,6 +736,8 @@ const SoundfontLoader = {
   activeSynth: {}, // midi -> synth voice，用于同音打断
   activeVoices: [], // 全局活跃voice（sample+synth），用于复音上限与抢占
   MAX_VOICES: 128,  // 全局复音上限，防止音频线程过载
+  lastTriggerTime: new Array(109).fill(0), // 每音高上次触发时间（audio time）
+  retriggerFloor: 0, // 自适应同音重触发下限（秒）；高密度谱面下 >0，用于限制节点创建率
   // ===== 调试统计 =====
   debug: {
     playNoteCalls: 0,
@@ -932,6 +934,7 @@ const SoundfontLoader = {
     }
     this.activeSynth = {};
     this.activeVoices.length = 0;
+    this.lastTriggerTime.fill(0);
   },
 
   // 定期音频状态报告（每5秒一次）
@@ -975,7 +978,14 @@ const SoundfontLoader = {
         this.debug.lastState = audioCtx.state;
       }
     }
-    // 不再做同音去重/合并：每个音符事件都必须发声
+    // 自适应同音聚合：仅当谱面整体密度极高时才启用，
+    // 限制每个音高的重触发频率，从而限制 BufferSource 创建率（节点 churn）。
+    // 普通密度谱面 floor=0，完全逐音符忠实。
+    if(this.retriggerFloor > 0 && t - this.lastTriggerTime[midi] < this.retriggerFloor){
+      this.debug.playNoteIgnored++;
+      return;
+    }
+    this.lastTriggerTime[midi] = t;
     // 使用真实时长；仅用 1ms epsilon 防止 0/无效调度（不再强制 30ms）
     const d = Math.max(duration, 0.001);
     if(this.current !== '__synth__'){
@@ -1418,6 +1428,16 @@ function parseAndPlayMidi(buf, filename){
   });
   allNotes.sort((a, b) => a.time - b.time);
   totalDuration = maxTime;
+  // 根据整首谱面平均密度设置自适应同音重触发下限（仅高密度 black-MIDI 生效）
+  const density = totalDuration > 0 ? allNotes.length / totalDuration : 0;
+  SoundfontLoader.retriggerFloor =
+    density <= 1000 ? 0 :
+    density <= 3000 ? 0.008 :
+    density <= 6000 ? 0.02 :
+    density <= 12000 ? 0.035 : 0.05;
+  SoundfontLoader.lastTriggerTime.fill(0);
+  console.log('[AudioDebug] 谱面密度=' + density.toFixed(0) + ' 音符/s，自适应同音重触发下限=' +
+    SoundfontLoader.retriggerFloor + 's');
   document.getElementById('statTracks').textContent = '轨道：' + midi.tracks.length;
   document.getElementById('statTotal').textContent = '音符：' + allNotes.length;
   document.getElementById('statPlayed').textContent = '已播：0/' + allNotes.length;
@@ -2005,15 +2025,17 @@ function drawScene(notes, startIdx, endIdx, curTime){
   ctx.rect(0, 0, C.w, keyTop);
   ctx.clip();
 
-  for(let i = startIdx; i < endIdx; i++){
+  // ===== 渲染 LOD：可见音符过多时按步长抽样，绘制量有界，避免 O(音符数) =====
+  const visibleCount = endIdx - startIdx;
+  const DRAW_BUDGET = 4000;
+  const stride = visibleCount > DRAW_BUDGET ? Math.ceil(visibleCount / DRAW_BUDGET) : 1;
+  const useRound = stride === 1;
+
+  for(let i = startIdx; i < endIdx; i += stride){
     const n = notes[i];
     const key = keyByMidi[n.midi];
     if(!key) continue;
     const timeUntilStart = n.time - curTime;
-    // 记录当前正在播放的键
-    if(timeUntilStart <= 0 && n.time + n.duration >= curTime){
-      activeKeySet.add(n.midi);
-    }
     const noteH = n.duration * invFallDur * keyTop;
     const h = noteH < minH ? minH : noteH;
     const bottomY = keyTop - timeUntilStart * invFallDur * keyTop;
@@ -2021,7 +2043,8 @@ function drawScene(notes, startIdx, endIdx, curTime){
     // 整个音符沉入琴键后才消失
     if(y > keyTop || bottomY <= 0) continue;
     const ci = n.velocity > 0.7 ? 2 : (n.velocity > 0.4 ? 1 : 0);
-    paths[ci].roundRect(key.x + 1, y, key.w - 2, h, radius);
+    if(useRound) paths[ci].roundRect(key.x + 1, y, key.w - 2, h, radius);
+    else paths[ci].rect(key.x + 1, y, key.w - 2, h);
     hasAny = true;
   }
   ctx.restore();
@@ -2031,6 +2054,14 @@ function drawScene(notes, startIdx, endIdx, curTime){
       ctx.fillStyle = colors[c];
       ctx.fill(paths[c]);
     }
+  }
+
+  // 高亮当前正在发声的键：直接读 voice 注册表（O(88)），与绘制抽样无关
+  for(let m = 0; m < SoundfontLoader.activeSources.length; m++){
+    if(SoundfontLoader.activeSources[m]) activeKeySet.add(m);
+  }
+  for(const k in SoundfontLoader.activeSynth){
+    activeKeySet.add(parseInt(k, 10));
   }
 
   // 按键高亮
