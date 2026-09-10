@@ -419,6 +419,18 @@ function multiColor(colors, t){
   const localT = (t - idx*seg)/seg;
   return lerpColor(colors[idx], colors[idx+1], localT);
 }
+// 渐变颜色查表：按颜色数组缓存 256 级 LUT，避免逐柱逐帧解析 hex
+const _gradCache = new Map();
+function gradientLUT(colors){
+  const key = colors.join(',');
+  let lut = _gradCache.get(key);
+  if(lut) return lut;
+  lut = new Array(256);
+  for(let i=0;i<256;i++) lut[i] = multiColor(colors, i/255);
+  if(_gradCache.size >= 32) _gradCache.clear();
+  _gradCache.set(key, lut);
+  return lut;
+}
 function elemColor(p, t){
   if(p.colorMode==='solid') return p.colors[0] || '#ff3f58';
   if(p.colorMode==='rainbow'){
@@ -426,7 +438,8 @@ function elemColor(p, t){
     const clock = CFG.audio ? CFG.audio.currentTime : 0;
     return `hsl(${(t*300 + clock*30)%360},100%,60%)`;
   }
-  return multiColor(p.colors, t);
+  const lut = gradientLUT(p.colors);
+  return lut[Math.max(0, Math.min(255, Math.round(t*255)))];
 }
 
 /* ============================================================
@@ -662,8 +675,8 @@ function drawBackground(cfg){
   } else if(c.bgType==='image' && c.bgImage){
     const img=_bgImg;
     if(img&&img.complete){
-      ctx.drawImage(img,0,0,canvas.width,canvas.height);
       if(c.bgBlur>0){ ctx.filter=`blur(${c.bgBlur}px)`; ctx.drawImage(img,0,0,canvas.width,canvas.height); ctx.filter='none'; }
+      else { ctx.drawImage(img,0,0,canvas.width,canvas.height); }
       if(c.bgDarken>0){ ctx.fillStyle=`rgba(0,0,0,${c.bgDarken})`; ctx.fillRect(0,0,canvas.width,canvas.height); }
     } else { ctx.fillStyle=c.bgColor; ctx.fillRect(0,0,canvas.width,canvas.height); }
   }
@@ -778,9 +791,14 @@ function updateTimeDisplay(){
   const a=CFG.audio;
   document.getElementById('timeDisplay').textContent=`${fmtTime(a?a.currentTime:0)} / ${fmtTime(a?a.duration:0)}`;
 }
+let _lastSeekUI = 0;
 function updateSeekUI(){
   const a=CFG.audio;
-  if(a&&a.duration) document.getElementById('seekFill').style.width=(a.currentTime/a.duration*100)+'%';
+  if(!a||!a.duration) return;
+  const now=performance.now();
+  if(now-_lastSeekUI<100) return; // 100ms 节流，避免每帧写 DOM
+  _lastSeekUI=now;
+  document.getElementById('seekFill').style.width=(a.currentTime/a.duration*100)+'%';
 }
 
 /* ============================================================
@@ -1175,12 +1193,17 @@ canvas.addEventListener('pointerdown',e=>{
 canvas.addEventListener('pointermove',e=>{
   if(!_drag) return;
   const {x:mx,y:my}=canvasPos(e);
-  _drag.el.params.x=(mx-_drag.offX)/canvas.width*100;
-  _drag.el.params.y=(my-_drag.offY)/canvas.height*100;
-  renderProps();
+  const p=_drag.el.params;
+  p.x=(mx-_drag.offX)/canvas.width*100;
+  p.y=(my-_drag.offY)/canvas.height*100;
+  // 拖动期间只同步 X/Y 控件，避免每帧重建整个属性面板
+  const body=document.getElementById('propsBody');
+  const xr=body.querySelector('[data-field="x"]'), yr=body.querySelector('[data-field="y"]');
+  if(xr){ xr.value=p.x; const v=xr.parentElement.querySelector('.val'); if(v) v.textContent=p.x.toFixed(1); }
+  if(yr){ yr.value=p.y; const v=yr.parentElement.querySelector('.val'); if(v) v.textContent=p.y.toFixed(1); }
   e.preventDefault();
 });
-function endDrag(){ if(_drag){ _drag=null; scheduleSave(); } }
+function endDrag(){ if(_drag){ _drag=null; scheduleSave(); renderProps(); } }
 canvas.addEventListener('pointerup',endDrag);
 canvas.addEventListener('pointercancel',endDrag);
 
