@@ -301,6 +301,66 @@ select:focus{border-color:var(--accent)}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js"></script>
+
+<script>
+// ===== 调试终端：重定向console输出到页面 =====
+const _origLog = console.log.bind(console);
+const _origWarn = console.warn.bind(console);
+const _origError = console.error.bind(console);
+let _debugTerminalEl = null;
+let _debugContentEl = null;
+let _debugLines = [];
+const MAX_DEBUG_LINES = 200;
+
+function _appendDebug(msg, type) {
+  if(!_debugContentEl) {
+    _debugContentEl = document.getElementById('debugTerminalContent');
+  }
+  const time = new Date().toLocaleTimeString();
+  const color = type === 'warn' ? '#ff0' : type === 'error' ? '#f44' : '#0f0';
+  const line = document.createElement('div');
+  line.style.color = color;
+  line.style.wordBreak = 'break-all';
+  line.textContent = '[' + time + '] ' + msg;
+  if(_debugContentEl) {
+    _debugContentEl.appendChild(line);
+    if(_debugContentEl.children.length > MAX_DEBUG_LINES) {
+      _debugContentEl.removeChild(_debugContentEl.firstChild);
+    }
+    _debugContentEl.scrollTop = _debugContentEl.scrollHeight;
+  }
+}
+
+console.log = function(...args) {
+  _origLog(...args);
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  if(msg.includes('AudioDebug')) _appendDebug(msg, 'log');
+};
+console.warn = function(...args) {
+  _origWarn(...args);
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  if(msg.includes('AudioDebug')) _appendDebug(msg, 'warn');
+};
+console.error = function(...args) {
+  _origError(...args);
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  if(msg.includes('AudioDebug')) _appendDebug(msg, 'error');
+};
+
+function toggleDebugTerminal() {
+  const el = document.getElementById('debugTerminal');
+  if(el.style.display === 'none' || el.style.display === '') {
+    el.style.display = 'flex';
+  } else {
+    el.style.display = 'none';
+  }
+}
+function clearDebugTerminal() {
+  const el = document.getElementById('debugTerminalContent');
+  if(el) el.innerHTML = '';
+}
+</script>
+
 <script>
 /* ============================================================
  * 1. 音频上下文
@@ -1509,5 +1569,19 @@ document.getElementById('playBtn').addEventListener('click', () => {});
     <div id="manageList" style="overflow-y:auto;flex:1"></div>
   </div>
 </div>
+
+<!-- ===== 调试终端面板 ===== -->
+<div id="debugTerminal" style="position:fixed;left:0;right:0;bottom:0;height:40%;background:rgba(0,0,0,0.92);z-index:9999;display:none;flex-direction:column;font-family:monospace;font-size:11px;border-top:1px solid #444;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:#222;border-bottom:1px solid #444;">
+    <span style="color:#0f0;font-weight:bold;">DEBUG TERMINAL</span>
+    <div style="display:flex;gap:8px;">
+      <button onclick="clearDebugTerminal()" style="background:#333;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">清空</button>
+      <button onclick="toggleDebugTerminal()" style="background:#c22;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">关闭</button>
+    </div>
+  </div>
+  <div id="debugTerminalContent" style="flex:1;overflow-y:auto;padding:4px 8px;line-height:1.4;"></div>
+</div>
+<button id="debugTerminalBtn" onclick="toggleDebugTerminal()" style="position:fixed;bottom:8px;right:8px;z-index:9998;background:#222;color:#0f0;border:1px solid #444;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:4px;opacity:0.7;">DEBUG</button>
+
 </body>
 </html>
