@@ -654,37 +654,18 @@ const SoundfontLoader = {
     this.debug.lastReportTime = now;
     const activeCount = this.activeSources.filter(s => s !== null).length;
     const t = audioCtx ? audioCtx.currentTime : 0;
-    console.log('[AudioDebug] 状态报告:', {
-      audioCtxState: audioCtx ? audioCtx.state : 'null',
-      currentTime: t.toFixed(2),
-      activeSources: activeCount,
-      playNoteCalls: this.debug.playNoteCalls,
-      playNoteIgnored: this.debug.playNoteIgnored,
-      srcCreated: this.debug.srcCreated,
-      srcStopped: this.debug.srcStopped,
-      onendedFired: this.debug.onendedFired,
-      errors: this.debug.errors,
-      synthCalls: this.debug.synthCalls || 0,
-      currentTimbre: this.current,
-      masterGain: masterGain ? masterGain.gain.value : 'null',
-    });
-    // 异常检测：activeSources超过88
-    if(activeCount > 88){
-      console.warn('[AudioDebug] activeSources数量异常:', activeCount, '超过88个钢琴键！');
-    }
-    // 异常检测：srcCreated远大于onendedFired，说明节点泄漏
+    // 用字符串拼接，避免控制台持有对象引用导致内存增长
+    const memInfo = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + 'MB' : 'N/A';
+    console.log('[AudioDebug] t=' + t.toFixed(1) + ' active=' + activeCount +
+      ' created=' + this.debug.srcCreated + ' ended=' + this.debug.onendedFired +
+      ' leak=' + (this.debug.srcCreated - this.debug.onendedFired) +
+      ' mem=' + memInfo + ' timbre=' + this.current);
+    // 节点泄漏检测：阈值500，且只在差值比上次增长超过200时告警，避免频繁输出
     const leakCount = this.debug.srcCreated - this.debug.onendedFired;
-    if(leakCount > 100){
-      console.warn('[AudioDebug] 节点泄漏嫌疑: 创建', this.debug.srcCreated, 'onended', this.debug.onendedFired, '差值', leakCount);
-    }
-    // 内存监控（Chrome支持）
-    if(performance.memory){
-      const usedMB = (performance.memory.usedJSHeapSize / 1048576).toFixed(1);
-      const totalMB = (performance.memory.jsHeapSizeLimit / 1048576).toFixed(0);
-      console.log('[AudioDebug] 内存使用:', usedMB + 'MB / ' + totalMB + 'MB');
-      if(performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit > 0.8){
-        console.warn('[AudioDebug] 内存使用超过80%，可能导致GC频繁和卡顿!');
-      }
+    if(leakCount > 500 && leakCount - (this.debug.lastLeakWarn || 0) > 200){
+      this.debug.lastLeakWarn = leakCount;
+      console.warn('[AudioDebug] 节点泄漏! created=' + this.debug.srcCreated +
+        ' ended=' + this.debug.onendedFired + ' leak=' + leakCount);
     }
   },
 
@@ -735,6 +716,9 @@ const SoundfontLoader = {
             prev.gain.gain.setValueAtTime(prev.gain.gain.value, t);
             prev.gain.gain.linearRampToValueAtTime(0, t + 0.01);
             prev.src.stop(t + 0.02);
+            // 延迟disconnect，等淡出完成
+            const oldSrc = prev.src, oldGain = prev.gain;
+            setTimeout(() => { try{ oldSrc.disconnect(); oldGain.disconnect(); }catch(e){} }, 50);
           }catch(e){}
         }
         let src, g;
@@ -760,7 +744,11 @@ const SoundfontLoader = {
         this.activeSources[midi] = {src, gain: g};
         src.onended = () => {
           this.debug.onendedFired++;
+          // 主动断开连接，帮助GC回收
+          try{ src.disconnect(); g.disconnect(); }catch(e){}
           if(this.activeSources[midi] && this.activeSources[midi].src === src) this.activeSources[midi] = null;
+          // 解除闭包引用
+          src.onended = null;
         };
         return;
       }
