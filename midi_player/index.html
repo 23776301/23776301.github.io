@@ -27,8 +27,8 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
 
 /* 菜单/调试按钮组（可拖拽，自动淡出） */
 .fab-group{
-  position:fixed;left:0;top:66.67%;transform:translateY(-50%);
-  z-index:2001;
+  position:fixed;left:0;top:67%;transform:translateY(-50%);
+  z-index:10000;
   display:flex;flex-direction:column;align-items:center;gap:8px;
   transition:opacity .4s ease, transform .4s ease, left .3s ease;
   opacity:1;
@@ -1786,6 +1786,38 @@ function toggleMenu(){
   document.addEventListener('touchstart', () => { if(!group.classList.contains('hidden-btn')) showMenuBtn(); }, {passive:true});
   document.addEventListener('mousemove', () => { if(!group.classList.contains('hidden-btn')) showMenuBtn(); });
 
+  // 位置边界：高度限制在 10%~90%，且不超出屏幕
+  function fabBounds(){
+    const H = window.innerHeight, W = window.innerWidth;
+    const gh = group.offsetHeight || 57;
+    const gw = group.offsetWidth || 26;
+    const minTop = Math.round(H * 0.1);
+    return {
+      minTop,
+      maxTop: Math.max(minTop, Math.round(H * 0.9) - gh),
+      minLeft: 4,
+      maxLeft: Math.max(4, W - gw - 4)
+    };
+  }
+  function clampFabGroup(){
+    if(window.innerWidth > 800) return; // PC 由 CSS 固定在右下角
+    const b = fabBounds();
+    const r = group.getBoundingClientRect();
+    let top = r.top, left = r.left, changed = false;
+    if(top < b.minTop){ top = b.minTop; changed = true; }
+    if(top > b.maxTop){ top = b.maxTop; changed = true; }
+    if(left < b.minLeft){ left = b.minLeft; changed = true; }
+    if(left > b.maxLeft){ left = b.maxLeft; changed = true; }
+    if(changed){
+      group.style.left = Math.round(left) + 'px';
+      group.style.top = Math.round(top) + 'px';
+      group.style.right = 'auto'; group.style.bottom = 'auto';
+      group.style.transform = 'none';
+      try{ localStorage.setItem('menuBtnPos', JSON.stringify({x: Math.round(left), y: Math.round(top)})); }catch(e){}
+    }
+  }
+  window.clampFabGroup = clampFabGroup;
+
   // 仅移动端恢复拖拽位置；PC 端由 CSS 固定在右下角
   const isMobile = window.innerWidth <= 800;
   const saved = localStorage.getItem('menuBtnPos');
@@ -1799,6 +1831,12 @@ function toggleMenu(){
       group.style.transform = 'none';
     }catch(e){}
   }
+  // 恢复/布局后校正位置，防止保存的坐标落在屏幕外
+  setTimeout(clampFabGroup, 50);
+  window.addEventListener('resize', clampFabGroup);
+  window.addEventListener('orientationchange', () => setTimeout(clampFabGroup, 300));
+  if(window.visualViewport) window.visualViewport.addEventListener('resize', () => clampFabGroup());
+
   let isDragging = false, moved = false, tapAction = null;
   let startX, startY, startLeft, startTop;
   function onDown(action){
@@ -1807,7 +1845,8 @@ function toggleMenu(){
       isDragging = true; moved = false;
       const p = e.touches ? e.touches[0] : e;
       startX = p.clientX; startY = p.clientY;
-      startLeft = group.offsetLeft; startTop = group.offsetTop;
+      const r = group.getBoundingClientRect();
+      startLeft = r.left; startTop = r.top;
       group.style.transition = 'none'; // 拖动时禁用过渡，确保跟手
       group.classList.remove('faded'); // 拖动时保持不透明
       if(fadeTimer) clearTimeout(fadeTimer);
@@ -1819,9 +1858,10 @@ function toggleMenu(){
     const p = e.touches ? e.touches[0] : e;
     const dx = p.clientX - startX, dy = p.clientY - startY;
     if(Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
-    let nl = Math.max(0, Math.min(window.innerWidth - group.offsetWidth, startLeft + dx));
-    let nt = Math.max(0, Math.min(window.innerHeight - group.offsetHeight, startTop + dy));
-    group.style.left = nl + 'px'; group.style.top = nt + 'px';
+    const b = fabBounds();
+    const nl = Math.max(b.minLeft, Math.min(b.maxLeft, startLeft + dx));
+    const nt = Math.max(b.minTop, Math.min(b.maxTop, startTop + dy));
+    group.style.left = Math.round(nl) + 'px'; group.style.top = Math.round(nt) + 'px';
     group.style.right = 'auto'; group.style.bottom = 'auto';
     group.style.transform = 'none';
     e.preventDefault();
@@ -1842,7 +1882,8 @@ function toggleMenu(){
         snapX = window.innerWidth - group.offsetWidth - 4;
       }
       group.style.left = snapX + 'px';
-      localStorage.setItem('menuBtnPos', JSON.stringify({x: snapX, y: group.offsetTop}));
+      clampFabGroup();
+      localStorage.setItem('menuBtnPos', JSON.stringify({x: group.offsetLeft, y: group.offsetTop}));
       showMenuBtn();
     } else {
       group.style.transition = '';
