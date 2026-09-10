@@ -238,7 +238,7 @@ select:focus{border-color:var(--accent)}
             <option value="trombone">长号</option>
             <option value="french_horn">圆号</option>
             <option value="tuba">大号</option>
-            <option value="brass_ensemble">铜管合奏</option>
+            <option value="brass_section">铜管合奏</option>
             <option value="soprano_sax">高音萨克斯</option>
             <option value="alto_sax">中音萨克斯</option>
             <option value="tenor_sax">次中音萨克斯</option>
@@ -255,8 +255,6 @@ select:focus{border-color:var(--accent)}
             <option value="lead_1_square">方波主音</option>
             <option value="lead_2_sawtooth">锯齿主音</option>
             <option value="lead_7_fifths">五度主音</option>
-            <option value="pad_1_new_age">新世纪垫音</option>
-            <option value="pad_2_warm">温暖垫音</option>
             <option value="pad_4_choir">合唱垫音</option>
           </optgroup>
         </select>
@@ -340,7 +338,7 @@ const AssetCache = {
 
 const SoundfontLoader = {
   cacheName: 'midi-player-soundfont-cache-v1',
-  cdnBase: 'https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@master/FluidR3_GM/',
+  cdnBase: './soundfonts/',
   loaded: {},
   current: '__synth__',
   loading: null,
