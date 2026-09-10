@@ -725,8 +725,6 @@ const SoundfontLoader = {
     synthCalls: 0,        // 回退合成钢琴次数
   },
   timbreGain: { 'acoustic_grand_piano': 10.0, 'clavinet': 5.0 }, // 硬编码音色增益：三角钢琴1000%, 古钢琴500%
-  lastTriggerTime: new Array(109).fill(0),
-  MIN_TRIGGER_INTERVAL: 0.05, // 同音最小触发间隔50ms（解析时已合并，此为兜底）
   MIN_DURATION: 0.03, // 最小播放时间30ms
 
   init(){
@@ -868,7 +866,6 @@ const SoundfontLoader = {
       this.synthVoices.length = 0;
       console.log('[AudioDebug] stopAll停止了', n, '个合成钢琴voice');
     }
-    this.lastTriggerTime.fill(0);
   },
 
   // 定期音频状态报告（每5秒一次）
@@ -912,12 +909,7 @@ const SoundfontLoader = {
         this.debug.lastState = audioCtx.state;
       }
     }
-    // 同音节流：30ms内的重复触发忽略，人耳分辨不出
-    if(t - this.lastTriggerTime[midi] < this.MIN_TRIGGER_INTERVAL){
-      this.debug.playNoteIgnored++;
-      return;
-    }
-    this.lastTriggerTime[midi] = t;
+    // 不再做同音去重/合并：每个音符事件都必须发声
     // 最小播放时间30ms，避免极短音符频繁切换
     const effDuration = Math.max(duration, this.MIN_DURATION);
     if(this.current !== '__synth__'){
@@ -1703,16 +1695,12 @@ function playLoop(){
 
   currentTime = (now - playStartTime) * playSpeed;
 
-  // 触发到时间的音符（同一帧同音合并，最多88个同时触发）
-  const triggeredThisFrame = new Set();
+  // 触发到时间的音符（不做同音合并，每个音符事件都触发）
   let _trigCount = 0;
   while(nextNoteIndex < allNotes.length && allNotes[nextNoteIndex].time <= currentTime){
     const note = allNotes[nextNoteIndex];
-    if(!triggeredThisFrame.has(note.midi)){
-      triggeredThisFrame.add(note.midi);
-      _trigCount++;
-      SoundfontLoader.playNote(note.midi, note.velocity, note.duration / playSpeed);
-    }
+    _trigCount++;
+    SoundfontLoader.playNote(note.midi, note.velocity, note.duration / playSpeed);
     nextNoteIndex++;
   }
   AudioDebugMonitor.frame(performance.now() - _frameT0, _trigCount);
