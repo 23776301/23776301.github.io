@@ -1252,6 +1252,10 @@ function resizeCanvas(){
   drawScene(allNotes, 0, 0, 0);
 }
 window.addEventListener('resize', resizeCanvas);
+// 全屏切换、屏幕方向变化、移动端地址栏显示/隐藏时重新计算布局，确保钢琴键盘始终可见
+document.addEventListener('fullscreenchange', () => setTimeout(resizeCanvas, 100));
+window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
+if(window.visualViewport) window.visualViewport.addEventListener('resize', () => resizeCanvas());
 
 // 预渲染静态元素（背景、轨道线、琴键、音名）
 function renderStatic(){
