@@ -1132,15 +1132,6 @@ function applyZoom(){
   const z=CFG.canvas.zoom;
   document.getElementById('zoomLabel').textContent=Math.round(z*100)+'%';
 }
-function fitCanvas(){
-  const stageRect=canvasStage.getBoundingClientRect();
-  const pad=40;
-  const zx=(stageRect.width-pad)/canvas.width;
-  const zy=(stageRect.height-pad)/canvas.height;
-  CFG.canvas.zoom=Math.min(1,Math.min(zx,zy));
-  applyZoom();
-}
-
 /* ============================================================
    事件绑定
    ============================================================ */
@@ -1261,8 +1252,6 @@ window.addEventListener('keydown',e=>{
   if(e.code==='Space'&&!e.target.matches('input,select,textarea')){e.preventDefault();togglePlay();}
   if(e.code==='Delete'&&CFG.selectedId){removeElement(CFG.selectedId);}
 });
-window.addEventListener('resize',fitCanvas);
-
 /* ============================================================
    初始化
    ============================================================ */
@@ -1271,7 +1260,7 @@ renderLibrary();
 renderProps();
 addElement('bars');
 requestAnimationFrame(render);
-// 保持默认100%缩放，不自动适配
+// 保持默认100%缩放，不自动适配（窗口尺寸变化不改缩放，避免默认被压到很小）
 
 // 自动加载演示音频
 AssetCache.fetch('demo.ogg').then(r=>r.blob()).then(blob=>{
