@@ -303,14 +303,64 @@ select:focus{border-color:var(--accent)}
 <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js"></script>
 
 <script>
-// ===== 调试终端：重定向console输出到页面 =====
+// ===== 调试终端：重定向console输出到页面 + IndexedDB持久化 =====
 const _origLog = console.log.bind(console);
 const _origWarn = console.warn.bind(console);
 const _origError = console.error.bind(console);
-let _debugTerminalEl = null;
 let _debugContentEl = null;
-let _debugLines = [];
-const MAX_DEBUG_LINES = 200;
+let _debugDB = null;
+const DEBUG_DB_NAME = 'midi-player-debug-logs';
+const DEBUG_STORE = 'logs';
+
+// 打开IndexedDB
+function _openDebugDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DEBUG_DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(DEBUG_STORE)) {
+        db.createObjectStore(DEBUG_STORE, {autoIncrement: true});
+      }
+    };
+    req.onsuccess = (e) => { _debugDB = e.target.result; resolve(); };
+    req.onerror = (e) => reject(e);
+  });
+}
+
+// 保存日志到IndexedDB
+function _saveDebugLog(msg, type) {
+  if(!_debugDB) return;
+  try {
+    const tx = _debugDB.transaction(DEBUG_STORE, 'readwrite');
+    const store = tx.objectStore(DEBUG_STORE);
+    store.add({msg, type, time: Date.now()});
+  } catch(e) {}
+}
+
+// 从IndexedDB加载历史日志
+function _loadDebugLogs() {
+  if(!_debugDB) return;
+  const tx = _debugDB.transaction(DEBUG_STORE, 'readonly');
+  const store = tx.objectStore(DEBUG_STORE);
+  const req = store.getAll();
+  req.onsuccess = () => {
+    const logs = req.result || [];
+    if(_debugContentEl) {
+      logs.forEach(log => {
+        const time = new Date(log.time).toLocaleTimeString();
+        const color = log.type === 'warn' ? '#ff0' : log.type === 'error' ? '#f44' : '#0f0';
+        const line = document.createElement('div');
+        line.style.color = color;
+        line.style.wordBreak = 'break-all';
+        line.textContent = '[' + time + '] ' + log.msg;
+        _debugContentEl.appendChild(line);
+      });
+      _debugContentEl.scrollTop = _debugContentEl.scrollHeight;
+    }
+  };
+}
+
+_openDebugDB().then(() => _loadDebugLogs());
 
 function _appendDebug(msg, type) {
   if(!_debugContentEl) {
@@ -324,11 +374,9 @@ function _appendDebug(msg, type) {
   line.textContent = '[' + time + '] ' + msg;
   if(_debugContentEl) {
     _debugContentEl.appendChild(line);
-    if(_debugContentEl.children.length > MAX_DEBUG_LINES) {
-      _debugContentEl.removeChild(_debugContentEl.firstChild);
-    }
     _debugContentEl.scrollTop = _debugContentEl.scrollHeight;
   }
+  _saveDebugLog(msg, type);
 }
 
 console.log = function(...args) {
@@ -358,6 +406,10 @@ function toggleDebugTerminal() {
 function clearDebugTerminal() {
   const el = document.getElementById('debugTerminalContent');
   if(el) el.innerHTML = '';
+  if(_debugDB) {
+    const tx = _debugDB.transaction(DEBUG_STORE, 'readwrite');
+    tx.objectStore(DEBUG_STORE).clear();
+  }
 }
 </script>
 
@@ -634,6 +686,14 @@ const SoundfontLoader = {
     if(this.current !== '__synth__'){
       const entry = this.loaded[this.current];
       const buffer = entry ? entry.buffers[midi] : null;
+      // 调试：首次buffer为null时打印详细信息
+      if(!buffer && !this._debugBufferNullLogged){
+        this._debugBufferNullLogged = true;
+        console.warn('[AudioDebug] buffer为null! current=', this.current,
+          'entry存在=', !!entry, 'entry.ready=', entry ? entry.ready : 'N/A',
+          'buffers键数=', entry ? Object.keys(entry.buffers).length : 'N/A',
+          'midi=', midi, '时间=', t.toFixed(2));
+      }
       if(buffer){
         // 同音新音符触发：打断上一个，10ms快速淡出
         const prev = this.activeSources[midi];
