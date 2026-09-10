@@ -555,7 +555,15 @@ const SoundfontLoader = {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for(let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const buffer = await audioCtx.decodeAudioData(bytes.buffer);
+    let buffer = null;
+    try{
+      buffer = await audioCtx.decodeAudioData(bytes.buffer);
+    }catch(e){
+      console.error('[AudioDebug] decodeAudioData失败! name=', name, 'midi=', midi,
+        'noteName=', noteName, 'dataUri长度=', dataUri ? dataUri.length : 0,
+        'bytes长度=', bytes.length, '错误=', e.message || e);
+      return null;
+    }
     entry.buffers[midi] = buffer;
     return buffer;
   },
@@ -652,6 +660,8 @@ const SoundfontLoader = {
       srcStopped: this.debug.srcStopped,
       onendedFired: this.debug.onendedFired,
       errors: this.debug.errors,
+      synthCalls: this.debug.synthCalls || 0,
+      currentTimbre: this.current,
       masterGain: masterGain ? masterGain.gain.value : 'null',
     });
     // 异常检测：activeSources超过88
@@ -668,6 +678,14 @@ const SoundfontLoader = {
     if(!audioCtx) return;
     const t = audioCtx.currentTime;
     this.debug.playNoteCalls++;
+    // 调试：首次调用时打印current音色
+    if(!this._debugCurrentLogged){
+      this._debugCurrentLogged = true;
+      console.warn('[AudioDebug] playNote首次调用 current=', this.current,
+        'loaded键数=', Object.keys(this.loaded).length,
+        'loaded[current]=', this.loaded[this.current] ? '存在' : 'undefined',
+        '时间=', t.toFixed(2));
+    }
     // 检测AudioContext状态异常
     if(audioCtx.state !== 'running'){
       if(this.debug.lastState !== audioCtx.state){
@@ -736,6 +754,12 @@ const SoundfontLoader = {
       // buffer未就绪时回退合成钢琴
     }
     // 回退：合成钢琴
+    if(!this._debugSynthWarned){
+      this._debugSynthWarned = true;
+      console.warn('[AudioDebug] 走了合成钢琴分支! current=', this.current,
+        '说明音色加载失败或buffer为null，时间=', t.toFixed(2));
+    }
+    this.debug.synthCalls = (this.debug.synthCalls || 0) + 1;
     const f = 440 * Math.pow(2, (midi - 69) / 12);
     const t0 = audioCtx.currentTime;
     const env = audioCtx.createGain();
