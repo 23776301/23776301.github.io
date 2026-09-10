@@ -858,7 +858,7 @@ setInterval(() => AudioDebugMonitor.sampleRms(), 200);
  * ========================================================== */
 // 静态资源缓存（MIDI谱、list.json等），版本化缓存名
 const AssetCache = {
-  cacheName: 'midi-player-assets-v1',
+  cacheName: 'midi-player-assets-v2',
   // 统一转绝对路径，避免相对路径在不同URL下解析不同导致缓存失效
   _abs(url){ return new URL(url, window.location.href).href; },
   async fetch(url) {
@@ -1295,7 +1295,7 @@ async function onTimbreChange(){
   let defaultTimbreReady = false; // 谱子对应音色是否加载完成
   let defaultTimbreFallback = false; // 是否fallback到合成钢琴
   let autoPlayTriggered = false; // 是否已触发自动播放（避免重复播放）
-  const DEFAULT_SONG = 'Rush E3.mid';
+  const DEFAULT_SONG = 'Rush E 3.mid';
 
   // 轻量Toast提示
   function showToast(msg){
@@ -1446,7 +1446,7 @@ async function getUserSong(name){
 
 // 内置谱默认音色配置：谱子文件名 -> 音色id
 const songDefaultTimbre = {
-  'Rush E3.mid': 'clavinet', // 古钢琴
+  'Rush E 3.mid': 'clavinet', // 古钢琴
   'The Sound of Silence.mid': 'electric_piano_2', // 电钢琴2
 };
 
