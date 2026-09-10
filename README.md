@@ -32,15 +32,6 @@
 └── .github/workflows/      # 自动部署配置
 ```
 
-## 添加 MIDI 谱子
-
-1. 将 `.mid` 文件放入 `midi_player/midi/` 目录
-2. 在 `midi_player/midi/list.json` 中添加条目：
-
-```json
-{"name": "显示名称", "file": "midi/文件名.mid"}
-```
-
 ## 添加外部链接
 
 编辑 `data/links.json`，按现有格式添加条目，推送即生效。
