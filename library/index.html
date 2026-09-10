@@ -31,9 +31,11 @@ a{text-decoration:none;color:var(--accent)}
 .block-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px;font-weight:600}
 .cmd{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}
 .cmd code{flex:1;font-size:13px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;color:#d2e6ff;overflow-x:auto;white-space:nowrap}
-.copy-btn{flex-shrink:0;background:transparent;border:1px solid var(--line);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;transition:all .15s;min-height:28px}
-.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.copy-btn{flex-shrink:0;background:transparent;border:1px solid var(--line);color:var(--accent);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;transition:all .15s;min-height:28px}
+.copy-btn:hover{border-color:var(--accent);background:rgba(88,166,255,.12)}
 .copy-btn.ok{border-color:var(--accent2);color:var(--accent2)}
+.read-btn{flex-shrink:0;display:inline-flex;align-items:center;background:transparent;border:1px solid var(--line);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:11px;text-decoration:none;transition:all .15s;min-height:28px}
+.read-btn:hover{border-color:var(--accent);color:var(--text)}
 .file-list{display:flex;flex-wrap:wrap;gap:8px}
 .file-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--muted);transition:all .15s}
 .file-chip:hover{border-color:var(--accent);color:var(--text)}
@@ -77,11 +79,11 @@ footer{border-top:1px solid var(--line);padding:16px;text-align:center;font-size
     if(t.platform) html+='<span class="platform-tag">💻 '+esc(t.platform)+'</span>';
     html+='</div>';
     html+='<div class="tool-desc">'+esc(t.desc)+'</div>';
-    if(t.install){ html+='<div class="block-title">⚡ 一键安装</div><div class="cmd"><code>'+esc(t.install)+'</code><button class="copy-btn">📋 复制</button></div>'; }
-    if(t.deploy){ html+='<div class="block-title">🚀 一键部署</div><div class="cmd"><code>'+esc(t.deploy)+'</code><button class="copy-btn">📋 复制</button></div>'; }
-    if(t.commands && t.commands.length){ html+='<div class="block-title">⌨️ 常用命令</div>'; t.commands.forEach(function(c){ html+='<div class="cmd"><code>'+esc(c)+'</code><button class="copy-btn">📋 复制</button></div>'; }); }
+    if(t.install){ html+='<div class="block-title">⚡ 一键安装</div><div class="cmd"><code>'+esc(t.install)+'</code><button class="copy-btn">复制</button></div>'; }
+    if(t.deploy){ html+='<div class="block-title">🚀 一键部署</div><div class="cmd"><code>'+esc(t.deploy)+'</code><button class="copy-btn">复制</button></div>'; }
+    if(t.commands && t.commands.length){ html+='<div class="block-title">⌨️ 常用命令</div>'; t.commands.forEach(function(c){ html+='<div class="cmd"><code>'+esc(c)+'</code><button class="copy-btn">复制</button></div>'; }); }
     if(t.files && t.files.length){ html+='<div class="block-title">📁 部署文件</div><div class="file-list">'; t.files.forEach(function(f){ var name=f.split('/').pop(); html+='<a class="file-chip" href="'+esc(abs(f))+'" download="'+esc(name)+'"><span>'+esc(name)+'</span><span class="dl">⬇ 下载</span></a>'; }); html+='</div>'; }
-    if(t.docs){ html+='<div class="block-title">📄 文档</div><div class="cmd"><code>'+esc('文档: '+t.docs)+'</code><a class="copy-btn" href="'+esc(abs(t.docs))+'" style="text-decoration:none;display:inline-flex;align-items:center;padding:4px 10px">📖 阅读</a></div>'; }
+    if(t.docs){ html+='<div class="block-title">📄 文档</div><div class="cmd"><code>'+esc('文档: '+t.docs)+'</code><a class="read-btn" href="'+esc(abs(t.docs))+'">📖 阅读</a></div>'; }
     html+='</div>';
     return html;
   }
@@ -95,7 +97,6 @@ footer{border-top:1px solid var(--line);padding:16px;text-align:center;font-size
     });
     container.innerHTML=html;
     container.querySelectorAll('.copy-btn').forEach(function(btn){
-      if(btn.tagName==='A') return;
       var code=btn.parentElement.querySelector('code');
       if(code) btn.addEventListener('click', function(){ copyText(code.textContent, btn); });
     });
