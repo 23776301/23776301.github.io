@@ -1,120 +1,321 @@
-# Audio Visualizer Studio
+# 音频可视化工作室 · Music Visualizer
 
-浏览器端的实时音频可视化工具。上传一首歌（或开麦克风），从 30 种可视化效果里挑一个，拖动参数即时看到变化——不需要渲染、不需要等待导出。
+浏览器端实时音频可视化工具。上传一首歌，从 10 种可视化效果里选一个，拖动参数即时看到变化——不需要渲染、不需要等待导出。
 
-纯静态文件，无构建步骤、无后端、无依赖，双击 `index.html` 就能跑。
+单文件、零依赖、零构建：整个应用就是 `music_visualization/index.html`，双击即可运行。
 
-## 功能
+> 本文档描述的是**当前 `index.html` 的实际实现**，包含真实的参数、边界与已知问题，并给出后续深挖方向。
 
-**30 种可视化效果**
+---
 
-| 分类 | 效果 |
-|------|------|
-| 柱状（4） | 柱状图、镜像柱、3D 柱阵、LED 均衡 |
-| 圆形（11） | 圆形频谱、径向块、双层环、圆点环、圆形波、螺旋、莲花、同心圆、花瓣、环带频谱、声波带 |
-| 波形（7） | 波形线、平滑波、镜像波、山脉、心电图、极光、声波带 |
-| 点阵粒子（5） | 点阵、粒子、烟花、星际穿梭、星云 |
-| 空间（3） | 立方场、网格脉冲、频谱瀑布 |
+## 目录
 
-**参数**：34 种可调参数，每个效果暴露其中 12–16 个，合计 417 个参数项。
+1. [功能](#一功能)
+2. [快速开始](#二快速开始)
+3. [架构](#三架构)
+4. [音频分析](#四音频分析)
+5. [渲染管线](#五渲染管线)
+6. [参数系统](#六参数系统)
+7. [配色系统](#七配色系统)
+8. [背景系统](#八背景系统)
+9. [交互](#九交互)
+10. [扩展：新增一个可视化效果](#十扩展新增一个可视化效果)
+11. [性能与已知问题](#十一性能与已知问题)
+12. [路线图（深挖方向）](#十二路线图深挖方向)
 
-- **全局**：背景色、分析平滑、FFT 精度（1024–8192）、画面拖尾、画布比例（自适应 / 16:9 / 9:16 / 1:1 / 4:3）、FPS 显示
-- **配色**：单色 / 渐变 / 彩虹 / 能量映射四种模式，主色副色、色相偏移、饱和度
-- **形态**：数量、间距、粗细、圆角、半径、层数、展开角度、谐波瓣数、生长方向
-- **动态**：灵敏度、自转速度、扭曲、透视、振幅、速度、大小、拖尾残留
-- **特效**：发光强度、不透明度、镜像对称、峰值帽、填充
+---
 
-音频输入支持本地文件（拖到画布即可）和麦克风实时输入。配置自动存 localStorage，刷新不丢。
+## 一、功能
 
-## 快捷键
+### 1.1 可视化效果（10 种）
+
+| id | 名称 | 说明 |
+| --- | --- | --- |
+| `bars` | 频谱柱 | 频域柱状图，支持圆角、垂直翻转 |
+| `bars-mirror` | 镜像柱 | 以中线为轴对称的柱状图 |
+| `bars-3d` | 3D 柱 | 带顶面/侧面的伪 3D 柱阵 |
+| `waveform-zigzag` | 锯齿波 | 频域值驱动的上下折线 |
+| `circle-radial` | 放射圆 | 从内圈向外辐射的柱 |
+| `circle-wave` | 圆形波 | 时域波形围成的闭合曲线，支持发光 |
+| `circle-pulse` | 脉冲圆 | 分频段均值驱动的同心圆脉冲 |
+| `circular-bars` | 圆形柱 | 从圆心向外的柱状环 |
+| `spectrum-line` | 频谱线 | 频域折线，支持发光 |
+| `spectrum-area` | 频谱面积 | 频域折线下方的渐变填充 |
+
+### 1.2 输入与播放
+
+- 音频文件上传（点击顶部区域选择，或拖入）。
+- 播放/暂停、进度条拖拽 seek、音量、循环。
+- 自动加载演示音频 `demo.ogg`。
+
+### 1.3 其它
+
+- 画布比例预设：16:9（1280×720）、9:16、1:1、4:5、4:3。
+- 画布缩放（0.1×–2×）与「适配」按钮（重置为 100%）。
+- 画布内点击选中元素、拖动移动。
+- 背景：纯色 / 线性渐变 / 径向渐变 / 图片（模糊 + 暗化）。
+- 配色：纯色 / 渐变 / 彩虹，渐变支持多色增删排序。
+
+### 1.4 快捷键
 
 | 键 | 作用 |
-|----|------|
+| --- | --- |
 | `空格` | 播放 / 暂停 |
-| `F` | 全屏 |
-| `M` | 切换麦克风 |
 
-## 本地预览
+> 说明：当前**没有**麦克风输入、全屏、FPS 显示、暗/亮主题、配置持久化与导出功能（见[路线图](#十二路线图深挖方向)）。
 
-因为用到了 `getUserMedia`，麦克风功能需要通过 HTTP 访问（`file://` 下浏览器会拦截）。本地起个服务：
+---
+
+## 二、快速开始
+
+### 2.1 本地预览
+
+因为使用了 Cache API 与 `AudioContext`，建议通过 HTTP 访问：
 
 ```bash
 python -m http.server 8000
-# 打开 http://localhost:8000
+# 打开 http://localhost:8000/music_visualization/
 ```
 
-不用麦克风的话，直接双击 `index.html` 就行。
+### 2.2 部署
 
-## 部署到 GitHub Pages
+本工具作为子目录部署在 `teecatt/teecatt.github.io` 仓库的 `music_visualization/` 下，通过 GitHub Pages 发布：
 
-### 方式一：独立仓库（推荐）
+- 线上地址：`https://down2.top/music_visualization/`
+- 推送 `master` 后由 `.github/workflows/deploy.yml` 自动构建发布。
 
-```bash
-cd audio-visualizer
-git init
-git add .
-git commit -m "Add audio visualizer studio"
-git branch -M main
-git remote add origin https://github.com/<你的用户名>/audio-visualizer.git
-git push -u origin main
-```
-
-然后在仓库页面 **Settings → Pages → Source**，选择 `main` 分支、根目录 `/`，保存。等一两分钟，访问 `https://<用户名>.github.io/audio-visualizer/`。
-
-### 方式二：放进已有仓库的子目录
-
-如果像 `tools` 那样已有仓库，把它作为一个子目录放进去，Pages 的 Source 选 `/docs` 就把目录改名成 `docs`，选根目录就把文件放在仓库根下。
-
-> 注意：如果仓库里已经有别的内容（比如 TrafficMonitor 插件），建议用子目录，别覆盖原有的 `index.html`。
-
-### 方式三：gh-pages 分支
-
-```bash
-git checkout -b gh-pages
-git add . && git commit -m "Deploy visualizer"
-git push origin gh-pages
-```
-
-Pages Source 选 `gh-pages` 分支即可。
-
-## 麦克风在 HTTPS 下才可用
-
-GitHub Pages 默认走 HTTPS，麦克风功能正常。本地 `http://localhost` 也算安全上下文，同样可用。但如果部署到自建的 HTTP 站点，`getUserMedia` 会被浏览器拦截——这是浏览器安全策略，不是代码问题。
-
-## 文件结构
+### 2.3 文件结构
 
 ```
-├── index.html        # 页面骨架
-├── style.css         # 样式（暗色 / 亮色双主题）
-├── visualizers.js    # 30 种可视化的渲染实现 + 参数池
-└── app.js            # 音频引擎、渲染循环、UI 交互
+music_visualization/
+├── index.html      # 单文件应用（页面骨架 + 样式 + 全部逻辑）
+├── demo.ogg        # 自动加载的演示音频
+└── README.md       # 本文档
 ```
 
-### 加一个新可视化
+---
 
-在 `visualizers.js` 的 `V` 数组里追加一项即可，参数面板会自动生成：
+## 三、架构
+
+单文件内按职责划分为若干区块（均在同一个 `<script>` 中）：
+
+```
+index.html
+├── <style>                     # 暗色主题、响应式、组件样式
+├── AssetCache                  # Cache API 缓存（music-viz-assets-v1）
+├── CFG                         # 全局配置（canvas / elements / audio）
+├── VISUAL_STYLES               # 效果清单（id / name / cat）
+├── defaultElementParams()      # 元素默认参数
+├── 颜色工具                     # hexToRgb / rgbToHex / lerpColor / multiColor / elemColor
+├── envStep()                   # 指数包络跟随器
+├── getFreqBars()               # 频域取样 + 范围裁剪 + 对数映射 + 包络
+├── DRAW{}                      # 10 个效果的绘制函数
+├── drawBackground()            # 背景绘制
+├── render()                    # rAF 主循环
+├── 音频控制                     # loadAudio / togglePlay / updateSeekUI
+├── 元素库渲染                   # renderLibrary / thumbSVG
+├── 属性面板                     # renderProps / colorEditorHTML / bindPropsFields
+├── 画布交互                     # mousedown / mousemove / mouseup
+└── 画布比例与缩放               # setAspect / applyZoom
+```
+
+**数据流**
+
+```
+<audio> → MediaElementSource → AnalyserNode → destination
+                                   │
+                     getByteFrequencyData / getByteTimeDomainData
+                                   │
+                        getFreqBars()（裁剪+对数+包络）
+                                   │
+                     DRAW[type](ctx, p, W, H, el, dt)
+                                   │
+                              render() 每帧
+```
+
+**关键设计**
+
+- `CFG` 是唯一配置源，`window.__CFG` 暴露供调试。
+- `DRAW` 是效果注册表：`DRAW[type] = function(ctx, p, W, H, el, dt)`。
+- 效果清单 `VISUAL_STYLES` 与 `DRAW` 分离，新增效果需同时登记两处。
+- 属性面板由参数声明式生成，不手写每个控件。
+
+---
+
+## 四、音频分析
+
+- **节点**：`createMediaElementSource(audio)` → `AnalyserNode(fftSize=2048)` → `destination`。
+- **数据**：`getByteFrequencyData`（频域，长度 `frequencyBinCount = 1024`）与 `getByteTimeDomainData`（时域，长度 `fftSize = 2048`）。
+- **频率范围裁剪**：`freqMin`/`freqMax` 映射到 bin 区间 `[minBin, maxBin]`，只在该区间取样。
+- **对数映射**：`logScale` 开启时按 `pow(i/n, 1.5)` 取样，低频分到更多柱子，更贴合听感；关闭则线性。
+- **包络跟随**：`getFreqBars` 对每个柱子维护 `el._env[i]`，用 `envStep` 做指数趋近：
+
+  ```
+  k = target > cur ? 1 - exp(-dt/attack) : 1 - exp(-dt/release)
+  cur += (target - cur) * k
+  ```
+
+  时间常数以秒计，与帧率无关；`attack` 控制激发速度，`release` 控制回落速度。关闭 `useEnvelope` 则直接使用瞬时值。
+
+> 注意：当前**没有**分频段能量（bass/mid/treble）、节拍检测或频谱质心分析；所有效果都直接消费频域/时域数组。
+
+---
+
+## 五、渲染管线
+
+`render()` 每个 `requestAnimationFrame` 执行一次：
+
+1. 计算 `dt`（钳制上限 0.1s，避免后台恢复跳变）。
+2. `drawBackground(CFG)` 绘制背景（不受缩放影响）。
+3. `ctx.save()` + 以画布中心为原点应用 `zoom` 缩放。
+4. 按 `y` 排序元素，逐个：
+   - `globalAlpha = opacity`；
+   - 平移到元素中心、应用 `rotation`、再平移回左上角；
+   - 调用 `DRAW[type](ctx, p, ew, eh, el, dt)`，其中 `ew = canvas.width * w/100`。
+5. `ctx.restore()`；`updateSeekUI()` 更新进度条。
+
+坐标系统：元素用**百分比**描述（`x/y` 为元素中心，`w/h` 为占画布比例），绘制时换算为像素。
+
+---
+
+## 六、参数系统
+
+元素默认参数（`defaultElementParams`）与 UI 分组：
+
+| 参数 | 默认 | 含义 | 实际生效范围 |
+| --- | --- | --- | --- |
+| `x` / `y` | 50 / 50 | 中心位置（%） | 全部 |
+| `w` / `h` | 80 / 60 | 尺寸（%） | 全部 |
+| `rotation` | 0 | 旋转（°） | 全部 |
+| `opacity` | 1 | 不透明度 | 全部 |
+| `colorMode` | `gradient` | 纯色/渐变/彩虹 | 全部 |
+| `colors` | 3 色数组 | 多色渐变停靠点 | 全部 |
+| `useEnvelope` | true | 是否启用包络跟随 | 频域效果 |
+| `attack` | 50ms | 包络上升时间 | 频域效果 |
+| `release` | 300ms | 包络下降时间 | 频域效果 |
+| `smoothing` | 0.8 | Analyser 平滑（**全局**属性） | 全局 |
+| `gain` | 1.2 | 灵敏度 | 频域效果 |
+| `barCount` | 64 | 柱数/密度 | 除 `circle-pulse` 外 |
+| `lineWidth` | 3 | 线宽 | 折线/波形类 |
+| `freqMin` / `freqMax` | 20 / 16000 | 频率范围（Hz） | 频域效果 |
+| `logScale` | true | 对数频率映射 | 频域效果 |
+| `invert` | false | 垂直翻转 | 仅 `bars` |
+| `rounded` | true | 圆角柱 | 仅 `bars` |
+| `glow` / `glowBlur` | false / 12 | 发光 | `circle-wave`、`spectrum-line` |
+| `innerRadius` | 25 | 内圈半径（%） | 仅 `circle-radial` |
+| `mirror` | false | 镜像 | ⚠️ 未实现（占位参数） |
+
+属性面板由 `rangeField` / `toggleField` / `dualRangeField` / `collapsible` / `colorEditorHTML` 生成，`bindPropsFields` 统一绑定事件。
+
+> ⚠️ 部分参数只在个别效果中生效（如 `invert`/`rounded` 仅 `bars`），而 `mirror` 目前是死参数；见[已知问题](#十一性能与已知问题)。
+
+---
+
+## 七、配色系统
+
+- **模式**：`solid`（纯色）、`gradient`（多色渐变）、`rainbow`（彩虹）。
+- **多色渐变**：`colors` 数组按停靠点均匀插值（`multiColor`），支持添加、上移、下移、删除，并提供实时预览条。
+- **逐柱映射**：多数效果用 `elemColor(p, i/barCount)` 让颜色沿柱子渐变。
+- **彩虹**：`hsl((t*300 + performance.now()*0.05) % 360, 100%, 60%)`——基于**墙钟时间**，与播放进度无关。
+
+---
+
+## 八、背景系统
+
+| 类型 | 参数 |
+| --- | --- |
+| `solid` | `bgColor` |
+| `gradient-linear` | `gradColor1`/`gradColor2`、5 个停靠点（首尾固定，25/50/75 可调）、`gradAngle` |
+| `gradient-radial` | `gradColor1`/`gradColor2`、停靠点、`gradRadius` |
+| `image` | 背景图片、`bgBlur`（0–20）、`bgDarken`（0–1） |
+
+背景绘制在缩放变换之前，因此缩放只影响元素、不影响背景。
+
+---
+
+## 九、交互
+
+- **元素库**：左侧面板按分类列出效果缩略图，点击即创建。
+- **属性面板**：右侧（移动端底部抽屉）分组展示参数。
+- **画布**：`mousedown` 命中检测 → 选中并拖动；`mousemove` 更新位置；`mouseup` 结束。
+- **元素库/背景**：底部「背景」工具页配置画布背景。
+- **缩放**：工具栏 `− / + / ⛶ 适配`，标签实时显示百分比。
+
+> ⚠️ 画布拖动仅绑定了鼠标事件，**触摸设备无法拖动元素**。
+
+---
+
+## 十、扩展：新增一个可视化效果
+
+只需两步：
+
+**1. 在 `VISUAL_STYLES` 登记**
 
 ```js
-V.push({
-  id: 'myViz',
-  name: '我的效果',
-  cat: 'circle',
-  params: [...BASE, 'radius', 'spin', 'amplitude'],  // 从参数池挑选
-  icon: '<svg viewBox="0 0 48 48">...</svg>',        // 选择器里的预览图标
-  draw(ctx, s) {
-    // s.freq  频域数据 Uint8Array
-    // s.wave  时域数据 Uint8Array
-    // s.W/s.H 画布尺寸   s.c 参数对象   s.t 时间(秒)
-    // s.energy/bass/mid/treble 分频段能量   s.beat 节拍   s.rot 累积旋转
-    // s.state 该效果独有的持久状态对象
-  }
-});
+{ id: 'my-viz', name: '我的效果', cat: 'visualizer' }
 ```
 
-## 技术说明
+**2. 在 `DRAW` 注册绘制函数**
 
-音频分析走 Web Audio API 的 `AnalyserNode`，和 EchoWave 是同一套 FFT 机制；区别在于渲染位置——EchoWave 把分析结果传到云端渲染成 MP4，这里直接在 Canvas 2D 上画，所以没有导出等待，参数改动下一帧就能看到。
+```js
+DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
+  // ctx: 已平移到元素左上角、已设置 globalAlpha 的 2D 上下文
+  // p:   参数对象（见第六节）
+  // W/H: 元素像素宽高
+  // el:  元素对象，可用 el._env 保存每元素持久状态
+  // dt:  距上一帧的秒数
+  const bars = getFreqBars(p, el, p.barCount, dt); // 频域+包络
+  // ... 用 ctx 绘制 ...
+};
+```
 
-频率采样用对数映射而非线性，低频分到更多柱子，视觉上更贴合听感。节拍检测基于低频能量的滑动平均突变。
+需要时域波形可直接读 `CFG.wave`（先用 `CFG.analyser.getByteTimeDomainData(CFG.wave)`）。
 
-渲染按 `devicePixelRatio` 缩放（上限 2×），高分屏下不会发虚。
+可选：在 `thumbSVG(id)` 里为该 id 增加缩略图，否则使用默认矩形图标。
+
+---
+
+## 十一、性能与已知问题
+
+### 11.1 性能
+
+- **拖动元素时每帧重建属性面板**：`mousemove` 里直接调用 `renderProps()`，会反复 `innerHTML` 重建并重绑事件，是当前最大热点。
+- **颜色逐帧解析 hex**：`multiColor → lerpColor → hexToRgb` 每柱每帧执行，`barCount` 高时开销显著。
+- **每帧重复取频谱**：每个频域效果各自调用 `getByteFrequencyData` 并新建数组。
+- **背景图片模糊时重复绘制**：`bgBlur > 0` 时先画清晰图再画模糊图，清晰那次是浪费。
+- **`updateSeekUI()` 每帧写 DOM**。
+
+### 11.2 已知问题 / 死代码
+
+- `mirror` 参数暴露在 UI 但没有任何效果使用。
+- `rounded`/`invert` 仅 `bars` 生效；`innerRadius` 仅 `circle-radial`；`glow`/`lineWidth` 仅部分效果。
+- `circle-pulse` 忽略 `barCount`（写死 32）。
+- 选中框代码计算了坐标但未绘制任何内容。
+- `addElement()` 每次清空 `CFG.elements`，实际**同时只能存在一个效果**。
+- 画布拖动无触摸/指针支持。
+- `rainbow` 基于墙钟时间，暂停时仍在变化。
+- `smoothing` 是全局 analyser 属性，却放在元素参数中，且初始化未从参数写入。
+- 无配置持久化、无导出、无麦克风、无 DPR 适配。
+
+---
+
+## 十二、路线图（深挖方向）
+
+按“价值/成本”排序：
+
+1. **音频特征层**：在 `AnalyserNode` 之上加 `AudioFeatures`——分频段能量（bass/mid/treble）、节拍检测（低频能量滑动平均 + 自适应阈值 + 冷却，输出 beat 脉冲与 BPM）、频谱质心/谱通量，驱动“能量映射”配色与脉冲特效。
+2. **渲染性能**：颜色 LUT 预计算、每帧单次取谱、拖动期间只改几何（rAF 节流，`mouseup` 再同步面板）、背景模糊去重。
+3. **多元素/图层**：真正的多效果叠加、图层顺序、`globalCompositeOperation` 混合模式。
+4. **导出**：`canvas.captureStream()` + `MediaRecorder` 录制 WebM；或逐帧导出 PNG 序列；用 `OfflineAudioContext` 离线渲染保证稳定帧率。
+5. **持久化与分享**：配置存 localStorage / 压缩进 URL hash，导入导出 JSON 预设。
+6. **响应式与 DPR**：画布按 `devicePixelRatio` 与容器自适应，Pointer Events 统一鼠标/触摸，增加缩放手柄。
+7. **麦克风输入**：`getUserMedia` + `createMediaStreamSource`。
+8. **性能预算与降级**：监测帧率/丢帧，动态降低 `barCount`、关闭发光/模糊。
+9. **可测试性**：拆分为 `audio.js`/`visualizers.js`/`app.js`，对纯函数（`multiColor`、`envStep`、`getFreqBars`）做单元测试，Playwright 做视觉回归。
+10. **修正参数语义**：让 `mirror` 真正生效，或从 UI 移除；把 `smoothing` 提到全局设置。
+
+---
+
+## 附：缓存
+
+`AssetCache` 使用 Cache API，缓存名 `music-viz-assets-v1`，以绝对路径为键、`ignoreSearch` 提高命中率；缓存失败时回退到普通 `fetch`。目前仅用于演示音频 `demo.ogg`。
