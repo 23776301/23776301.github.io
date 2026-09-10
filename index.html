@@ -31,6 +31,10 @@ a{text-decoration:none;color:inherit}
 .card h2{font-size:17px;font-weight:600}
 .card .desc{font-size:13px;color:var(--muted);line-height:1.6;flex:1}
 .card .go{font-size:13px;color:var(--accent);font-weight:600}
+.card-body{display:flex;flex-direction:column;gap:10px;flex:1;color:inherit;min-width:0}
+.card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.doc-link{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:3px 10px;transition:all .15s;white-space:nowrap}
+.doc-link:hover{border-color:var(--accent);color:var(--text);background:var(--hover)}
 .card-audio .ico{background:linear-gradient(135deg,rgba(255,63,88,.25),rgba(200,34,255,.25));border:1px solid rgba(255,63,88,.4)}
 .card-audio{border-color:rgba(255,63,88,.35)}
 .card-audio:hover{border-color:var(--red)}
@@ -68,18 +72,28 @@ footer a:hover{text-decoration:underline}
   </div>
 </div>
 <div class="grid">
-  <a class="card card-audio" href="https://down2.top/music_visualization/" title="音频可视化工具">
-    <div class="ico">♫</div>
-    <h2>音频可视化 <span class="badge badge-new">在线版</span></h2>
-    <div class="desc">10 种可视化样式 · 频段包络 · 多色渐变 · 全程参数可调</div>
-    <div class="go">打开编辑器 →</div>
-  </a>
-  <a class="card card-piano" href="./midi_player/" title="在线 MIDI 播放器">
-    <div class="ico">🎹</div>
-    <h2>MIDI 播放器 <span class="badge badge-new">在线版</span></h2>
-    <div class="desc">88键钢琴可视化 · 多音色 · 变速播放<br><span style="font-size:11px;color:var(--warn)">💡 低性能设备可能无法流畅播放高密度谱面</span></div>
-    <div class="go">开始播放 →</div>
-  </a>
+  <div class="card card-audio">
+    <a class="card-body" href="https://down2.top/music_visualization/" title="音频可视化工具">
+      <div class="ico">♫</div>
+      <h2>音频可视化 <span class="badge badge-new">在线版</span></h2>
+      <div class="desc">10 种可视化样式 · 频段包络 · 多色渐变 · 全程参数可调</div>
+    </a>
+    <div class="card-foot">
+      <a class="go" href="https://down2.top/music_visualization/">打开编辑器 →</a>
+      <a class="doc-link" href="https://github.com/teecatt/teecatt.github.io/blob/master/music_visualization/README.md" target="_blank" rel="noopener" title="在 GitHub 上阅读文档">📖 阅读</a>
+    </div>
+  </div>
+  <div class="card card-piano">
+    <a class="card-body" href="./midi_player/" title="在线 MIDI 播放器">
+      <div class="ico">🎹</div>
+      <h2>MIDI 播放器 <span class="badge badge-new">在线版</span></h2>
+      <div class="desc">88键钢琴可视化 · 多音色 · 变速播放<br><span style="font-size:11px;color:var(--warn)">💡 低性能设备可能无法流畅播放高密度谱面</span></div>
+    </a>
+    <div class="card-foot">
+      <a class="go" href="./midi_player/">开始播放 →</a>
+      <a class="doc-link" href="https://github.com/teecatt/teecatt.github.io/blob/master/midi_player/README.md" target="_blank" rel="noopener" title="在 GitHub 上阅读文档">📖 阅读</a>
+    </div>
+  </div>
   <a class="card card-tools" href="./library/" title="资源库">
     <div class="ico">⚙</div>
     <h2>资源库</h2>
