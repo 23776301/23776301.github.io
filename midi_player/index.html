@@ -110,7 +110,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 }
 .drop-panel.open{display:block}
 /* 全屏时设置面板改挂到渲染区左上角（由 _syncFsLayout 移动并加 .in-fs） */
-.control-panel.in-fs{position:fixed;top:64px;left:14px;right:auto;margin-top:0;max-height:66.67vh}
+.control-panel.in-fs{position:fixed;top:14px;left:62px;right:auto;margin-top:0;max-height:66.67vh}
 .control-panel > .dbg-section:first-of-type{margin-top:0;padding-top:0;border-top:none}
 .overlay-mask{display:none}
 @media(max-width:800px){
@@ -178,6 +178,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .dbg-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:10px;color:var(--dim);margin-bottom:6px}
 .dbg-toolbar label{display:flex;align-items:center;gap:4px;cursor:pointer}
 .dbg-toolbar input[type=range]{width:64px}
+.appearance-sliders{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
 .dbg-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
 .dbg-actions button{background:#333;color:#fff;border:none;width:26px;height:26px;padding:0;cursor:pointer;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
 .dbg-actions button svg{width:14px;height:14px}
@@ -322,12 +323,12 @@ select:focus{border-color:var(--accent)}
 .fs-float-btn:active{opacity:.7}
 .fs-float-btn svg{width:20px;height:20px}
 /* 活跃：内缩 14px 完整显示；空闲：吸附到左右边界只露半边圆 */
-.fs-settings{top:14px;left:0;transform:translateX(14px)}
-.fs-exit{top:14px;right:0;transform:translateX(-14px)}
-/* 2s 未点击悬浮按钮：淡到 20% 并吸附到边界（半圆） */
+.fs-settings{top:0;left:0;transform:translate(14px,14px)}
+.fs-exit{top:0;right:0;transform:translate(-14px,14px)}
+/* 2s 未点击悬浮按钮：淡到 20% 并向左上/右上角吸附到露出 70% */
 .fs-overlay.faded .fs-float-btn{opacity:.2}
-.fs-overlay.faded .fs-settings{transform:translateX(-50%)}
-.fs-overlay.faded .fs-exit{transform:translateX(50%)}
+.fs-overlay.faded .fs-settings{transform:translate(-30%,-30%)}
+.fs-overlay.faded .fs-exit{transform:translate(30%,-30%)}
 /* 调试面板：从控制行下方展开（absolute，不遮挡按钮） */
 .debug-panel{display:none}
 .debug-panel.open{display:block}
@@ -346,7 +347,7 @@ select:focus{border-color:var(--accent)}
     <div>
       <div class="top-bar">
         <div class="top-bar-row">
-          <button class="ctl-btn primary" id="replayBtn" onclick="replayPlay()" disabled title="重播"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M22 12c0 5.523-4.477 10-10 10S2 17.523 2 12S6.477 2 12 2a9.98 9.98 0 0 1 7.6 3.5"/><path d="M20 2.5V6h-3.5m-.555 6.358c-.176.626-1.012 1.07-2.682 1.955c-1.615.856-2.422 1.284-3.073 1.112a1.66 1.66 0 0 1-.712-.392C9 14.583 9 13.709 9 11.963c0-1.747 0-2.62.478-3.07c.198-.186.443-.321.712-.393c.65-.172 1.458.256 3.073 1.113c1.67.886 2.506 1.328 2.682 1.955c.073.259.073.531 0 .79"/></svg></button>
+          <button class="ctl-btn primary" id="replayBtn" onclick="replayPlay()" disabled title="重播"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M20 12c0 4.418-3.582 8-8 8s-8-3.582-8-8 3.582-8 8-8a7.984 7.984 0 0 1 6.08 2.8"/><path d="M18.4 4.4V7.2h-2.8"/><path d="M10.5 8.8 15.3 12 10.5 15.2Z" stroke-linejoin="miter"/></svg></button>
           <select id="songSel" onchange="onSongChange(this.value)" style="flex:1">
             <option value="">加载谱库…</option>
           </select>
@@ -401,8 +402,10 @@ select:focus{border-color:var(--accent)}
           <div class="panel control-panel drop-panel" id="controlPanel">
             <div class="dbg-section" id="appearanceSection">
               <div class="dbg-toolbar">
-                <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="100" oninput="applyPanelAppearance()"></label>
-                <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="25" oninput="applyPanelAppearance()"></label>
+                <div class="appearance-sliders">
+                  <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="100" oninput="applyPanelAppearance()"></label>
+                  <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="25" oninput="applyPanelAppearance()"></label>
+                </div>
                 <label class="switch" title="欣赏模式：音符自动发声；音游模式：需点击琴键发声" style="margin-left:auto">
                   <input id="playModeSw" type="checkbox" checked onchange="onPlayModeChange()">
                   <span class="track"><span class="knob"></span></span>
@@ -1789,6 +1792,7 @@ function initCustomSelect(select, opts){
   }
   function buildList(){
     const q = (search && search.value ? search.value : '').trim().toLowerCase();
+    const _prevScroll = list.scrollTop;
     list.textContent = '';
     let any = false;
     Array.prototype.forEach.call(select.children, function(node){
@@ -1816,6 +1820,7 @@ function initCustomSelect(select, opts){
       list.appendChild(e);
     }
     activeIndex = -1;
+    list.scrollTop = _prevScroll;
   }
   function choose(o){
     if(opts.canChoose && !opts.canChoose(o)) return;
@@ -1840,6 +1845,10 @@ function initCustomSelect(select, opts){
   function open(){
     closeAllCustomSelects();
     if(typeof _closeDropPanelsOnly === 'function') _closeDropPanelsOnly(wrap.closest ? wrap.closest('.drop-panel') : null); // 与其它面板互斥，但保留本下拉所在的面板
+    // 全屏时 body 外的节点不会被渲染：把弹层挂到全屏元素内
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    const host = fsEl || document.body;
+    if(pop.parentNode !== host) host.appendChild(pop);
     if(search) search.value = '';
     buildList();
     wrap.classList.add('open');
@@ -2232,7 +2241,7 @@ function _makeTimbreAction(o){
         if(SoundfontLoader.current === o.value){ setStatus('正在使用该音色，无法删除'); return; }
         SoundfontLoader.deleteCached(o.value).then(function(){
           setStatus('已删除音色：' + o.textContent);
-          if(_timbreSelect) _timbreSelect.refresh();
+          render(); // 只重绘本按钮，不重建整个列表（避免列表滚动位置跳动）
         }).catch(function(err){ setStatus('删除失败：' + (err && err.message ? err.message : err)); });
       });
     } else {
@@ -2243,7 +2252,7 @@ function _makeTimbreAction(o){
           if(p < 1) _btnLoading(btn, p * 100);
         }, {switchCurrent: false}).then(function(){
           setStatus('音色下载完成：' + o.textContent);
-          if(_timbreSelect) _timbreSelect.refresh();
+          render(); // 只重绘本按钮，不重建整个列表（避免列表滚动位置跳动）
         }).catch(function(err){
           setStatus('音色下载失败：' + (err && err.message ? err.message : err));
           render();
