@@ -9,12 +9,23 @@
 (function(){try{var s=localStorage.getItem("en-theme")||"dark";var d=s==="dark"||(s==="system"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches);if(d)document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark");}catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-<script>
-tailwind.config={darkMode:"class",theme:{extend:{
-  colors:{primary:"#3B82F6","bg-light":"#FFFFFF","bg-dark":"#111827","surface-light":"#F9FAFB","surface-dark":"#1F2937","border-light":"#E5E7EB","border-dark":"#374151","text-light":"#1F2937","text-dark":"#F9FAFB","muted-light":"#6B7280","muted-dark":"#9CA3AF"},
-  fontFamily:{sans:["Inter","system-ui","sans-serif"]}
-}}};
-</script>
+<style type="text/tailwindcss">
+@custom-variant dark (&:where(.dark, .dark *));
+@theme {
+  --color-primary: #3B82F6;
+  --color-bg-light: #FFFFFF;
+  --color-bg-dark: #111827;
+  --color-surface-light: #F9FAFB;
+  --color-surface-dark: #1F2937;
+  --color-border-light: #E5E7EB;
+  --color-border-dark: #374151;
+  --color-text-light: #1F2937;
+  --color-text-dark: #F9FAFB;
+  --color-muted-light: #6B7280;
+  --color-muted-dark: #9CA3AF;
+  --font-sans: Inter, system-ui, sans-serif;
+}
+</style>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <style>*{-webkit-tap-highlight-color:transparent}</style>
@@ -27,13 +38,13 @@ tailwind.config={darkMode:"class",theme:{extend:{
   <a href="https://down2.top/encrypted_notes/" class="inline-flex items-center gap-1 text-sm text-primary hover:underline mb-6"><span class="material-icons text-base">arrow_back</span> 返回加密笔记</a>
 
   <h1 class="text-3xl font-bold mb-3">为什么无法暴力破解？</h1>
-  <p class="text-muted-light dark:text-muted-dark mb-8">一句话：Argon2id 让<strong>每一次猜测</strong>都必须占用 512 MiB 内存，攻击者的并行优势被内存容量与带宽卡死，成本随密码长度指数爆炸。</p>
+  <p class="text-muted-light dark:text-muted-dark mb-8">一句话：Argon2id 让<strong>每一次猜测</strong>都必须占用 256 MiB 内存，攻击者的并行优势被内存容量与带宽卡死，成本随密码长度指数爆炸。</p>
 
   <article class="prose prose-lg dark:prose-invert max-w-none">
     <h2>关键点</h2>
     <ul>
-      <li><strong>内存硬</strong>：本页每次验证用 Argon2id <code>m=512 MiB, t=4, p=1</code>，一次猜测就吃掉 512 MiB。</li>
-      <li><strong>并行受内存限制</strong>：想同时猜 N 个口令，就要 N×512 MiB 内存。一张 80 GB 的 H100 最多约 150 路并发，不是无限。</li>
+      <li><strong>内存硬</strong>：本页每次验证用 Argon2id <code>m=256 MiB, t=4, p=1</code>，一次猜测就吃掉 256 MiB。</li>
+      <li><strong>并行受内存限制</strong>：想同时猜 N 个口令，就要 N×256 MiB 内存。一张 80 GB 的 H100 最多约 300 路并发，不是无限。</li>
       <li><strong>空间指数增长</strong>：随机密码每多 1 位，搜索空间 ×62。成本不是线性，是指数。</li>
       <li><strong>只保护强密码</strong>：Argon2 抬高每次猜测成本，但救不了字典词 / 短数字。请用长随机密码。</li>
     </ul>
@@ -55,56 +66,56 @@ tailwind.config={darkMode:"class",theme:{extend:{
           <tbody>
             <tr class="border-b border-border-light dark:border-border-dark/60">
               <td class="py-2.5 px-3 font-mono font-semibold">6 位</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap">900 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap">56 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap">6 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap">21.9 天</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap">2.2 天</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">450 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">28 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">3 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">11.0 天</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">1.1 天</td>
             </tr>
             <tr class="border-b border-border-light dark:border-border-dark/60">
               <td class="py-2.5 px-3 font-mono font-semibold">8 位</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">345.9 万年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">21.6 万年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">2.3 万年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap">231 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap">23 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">173.0 万年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">10.8 万年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.2 万年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">115 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">12 年</td>
             </tr>
             <tr class="border-b border-border-light dark:border-border-dark/60">
               <td class="py-2.5 px-3 font-mono font-semibold">10 位</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">133.0 亿年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">8.3 亿年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">8,865.3 万年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">88.7 万年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">8.9 万年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">66.5 亿年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">4.2 亿年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">4,432.6 万年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">44.3 万年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">4.4 万年</td>
             </tr>
             <tr class="border-b border-border-light dark:border-border-dark/60">
               <td class="py-2.5 px-3 font-mono font-semibold">12 位</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">5.11×10<sup>13</sup> 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">3.19×10<sup>12</sup> 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">3,407.8 亿年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">34.1 亿年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">3.4 亿年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">2.56×10<sup>13</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.60×10<sup>12</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1,703.9 亿年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">17.0 亿年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.7 亿年</td>
             </tr>
             <tr class="border-b border-border-light dark:border-border-dark/60">
               <td class="py-2.5 px-3 font-mono font-semibold">14 位</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.96×10<sup>17</sup> 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.23×10<sup>16</sup> 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.31×10<sup>15</sup> 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.31×10<sup>13</sup> 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.31×10<sup>12</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">9.82×10<sup>16</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">6.14×10<sup>15</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">6.55×10<sup>14</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">6.55×10<sup>12</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">6,549.8 亿年</td>
             </tr>
             <tr>
               <td class="py-2.5 px-3 font-mono font-semibold">16 位</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">7.55×10<sup>20</sup> 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">4.72×10<sup>19</sup> 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">5.04×10<sup>18</sup> 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">5.04×10<sup>16</sup> 年</td>
-              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">5.04×10<sup>15</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">3.78×10<sup>20</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">2.36×10<sup>19</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">2.52×10<sup>18</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">2.52×10<sup>16</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">2.52×10<sup>15</sup> 年</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="text-xs text-muted-light dark:text-muted-dark mt-2">估算假设：单核 ≈1 次/秒；9950X 16 核 ≈16 次/秒；1× H100 ≈150 次/秒；100× / 1000× 按比例。实际受内存带宽、实现与调度影响，可能有数量级偏差。</p>
+      <p class="text-xs text-muted-light dark:text-muted-dark mt-2">估算假设（m=256 MiB）：单核 ≈2 次/秒；9950X 16 核 ≈32 次/秒；1× H100 ≈300 次/秒；100× / 1000× 按比例。实际受内存带宽、实现与调度影响，可能有数量级偏差。</p>
     </div>
 
     <h2>结论</h2>
@@ -117,7 +128,7 @@ tailwind.config={darkMode:"class",theme:{extend:{
   </div>
 
   <footer class="mt-10 pt-6 border-t border-border-light dark:border-border-dark text-xs text-muted-light dark:text-muted-dark">
-    参数与本页实际使用一致：Argon2id m=512 MiB · t=4 · p=1 · AES-256-CTR。数字为数量级估算，非精确基准。
+    参数与本页实际使用一致：Argon2id m=256 MiB · t=4 · p=1 · AES-256-CTR。数字为数量级估算，非精确基准。
   </footer>
 </main>
 
