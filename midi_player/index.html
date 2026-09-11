@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=overlays-content">
 <title>MIDI 播放器 · 88键可视化</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#0d0d14; --panel:#16161f; --border:#2a2a3a; --text:#e8e8f0;
@@ -78,11 +81,12 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 
 /* 圆形配色按钮（A/B/C 与编辑图标）：与播放控制按钮同尺寸（32px）并对齐 */
 .pal-btn{
-  width:32px;height:32px;border-radius:50%;
+  width:27px;height:27px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
   padding:0;border:none;cursor:pointer;
   background:var(--accent);color:#fff;
-  font-size:13px;font-weight:600;
+  font-family:'Google Sans','Product Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:12px;font-weight:400;
   transition:background .15s,box-shadow .15s;
 }
 /* 选中：实心主题紫 + 外圈白框标识（与播放控制按钮一致的选中观感） */
@@ -135,7 +139,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .ctl-btn.primary:hover{background:#7c3aed}
 .ctl-btn svg{width:16px;height:16px}
 /* 配色面板：从控制行下方展开（absolute，不遮挡按钮） */
-.palette-row{display:none;align-items:center;gap:8px;flex-wrap:wrap;min-width:230px}
+.palette-row{display:none;align-items:center;gap:8px;flex-wrap:nowrap;min-width:230px}
 .palette-row.open{display:flex}
 #paletteToggleIcon{transition:transform .2s}
 
@@ -361,11 +365,7 @@ select:focus{border-color:var(--accent)}
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M8.203 2.004c1.261 0 2.304 1.103 2.476 2.538l8.483 8.484l-7.778 7.778a3 3 0 0 1-4.243 0L2.9 16.562a3 3 0 0 1 0-4.243l2.804-2.805V4.961c0-1.633 1.12-2.957 2.5-2.957m.5 2.957v1.553l-1 1V4.961c0-.327.224-.591.5-.591c.277 0 .5.264.5.591m0 5.914V9.342l-4.39 4.391a1 1 0 0 0 0 1.414l4.243 4.243a1 1 0 0 0 1.414 0l6.364-6.364l-5.63-5.63v3.48l-.003.128h-2.01a1 1 0 0 0 .012-.129" clip-rule="evenodd"/><path d="M16.859 16.875a3 3 0 1 0 4.242 0l-2.121-2.121z"/></svg>
               </button>
             </div>
-            <div style="display:flex;flex-direction:column;gap:4px;height:44px;font-size:9px;color:var(--dim);flex-shrink:0;">
-              <span style="height:20px;display:flex;align-items:flex-end;line-height:1;">白键</span>
-              <span style="height:20px;display:flex;align-items:flex-end;line-height:1;">黑键</span>
-            </div>
-            <div id="paletteSwatch" style="flex:1;min-width:90px;max-width:340px;height:44px;position:relative;"></div>
+            <div id="paletteSwatch" style="flex:1 1 0;min-width:0;max-width:340px;height:44px;position:relative;"></div>
           </div>
           <div class="debug-panel drop-panel" id="debugPanel">
             <div class="dbg-toolbar">
@@ -3049,7 +3049,13 @@ function setPalette(name){
     drawScene(allNotes, leftIdx, rightIdx, currentTime);
   }
 }
-// 两个横向直角梯形渐变块：短底=长底一半，左轻右重；上白键、下黑键；中间写"力度"
+// 叠加在力度图上的小标签（白键/黑键/力度）
+function _swatchLabel(text, pos){
+  return '<span style="position:absolute;' + pos +
+    'font-size:9px;line-height:1;color:#fff;' +
+    'text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none;white-space:nowrap;">' + text + '</span>';
+}
+// 两个横向直角梯形渐变块：短底=长底一半，左轻右重；上白键、下黑键；标签叠加在图上
 function updatePaletteSwatch(){
   const host = document.getElementById('paletteSwatch');
   if(!host) return;
@@ -3071,8 +3077,9 @@ function updatePaletteSwatch(){
       trap(0, 'pgW') +
       trap(bh + gap, 'pgB') +
     '</svg>' +
-    '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);' +
-      'font-size:11px;color:#fff;text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none;">力度</span>';
+    _swatchLabel('白键', 'left:10px;top:' + (bh * 0.75) + 'px;transform:translateY(-50%);') +
+    _swatchLabel('黑键', 'left:10px;top:' + (bh + gap + bh * 0.75) + 'px;transform:translateY(-50%);') +
+    _swatchLabel('力度', 'left:50%;top:50%;transform:translate(-50%,-50%);font-size:11px;');
 }
 
 // ===== 全彩取色板 =====
