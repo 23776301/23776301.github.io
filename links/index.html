@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔗 外部实用小工具 · teecatt</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--accent2:#3fb950;--hover:#21262d}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+a{text-decoration:none;color:inherit}
+.topbar{height:52px;display:flex;align-items:center;padding:0 20px;gap:14px;border-bottom:1px solid var(--line);background:var(--surface)}
+.topbar .back{color:var(--muted);font-size:13px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;transition:all .15s}
+.topbar .back:hover{color:var(--text);border-color:var(--accent)}
+.topbar h1{font-size:15px;font-weight:600;flex:1}
+.container{max-width:960px;margin:0 auto;padding:24px 20px 60px}
+.quote{text-align:center;padding:32px 20px 8px;font-size:16px;color:var(--muted);line-height:1.8}
+.group-title{display:flex;align-items:center;gap:8px;margin:28px 0 14px;font-size:14px;font-weight:600}
+.group-title::after{content:'';flex:1;height:1px;background:var(--line)}
+.grid{display:flex;flex-wrap:wrap;gap:14px}
+.link-card{flex:1 1 260px;max-width:320px;min-width:220px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:8px;transition:transform .15s,border-color .15s;cursor:pointer}
+.link-card:hover{transform:translateY(-2px);border-color:var(--accent)}
+.link-card .head{display:flex;align-items:center;gap:10px}
+.link-card .ico{font-size:20px;flex-shrink:0}
+.link-card h3{font-size:15px;font-weight:600;color:var(--accent);flex:1}
+.link-card .arrow{color:var(--muted);font-size:16px;transition:transform .15s}
+.link-card:hover .arrow{transform:translateX(3px);color:var(--accent)}
+.link-card .desc{font-size:12px;color:var(--muted);line-height:1.6;flex:1}
+.link-card .url{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty{padding:60px 20px;text-align:center;color:var(--muted);font-size:13px}
+footer{border-top:1px solid var(--line);padding:16px;text-align:center;font-size:11px;color:var(--muted)}
+.loading{text-align:center;color:var(--muted);padding:60px 0;font-size:13px}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="../">← 返回主页</a>
+  <h1>🔗 外部实用小工具</h1>
+</div>
+<div class="container" id="container">
+  <div class="quote">站在巨人的肩膀上<br>避免无意义的重复造轮子</div>
+  <div class="loading">加载中...</div>
+</div>
+<footer>teecatt · 链接配置见 data/links.json,可随时扩充</footer>
+<script>
+(function(){
+  var container = document.getElementById('container');
+  function esc(s){ var d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
+  function render(data){
+   if(!data || !data.groups || !data.groups.length){ container.innerHTML='<div class="quote">📚 站在巨人的肩膀上<br>避免无意义的重复造轮子</div><div class="empty">暂无链接数据</div>'; return; }
+   var html='<div class="quote">📚 站在巨人的肩膀上<br>避免无意义的重复造轮子</div>';
+    data.groups.forEach(function(g){
+      html+='<div class="group-title">'+esc(g.name)+'</div><div class="grid">';
+      g.items.forEach(function(it){
+        html+='<a class="link-card" href="'+esc(it.url)+'" target="_blank" rel="noopener">';
+        html+='<div class="head"><span class="ico">'+(it.ico||'🔗')+'</span><h3>'+esc(it.name)+'</h3><span class="arrow">→</span></div>';
+        if(it.desc) html+='<div class="desc">'+esc(it.desc)+'</div>';
+        html+='<div class="url">'+esc(it.url)+'</div></a>';
+      });
+      html+='</div>';
+    });
+    container.innerHTML=html;
+  }
+  fetch('../data/links.json').then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(render)
+    .catch(function(){ container.innerHTML='<div class="quote">📚 站在巨人的肩膀上<br>避免无意义的重复造轮子</div><div class="empty">链接数据加载失败,请稍后刷新</div>'; });
+})();
+</script>
+</body>
+</html>
