@@ -1,6 +1,6 @@
 # MIDI 播放器 · 88 键可视化
 
-浏览器端 MIDI 播放器：解析 `.mid` 谱面，在 Canvas 上以「88 键钢琴 + 下落音符」形式可视化，支持多音色（Soundfont）、变速播放、顺序/循环播放、自定义配色，并内置一套性能诊断与自动降级机制。
+浏览器端 MIDI 播放器：解析 `.mid` 谱面，在 Canvas 上以「88 键钢琴 + 下落音符」形式可视化，支持多音色（Soundfont）、变速播放、列表/单曲循环、自定义配色，并内置一套性能诊断与自动降级机制。
 
 ---
 
@@ -235,15 +235,20 @@ MIDI不载声响，是二进制的乐思底稿。
 
 ## 4.3 已使用的图标一览
 
-| Feather 名称 | 含义 | 使用位置 | `<svg>` 内的主要路径 |
+图标混用**线性**（Feather / Solar linear）与**实心**（Bootstrap / Material）两种风格，均以 `currentColor` 取色，随主题配色自适应。
+
+| 图标 | 图标集 | 含义 | 使用位置 |
 | --- | --- | --- | --- |
-| `folder` | 文件夹 / 上传 | 顶部「上传MIDI」 | `<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>` |
-| `play` | 播放 | 播放/暂停按钮（暂停态） | `<polygon points="5 3 19 12 5 21 5 3"/>` |
-| `pause` | 暂停 | 播放/暂停按钮（播放态） | `<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>` |
-| `rotate-cw` | 重播（顺时针回转） | 「重播」 | `<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>` |
-| `repeat` | 单曲循环 | 循环按钮（循环态） | `<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>` |
-| `arrow-right` | 顺序播放 | 循环按钮（顺序态） | `<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>` |
-| `edit-3` | 编辑（铅笔） | 「管理谱面」、配色「自定义」 | `<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>` |
+| `folder` | Feather | 文件夹 / 上传 | 顶部「上传MIDI」 |
+| `play`（polygon） | 自定义（Feather 风格） | 播放 | 播放/暂停按钮（暂停态） |
+| `pause`（rect×2） | 自定义（Feather 风格） | 暂停 | 播放/暂停按钮（播放态） |
+| `rotate-cw` | Feather | 重播（顺时针回转） | 「重播」 |
+| `repeat` | Bootstrap Icons（`bi`，16 网格） | 列表循环 | 循环按钮（列表态） |
+| `repeat-1` | Bootstrap Icons（`bi`，16 网格） | 单曲循环 | 循环按钮（单曲态） |
+| `settings-minimalistic-bold` | Solar | 设置 / 菜单 | 控制行「设置」 |
+| `round-color-lens` | Material Symbols（`ic`） | 配色编辑 | 配色「自定义」 |
+| `edit-3` | Feather | 编辑（铅笔） | 「管理谱面」 |
+| `maximize-linear` / `minimize-linear` | Solar | 全屏 / 退出全屏 | 控制行「全屏」 |
 
 ## 4.4 代码写法
 
@@ -258,25 +263,27 @@ MIDI不载声响，是二进制的乐思底稿。
 </button>
 ```
 
-动态按钮（播放/暂停、循环/顺序）：把图标抽成常量，切换时用 `innerHTML` 注入，避免在 JS 里重复大段 SVG：
+动态按钮（播放/暂停、列表/单曲循环）：把图标抽成常量，切换时用 `innerHTML` 注入，避免在 JS 里重复大段 SVG。线性图标用 `_svgIcon`，实心图标用 `_fillIcon`（可指定 viewBox 边长，Bootstrap Icons 为 16）：
 
 ```js
 const _svgIcon = (inner, size) => '<svg width="' + (size || 14) + '" height="' + (size || 14) +
   '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">' + inner + '</svg>';
-const PLAY_ICON   = _svgIcon('<polygon points="5 3 19 12 5 21 5 3"/>');
-const PAUSE_ICON  = _svgIcon('<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>');
-const REPEAT_ICON = _svgIcon('<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>');
-const SEQ_ICON    = _svgIcon('<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>');
+const _fillIcon = (inner, size, vb) => '<svg width="' + (size || 14) + '" height="' + (size || 14) +
+  '" viewBox="0 0 ' + (vb || 24) + ' ' + (vb || 24) + '" fill="currentColor" style="flex-shrink:0">' + inner + '</svg>';
+const PLAY_ICON      = _svgIcon('<polygon points="5 3 19 12 5 21 5 3"/>');
+const PAUSE_ICON     = _svgIcon('<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>');
+const LIST_LOOP_ICON = _fillIcon('<path d="...bi:repeat..."/>', 14, 16);
+const ONE_LOOP_ICON  = _fillIcon('<path d="...bi:repeat-1..."/>', 14, 16);
 
-document.getElementById('playBtn').innerHTML = PAUSE_ICON + '暂停'; // 播放中
-document.getElementById('playBtn').innerHTML = PLAY_ICON  + '播放'; // 暂停
-document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单曲循环' : SEQ_ICON + '顺序播放';
+document.getElementById('playBtn').innerHTML = PAUSE_ICON; // 播放中
+document.getElementById('playBtn').innerHTML = PLAY_ICON;  // 暂停
+document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICON : LIST_LOOP_ICON;
 ```
 
 ## 4.5 约定
 
-- 新增图标一律沿用同一规格（`24×24 / fill:none / currentColor / stroke-width:2 / round`），保证视觉语言统一。
-- 语义优先：上传用 `folder`、编辑用 `edit-3`、播放控制用 `play` / `pause` / `rotate-cw` / `repeat` / `arrow-right`。
+- 线性图标沿用 Feather 规格（`24×24 / fill:none / currentColor / stroke-width:2 / round`）；实心图标用 `fill="currentColor"`，viewBox 按其来源（Solar / Material 为 24，Bootstrap Icons 为 16）。
+- 语义优先：上传用 `folder`、编辑用 `edit-3`、播放控制用 `play` / `pause` / `rotate-cw`、循环用 `bi:repeat`（列表）/ `bi:repeat-1`（单曲）。
 - 图标颜色不写死，交给 `currentColor`；这样新增主题/配色时零成本适配。
 
 ---
@@ -295,11 +302,11 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 
 - **状态**：`isPlaying`、`currentTime`、`nextNoteIndex`、`playStartTime`、`playSpeed`、`loopEnabled`。
 - **时钟**：以 `audioCtx.currentTime` 为准推进 `currentTime`，避免 `performance.now` 与音频时钟漂移。
-- **控制**：播放/暂停/停止/重播、进度条拖拽 seek、0.2x–2x 变速、顺序播放/单曲循环。
+- **控制**：播放/暂停/停止/重播、进度条拖拽 seek、0.2x–2x 变速、列表循环/单曲循环。
 - **定位**：seek 与开始播放都用二分 `lowerBound(allNotes, time)` 找起始音符，避免线性扫描。
 - **并行加载与自动播放**：进入页面即**并行**下载默认谱面与默认音色（早期版本为串行）。谱面解析完成即可起播：若音色尚未就绪，先用**合成钢琴**抢跑，待音色下载并**预解码完成后无缝切回**——只切换 `current`，不打断正在发声的 voice，避免解码期间丢音；音色加载失败则保持合成钢琴。若 AudioContext 处于 suspended，则挂到首次点击/触摸后恢复。
 - **回到前台自动续播**：不因失焦暂停。`visibilitychange` 回到前台时，若仍在播放且音频上下文被浏览器挂起，则自动 `resume()` 并确保渲染循环运行。注：后台期间 rAF 被浏览器挂起，音频不会持续输出，此机制保证切回后接上。
-- **顺序播放**：非循环时自动切下一首，`await` 音色加载后再开始，避免开头丢音。
+- **列表循环 / 单曲循环**：循环按钮为两态。**列表循环**（默认）一首播完自动切下一首，播到列表末尾回到第一首继续；**单曲循环**重复当前一首。切歌时 `await` 音色加载后再开始，避免开头丢音。
 - **进度节流**：进度条与统计文本合并为 100ms 更新一次，避免每帧写 DOM。
 
 # 七、数据、存储与谱面管理
@@ -323,7 +330,7 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 
 ## 9.1 设置按钮（控制行内）
 
-- 菜单 / 设置按钮已并入**控制行**，位于「顺序播放」右侧，圆形 `.ctl-btn`，图标为 **`arcticons:set-edit`**（内联矢量 SVG），风格与尺寸和播放控制按钮一致；点击调用 `toggleMenu()` 展开 / 收起菜单面板。
+- 菜单 / 设置按钮已并入**控制行**，位于「循环」右侧，圆形 `.ctl-btn`，图标为 **`solar:settings-minimalistic-bold`**（实心内联 SVG），风格与尺寸和播放控制按钮一致；点击调用 `toggleMenu()` 展开 / 收起菜单面板。
 - 原移动端可拖拽 FAB 与 PC 顶栏菜单按钮已移除（`.fab-group` 不再存在），`toggleMenu` 对 `#fabGroup` 为 null 的情况做了保护。
 - 遮罩 `.overlay-mask` 仍在，点击可关闭菜单面板。
 
@@ -360,8 +367,8 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 
 - **视口自适应**：PC 端整页锁定视口高度（`height:100dvh` + `overflow:hidden`），`.layout` 用 `flex:1` 撑满，`.visual-panel` 与 Canvas 以 `flex:1` 占满——**钢琴键始终贴在屏幕底部，无需滚动页面**；菜单面板为浮层，不再挤压绘制区。
 - **顶栏排列**：进度条单独置于顶栏最底部；上传 MIDI 右侧是**管理谱面**圆形图标按钮（`.ctl-btn.primary`，与上传 / 播放控制一致的强调色底 + 白图标）；播放控制、设置、配色方案、力度指示、全屏排在进度条上方。
-- **控制行（`.control-row`）**：顺序为 播放 / 重播 / 循环 / **设置**（`arcticons:set-edit`，圆形），均为 `.ctl-btn`；顺序播放图标为**两个平行向右的箭头**。它们位于可收起区域之外，收起配色栏时仍可操作。
-- **全屏按钮**：控制行**最右侧是配色栏展开/收起按钮**，其左侧是**全屏**按钮；全屏按钮**无背景、方形**，图标为「带框箭头」矢量 SVG 且使用 `var(--accent)` 主题色，对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。
+- **控制行（`.control-row`）**：顺序为 播放 / 重播 / 循环 / **设置**（`solar:settings-minimalistic-bold`，圆形），均为 `.ctl-btn`；循环按钮为**列表循环（`bi:repeat`）/ 单曲循环（`bi:repeat-1`）两态**。它们位于可收起区域之外，收起配色栏时仍可操作。
+- **全屏按钮**：控制行**最右侧是配色栏展开/收起按钮**，其左侧是**全屏**按钮；全屏按钮**无背景、方形**，图标为 `solar:maximize-linear` / `solar:minimize-linear`（线性矢量 SVG）且使用 `var(--accent)` 主题色，对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。
 - **配色栏布局**：A/B/C/自定义色板按钮在**移动端为 2×2、PC 端为单行**，与「配色方案」竖排标签、「白键 / 黑键」标签及色带（`paletteSwatch`）底边对齐。
 
 ## 9.7 菜单面板、调试区与滑动开关
@@ -508,7 +515,7 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 ## 12.2 功能回归清单
 
 - 默认谱面自动加载并播放；上传本地 MIDI 后自动播放并进入「我的上传」。
-- 切换谱面、切换音色、变速、循环/顺序播放、进度条拖拽 seek。
+- 切换谱面、切换音色、变速、循环模式（列表/单曲）、进度条拖拽 seek。
 - 回到前台自动续播；移动端抽屉、FAB 拖动与吸附、弹窗、Toast。
 - 配色 A/B/C 切换、自定义四端颜色并保存、刷新后恢复。
 
@@ -720,3 +727,4 @@ midi_player/
 | 谱面管理 | 管理弹窗改为半透明 + 模糊、共享透明/模糊滑块、点击外部收起；支持内置谱删除与重新下载 | `4101b10` |
 | 控制栏布局 | 管理按钮移到上传 MIDI 右侧并引用主题色；顺序播放改两个平行右箭头；全屏按钮无背景、带框箭头矢量图标；展开按钮移到最右侧；桌面端配色栏内联并隐藏展开按钮 | `bf7e455` |
 | 设置按钮 | 菜单按钮改为 `arcticons:set-edit` 圆形设置按钮，移入控制行（循环右侧）；移除浮动 FAB 与顶栏菜单按钮；管理/全屏统一主题强调色 | `dcd17b7` |
+| 图标与循环 | 全屏改用 `solar:maximize/minimize-linear`、设置改用 `solar:settings-minimalistic-bold`、配色编辑改用 `ic:round-color-lens`；循环按钮改为列表循环（`bi:repeat`）/ 单曲循环（`bi:repeat-1`）两态，列表循环播到底回到第一首 | `f6d0e80` |
