@@ -86,7 +86,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
   transition:background .15s,box-shadow .15s;
 }
 /* 选中：实心主题紫 + 外圈白框标识（与播放控制按钮一致的选中观感） */
-.pal-btn.active{background:var(--accent);color:#fff;box-shadow:0 0 0 2px #fff}
+.pal-btn.active{background:var(--accent);color:#fff}
 .pal-btn:hover{background:#7c3aed}
 /* 按下反馈 */
 .pal-btn:active{background:#6d28d9;opacity:1}
@@ -160,6 +160,10 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .manage-row .icon-btn.del:hover{color:#ff6b6b}
 .manage-row .icon-btn.dl:hover{color:var(--accent)}
 .manage-row .icon-btn svg{width:16px;height:16px}
+.manage-row .icon-btn:disabled{opacity:.85;cursor:default;background:none}
+.manage-row .icon-btn.loading svg{animation:_spin .8s linear infinite}
+.manage-row .icon-btn .btn-pct{font-size:10px;font-weight:600;color:var(--accent)}
+@keyframes _spin{to{transform:rotate(360deg)}}
 
 /* 菜单面板内的调试区 */
 .dbg-section{margin-top:18px;padding-top:12px;border-top:1px solid var(--border)}
@@ -339,7 +343,7 @@ select:focus{border-color:var(--accent)}
           <button class="ctl-btn primary" id="loopBtn" onclick="toggleLoop()" disabled title="列表循环"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0"><path d="M11 5.466V4H5a4 4 0 0 0-3.584 5.777a.5.5 0 1 1-.896.446A5 5 0 0 1 5 3h6V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192m3.81.086a.5.5 0 0 1 .67.225A5 5 0 0 1 11 13H5v1.466a.25.25 0 0 1-.41.192l-2.36-1.966a.25.25 0 0 1 0-.384l2.36-1.966a.25.25 0 0 1 .41.192V12h6a4 4 0 0 0 3.585-5.777a.5.5 0 0 1 .225-.67Z"/></svg></button>
           <button class="ctl-btn primary drop-trigger" id="manageBtn" onclick="openManageModal()" title="管理谱面" aria-label="管理谱面"><svg viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0"><path d="M16.81 10.548a1.87 1.87 0 1 1 2.644 2.644l-4.829 4.83a2.2 2.2 0 0 1-1.021.578l-1.498.375a.89.89 0 0 1-1.079-1.08l.374-1.497c.097-.387.297-.74.579-1.021zM3.25 13.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m8.023 1.17a3.2 3.2 0 0 0-.597.83H7.75a.75.75 0 0 1 0-1.5h4.192zM3.25 8.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5q.159 0 .297.06c-.53.11-1.034.37-1.445.78l-.659.66H7.75a.75.75 0 0 1 0-1.5zm-14-5.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5a.75.75 0 0 1 0 1.5h-9.5a.75.75 0 0 1 0-1.5z"/></svg></button>
           <button class="ctl-btn primary" id="uploadBtn" onclick="document.getElementById('midiFile').click()" title="上传MIDI" aria-label="上传MIDI"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" style="flex-shrink:0"><path d="M4.5 11.5a3 3 0 0 1 3-3h8.718a4 4 0 0 1 2.325.745l4.914 3.51a4 4 0 0 0 2.325.745H40.5a3 3 0 0 1 3 3v20a3 3 0 0 1-3 3h-33a3 3 0 0 1-3-3z"/><path d="M24 33.5v-14m6.167 6.167L24 19.5l-6.167 6.167"/></svg></button>
-          <button class="ctl-btn primary drop-trigger" id="settingsBtn" onclick="toggleMenu()" title="设置" aria-label="设置"><svg viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M12.4277 2C11.3139 2 10.2995 2.6007 8.27081 3.80211L7.58466 4.20846C5.55594 5.40987 4.54158 6.01057 3.98466 7C3.42773 7.98943 3.42773 9.19084 3.42773 11.5937V12.4063C3.42773 14.8092 3.42773 16.0106 3.98466 17C4.54158 17.9894 5.55594 18.5901 7.58466 19.7915L8.27081 20.1979C10.2995 21.3993 11.3139 22 12.4277 22C13.5416 22 14.5559 21.3993 16.5847 20.1979L17.2708 19.7915C19.2995 18.5901 20.3139 17.9894 20.8708 17C21.4277 16.0106 21.4277 14.8092 21.4277 12.4063V11.5937C21.4277 9.19084 21.4277 7.98943 20.8708 7C20.3139 6.01057 19.2995 5.40987 17.2708 4.20846L16.5847 3.80211C14.5559 2.6007 13.5416 2 12.4277 2ZM8.67773 12C8.67773 9.92893 10.3567 8.25 12.4277 8.25C14.4988 8.25 16.1777 9.92893 16.1777 12C16.1777 14.0711 14.4988 15.75 12.4277 15.75C10.3567 15.75 8.67773 14.0711 8.67773 12Z" clip-rule="evenodd"/></svg></button>
+          <button class="ctl-btn primary drop-trigger" id="settingsBtn" onclick="toggleMenu()" title="设置" aria-label="设置" style="margin-left:auto"><svg viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M12.4277 2C11.3139 2 10.2995 2.6007 8.27081 3.80211L7.58466 4.20846C5.55594 5.40987 4.54158 6.01057 3.98466 7C3.42773 7.98943 3.42773 9.19084 3.42773 11.5937V12.4063C3.42773 14.8092 3.42773 16.0106 3.98466 17C4.54158 17.9894 5.55594 18.5901 7.58466 19.7915L8.27081 20.1979C10.2995 21.3993 11.3139 22 12.4277 22C13.5416 22 14.5559 21.3993 16.5847 20.1979L17.2708 19.7915C19.2995 18.5901 20.3139 17.9894 20.8708 17C21.4277 16.0106 21.4277 14.8092 21.4277 12.4063V11.5937C21.4277 9.19084 21.4277 7.98943 20.8708 7C20.3139 6.01057 19.2995 5.40987 17.2708 4.20846L16.5847 3.80211C14.5559 2.6007 13.5416 2 12.4277 2ZM8.67773 12C8.67773 9.92893 10.3567 8.25 12.4277 8.25C14.4988 8.25 16.1777 9.92893 16.1777 12C16.1777 14.0711 14.4988 15.75 12.4277 15.75C10.3567 15.75 8.67773 14.0711 8.67773 12Z" clip-rule="evenodd"/></svg></button>
           <button class="ctl-btn primary drop-trigger" id="paletteToggleBtn" onclick="togglePaletteRow()" title="配色面板" aria-label="配色面板"><svg id="paletteToggleIcon" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10a2.5 2.5 0 0 0 2.5-2.5c0-.61-.23-1.2-.64-1.67a.53.53 0 0 1-.13-.33c0-.28.22-.5.5-.5H16c3.31 0 6-2.69 6-6c0-4.96-4.49-9-10-9m5.5 11c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5s1.5.67 1.5 1.5s-.67 1.5-1.5 1.5m-3-4c-.83 0-1.5-.67-1.5-1.5S13.67 6 14.5 6s1.5.67 1.5 1.5S15.33 9 14.5 9M5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S7.33 13 6.5 13S5 12.33 5 11.5m6-4c0 .83-.67 1.5-1.5 1.5S8 8.33 8 7.5S8.67 6 9.5 6s1.5.67 1.5 1.5"/></svg></button>
           <button class="ctl-btn primary drop-trigger" id="debugToggleBtn" onclick="toggleDebugPanel()" title="调试面板" aria-label="调试面板"><svg viewBox="0 0 32 32" fill="currentColor" style="flex-shrink:0"><path d="m29.83 20l.34-2l-5.17-.85v-4.38l5.06-1.36l-.51-1.93l-4.83 1.29A9 9 0 0 0 20 5V2h-2v2.23a8.8 8.8 0 0 0-4 0V2h-2v3a9 9 0 0 0-4.71 5.82L2.46 9.48L2 11.41l5 1.36v4.38L1.84 18l.32 2L7 19.18a8.9 8.9 0 0 0 .82 3.57l-4.53 4.54l1.42 1.42l4.19-4.2a9 9 0 0 0 14.2 0l4.19 4.2l1.42-1.42l-4.54-4.54a8.9 8.9 0 0 0 .83-3.57ZM15 25.92A7 7 0 0 1 9 19v-6h6ZM9.29 11a7 7 0 0 1 13.42 0ZM23 19a7 7 0 0 1-6 6.92V13h6Z"/></svg></button>
           <input type="file" id="midiFile" accept=".mid,.midi" style="display:none" onchange="onMidiFile(event)">
@@ -1906,6 +1910,9 @@ let userGestureSeen = false;
     if(hint) hint.textContent = 'MIDI加载失败：' + e.message;
   });
 
+  // 仅再后台预取 The Sound of Silence；其余内置谱（并发测试谱）默认不下载，选到时才按需加载
+  AssetCache.fetch('midi/The Sound of Silence.mid').catch(() => {});
+
   loadDefaultTimbre();
 })();
 
@@ -1970,23 +1977,59 @@ function saveDeletedBuiltin(set){
   try{ localStorage.setItem('deletedBuiltin', JSON.stringify([...set])); }catch(e){}
 }
 
+// 内置谱列表：内存 + Cache 优先，避免每次打开都联网拉取
+let _builtinListCache = null;
+async function _getBuiltinList(){
+  if(_builtinListCache) return _builtinListCache;
+  try{
+    const resp = await AssetCache.fetch('midi/list.json'); // cache-first
+    if(resp.ok){ _builtinListCache = await resp.json(); return _builtinListCache; }
+  }catch(e){}
+  return _builtinListCache || [];
+}
+// 带进度的下载：用于「重新下载」时在按钮上显示百分比
+async function _fetchWithProgress(url, onProgress){
+  const absUrl = AssetCache._abs(url);
+  const resp = await fetch(url);
+  if(!resp.ok) throw new Error('HTTP ' + resp.status);
+  const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
+  let blob;
+  if(!resp.body || !total || !resp.body.getReader){
+    const buf = await resp.arrayBuffer();
+    blob = new Blob([buf]);
+    if(onProgress) onProgress(100);
+  } else {
+    const reader = resp.body.getReader();
+    const chunks = []; let received = 0;
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      chunks.push(value); received += value.length;
+      if(onProgress) onProgress(received / total * 100);
+    }
+    blob = new Blob(chunks);
+    if(onProgress) onProgress(100);
+  }
+  try{
+    const cache = await caches.open(AssetCache.cacheName);
+    await cache.put(absUrl, new Response(blob, {headers: resp.headers}));
+  }catch(e){}
+}
+
 async function loadSongList(){
   const sel = document.getElementById('songSel');
   sel.innerHTML = '';
   const deleted = getDeletedBuiltin();
   // 内置谱（排除已删除）
   try{
-    const resp = await AssetCache.fetchFresh('midi/list.json');
-    if(resp.ok){
-      const list = await resp.json();
-      list.forEach(song => {
-        if(deleted.has(song.file)) return;
-        const opt = document.createElement('option');
-        opt.value = 'builtin:' + song.file;
-        opt.textContent = song.name;
-        sel.appendChild(opt);
-      });
-    }
+    const list = await _getBuiltinList();
+    list.forEach(song => {
+      if(deleted.has(song.file)) return;
+      const opt = document.createElement('option');
+      opt.value = 'builtin:' + song.file;
+      opt.textContent = song.name;
+      sel.appendChild(opt);
+    });
   }catch(e){}
   // 用户上传谱
   try{
@@ -2009,43 +2052,61 @@ const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 function _syncManageAppearanceFromPanel(){ /* 滑块已移至设置面板，无需同步 */ }
 function applyManageAppearance(){ applyPanelAppearance(); }
 
-function _manageRow(name, opts){
-  opts = opts || {};
+// 谱面管理行：仅名称 + 右侧垃圾桶/下载图标（无文字标签）；操作时就地显示加载/百分比
+const SPINNER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
+function _btnLoading(btn, pct){
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.innerHTML = (pct == null) ? SPINNER_ICON : '<span class="btn-pct">' + Math.round(pct) + '%</span>';
+}
+function _btnIcon(btn, icon, cls, title, handler){
+  btn.disabled = false;
+  btn.classList.remove('loading');
+  btn.className = 'icon-btn ' + cls;
+  btn.innerHTML = icon;
+  btn.title = title;
+  btn.onclick = handler;
+}
+function _makeManageRow(name, kind, file, isDeleted){
   const row = document.createElement('div');
   row.className = 'manage-row';
   const nm = document.createElement('span');
   nm.className = 'name';
   nm.textContent = name;
   row.appendChild(nm);
-  if(opts.tag){
-    const tag = document.createElement('span');
-    tag.className = 'tag';
-    tag.textContent = opts.tag;
-    row.appendChild(tag);
+  const btn = document.createElement('button');
+  if(kind === 'user'){
+    _btnIcon(btn, TRASH_ICON, 'del', '删除', () => _onDeleteUser(name, btn, row));
+  } else if(isDeleted){
+    _btnIcon(btn, DOWNLOAD_ICON, 'dl', '重新下载', () => _onRedownloadBuiltin(file, btn));
+  } else {
+    _btnIcon(btn, TRASH_ICON, 'del', '删除', () => _onDeleteBuiltin(file, btn));
   }
-  if(opts.action){
-    const btn = document.createElement('button');
-    btn.className = 'icon-btn ' + (opts.actionClass || '');
-    btn.title = opts.actionTitle || '';
-    btn.innerHTML = opts.action;
-    btn.addEventListener('click', opts.onAction);
-    row.appendChild(btn);
-  }
+  row.appendChild(btn);
   return row;
+}
+async function _onDeleteUser(name, btn, row){
+  _btnLoading(btn);
+  await deleteSong(name);
+  row.remove();
+}
+async function _onDeleteBuiltin(file, btn){
+  _btnLoading(btn);
+  await deleteBuiltinSong(file);
+  _btnIcon(btn, DOWNLOAD_ICON, 'dl', '重新下载', () => _onRedownloadBuiltin(file, btn));
+}
+async function _onRedownloadBuiltin(file, btn){
+  _btnLoading(btn, 0);
+  await redownloadBuiltinSong(file, (p) => _btnLoading(btn, p));
+  _btnIcon(btn, TRASH_ICON, 'del', '删除', () => _onDeleteBuiltin(file, btn));
 }
 
 async function openManageModal(){
   const modal = document.getElementById('manageModal');
   const list = document.getElementById('manageList');
-  list.textContent = '';
-  const loading = document.createElement('div');
-  loading.className = 'manage-empty';
-  loading.textContent = '加载中…';
-  list.appendChild(loading);
   closeAllDropPanels(modal);
   modal.classList.add('open');
   applyPanelAppearance();
-
   const frag = document.createDocumentFragment();
   // 用户上传谱
   try{
@@ -2060,35 +2121,17 @@ async function openManageModal(){
       empty.textContent = '暂无上传谱面';
       frag.appendChild(empty);
     }
-    userSongs.forEach(s => {
-      frag.appendChild(_manageRow(s.name, {
-        tag: '上传',
-        action: TRASH_ICON, actionClass: 'del', actionTitle: '删除',
-        onAction: () => deleteSong(s.name)
-      }));
-    });
+    userSongs.forEach(s => frag.appendChild(_makeManageRow(s.name, 'user', null, false)));
   }catch(e){}
-  // 内置谱：已删除的显示「下载」以便重新下载，未删除的显示「删除」
+  // 内置谱：已删除的显示「下载」，未删除的显示「删除」
   try{
-    const resp = await AssetCache.fetchFresh('midi/list.json');
-    if(resp.ok){
-      const builtin = await resp.json();
-      const deleted = getDeletedBuiltin();
-      const header = document.createElement('div');
-      header.className = 'manage-section';
-      header.textContent = '内置谱面';
-      frag.appendChild(header);
-      builtin.forEach(s => {
-        const isDeleted = deleted.has(s.file);
-        frag.appendChild(_manageRow(s.name, {
-          tag: isDeleted ? '已删除' : '内置',
-          action: isDeleted ? DOWNLOAD_ICON : TRASH_ICON,
-          actionClass: isDeleted ? 'dl' : 'del',
-          actionTitle: isDeleted ? '重新下载' : '删除',
-          onAction: () => isDeleted ? redownloadBuiltinSong(s.file) : deleteBuiltinSong(s.file)
-        }));
-      });
-    }
+    const builtin = await _getBuiltinList();
+    const deleted = getDeletedBuiltin();
+    const header = document.createElement('div');
+    header.className = 'manage-section';
+    header.textContent = '内置谱面';
+    frag.appendChild(header);
+    builtin.forEach(s => frag.appendChild(_makeManageRow(s.name, 'builtin', s.file, deleted.has(s.file))));
   }catch(e){}
   list.textContent = '';
   list.appendChild(frag);
@@ -2097,29 +2140,23 @@ function closeManageModal(){
   const modal = document.getElementById('manageModal');
   if(modal) modal.classList.remove('open');
 }
+// 公开接口（供测试/外部调用）：只做操作 + 刷新选谱下拉，不重开管理面板
 async function deleteSong(name){
   await deleteUserSong(name);
   await loadSongList();
-  openManageModal();
 }
-// 删除内置谱：加入删除集合并清除缓存，之后可从管理弹窗重新下载
 async function deleteBuiltinSong(file){
-  const set = getDeletedBuiltin();
-  set.add(file); saveDeletedBuiltin(set);
+  const set = getDeletedBuiltin(); set.add(file); saveDeletedBuiltin(set);
   try{
     const cache = await caches.open(AssetCache.cacheName);
     await cache.delete(new URL(file, location.href).href, {ignoreSearch: true});
   }catch(e){}
   await loadSongList();
-  openManageModal();
 }
-// 重新下载内置谱：移出删除集合并重新拉取缓存
-async function redownloadBuiltinSong(file){
-  const set = getDeletedBuiltin();
-  set.delete(file); saveDeletedBuiltin(set);
-  try{ await AssetCache.fetch(file); }catch(e){}
+async function redownloadBuiltinSong(file, onProgress){
+  const set = getDeletedBuiltin(); set.delete(file); saveDeletedBuiltin(set);
+  try{ await _fetchWithProgress(file, onProgress); }catch(e){ try{ await AssetCache.fetch(file); }catch(_){} }
   await loadSongList();
-  openManageModal();
 }
 
 async function onSongChange(val){
@@ -2303,6 +2340,8 @@ const PAUSE_ICON = _svgIcon('<rect x="6" y="4" width="4" height="16" rx="1"/><re
 // 列表循环 / 单曲循环（Bootstrap Icons bi:repeat / bi:repeat-1，16 网格实心）
 const LIST_LOOP_ICON = _fillIcon('<path d="M11 5.466V4H5a4 4 0 0 0-3.584 5.777a.5.5 0 1 1-.896.446A5 5 0 0 1 5 3h6V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192m3.81.086a.5.5 0 0 1 .67.225A5 5 0 0 1 11 13H5v1.466a.25.25 0 0 1-.41.192l-2.36-1.966a.25.25 0 0 1 0-.384l2.36-1.966a.25.25 0 0 1 .41.192V12h6a4 4 0 0 0 3.585-5.777a.5.5 0 0 1 .225-.67Z"/>', 14, 16);
 const ONE_LOOP_ICON = _fillIcon('<path d="M11 4v1.466a.25.25 0 0 0 .41.192l2.36-1.966a.25.25 0 0 0 0-.384l-2.36-1.966a.25.25 0 0 0-.41.192V3H5a5 5 0 0 0-4.48 7.223a.5.5 0 0 0 .896-.446A4 4 0 0 1 5 4zm4.48 1.777a.5.5 0 0 0-.896.446A4 4 0 0 1 11 12H5.001v-1.466a.25.25 0 0 0-.41-.192l-2.36 1.966a.25.25 0 0 0 0 .384l2.36 1.966a.25.25 0 0 0 .41-.192V13h6a5 5 0 0 0 4.48-7.223Z"/><path d="M9 5.5a.5.5 0 0 0-.854-.354l-1.75 1.75a.5.5 0 1 0 .708.708L8 6.707V10.5a.5.5 0 0 0 1 0z"/>', 14, 16);
+// 不循环（播完暂停）：mdi:repeat-off（带斜杠的循环箭头）
+const NO_LOOP_ICON = _fillIcon('<path d="M2 5.27L3.28 4L20 20.72L18.73 22l-3-3H7v3l-4-4l4-4v3h6.73L7 10.27V11H5V8.27zM17 13h2v4.18l-2-2zm0-8V2l4 4l-4 4V7H8.82l-2-2z"/>', 14, 24);
 
 function togglePlay(){
   initAudio();
@@ -2373,10 +2412,10 @@ function nextSong(){
 }
 
 function toggleLoop(){
-  loopMode = loopMode === 'list' ? 'one' : 'list';
+  loopMode = loopMode === 'list' ? 'one' : (loopMode === 'one' ? 'none' : 'list');
   const btn = document.getElementById('loopBtn');
-  btn.innerHTML = loopMode === 'one' ? ONE_LOOP_ICON : LIST_LOOP_ICON;
-  btn.title = loopMode === 'one' ? '单曲循环' : '列表循环';
+  btn.innerHTML = loopMode === 'one' ? ONE_LOOP_ICON : (loopMode === 'none' ? NO_LOOP_ICON : LIST_LOOP_ICON);
+  btn.title = loopMode === 'one' ? '单曲循环' : (loopMode === 'none' ? '不循环（播完暂停）' : '列表循环');
 }
 
 function toggleMenu(){
@@ -2680,6 +2719,10 @@ function playLoop(){
       currentTime = 0;
       nextNoteIndex = 0;
       playStartTime = audioCtx.currentTime;
+    } else if(loopMode === 'none'){
+      // 不循环：播完立即暂停
+      stopPlay();
+      return;
     } else {
       // 列表循环：自动播下一首，播完列表回到第一首
       const sel = document.getElementById('songSel');
