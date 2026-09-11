@@ -118,13 +118,10 @@
 - `playNote` 中若同一音高距上次触发不足该下限则跳过，从源头限制 BufferSource 创建率。
 - 普通密度谱面 floor=0，不牺牲还原度；只有黑 MIDI 才启用聚合。
 
-### 1.3.3 前瞻调度与后台播放
+### 1.3.3 追赶洪峰抑制
 
-- 音符触发从 `requestAnimationFrame` 的 `playLoop` 中解耦，改由 `scheduleAhead()` 前瞻调度器负责：每 50ms 把未来 `SCHED_LOOKAHEAD = 1.5s` 内的音符按 `audioCtx.currentTime` 排程（`playNote(..., when)`）。
-- 这样即使后台标签页的 rAF 被挂起，音频仍按**音频时钟**持续播放；`playLoop` 只负责渲染与进度更新。
-- 单次调度上限 `MAX_SCHEDULE_PER_TICK = 20000`；落后超过 0.2s 的过旧音符丢弃并计入 `skippedNotes`。
-- 复音上限改为只统计「已开始发声」的 voice（`_activeVoiceCount`），避免前瞻排程的 future voice 被误抢占。
-- 结束/循环检测也移入调度器，后台挂起时仍能循环或切歌。
+- `playLoop` 中单帧触发上限 `MAX_TRIGGER_PER_FRAME = 256`。
+- 超过上限的音符直接快进跳过并计数（`skippedNotes`），避免音频时钟恢复瞬间灌爆音频线程。
 - 移除了早期的「30ms 最小发声时长」与「同音去重」，改为按真实时长调度，仅保留 1ms epsilon 防止无效调度。
 
 ### 1.3.4 PerfArbiter 性能仲裁与自动降级
@@ -237,7 +234,6 @@
 - **增益**：`timbreGain` 对个别音色（三角钢琴、古钢琴）单独设增益，其余默认 3.0。
 - **包络**：短音符按比例缩短 attack/release，避免事件时间倒挂。
 - **采样缓存**：每个音色按 midi 缓存已解码 `AudioBuffer`（`entry.buffers[midi]`），超出 88 键范围的音会映射到最近有效键。
-- **排程**：`playNote(midi, velocity, duration, when)` 支持指定音频时钟起始时间，供前瞻调度器提前排程；`src.start(when)`、包络与 `stop` 均以 `when` 为基准。
 
 # 四、Canvas 可视化与渲染
 
@@ -294,8 +290,7 @@
 - **控制**：播放/暂停/停止/重播、进度条拖拽 seek、0.2x–2x 变速、顺序播放/单曲循环。
 - **定位**：seek 与开始播放都用二分 `lowerBound(allNotes, time)` 找起始音符，避免线性扫描。
 - **自动播放**：默认谱面与音色就绪后尝试自动播放；若 AudioContext 处于 suspended，则挂到首次点击/触摸后恢复。
-- **后台持续播放**：音符由前瞻调度器按音频时钟排程，切到后台/锁屏后音频继续播放；回到前台画面自动跳到当前进度。
-- **失焦暂停（可选，默认关闭）**：开启后 `visibilitychange` 隐藏时暂停并显示遮罩，需手动点「继续播放」。开启会禁用后台播放。
+- **失焦暂停与自动续播**：`visibilitychange` 时按用户设置（移动端默认开、PC 默认关）暂停并显示遮罩；**回到前台会自动续播**（仅当此前是因失焦而暂停），也可手动点遮罩上的「继续播放」。注：后台期间 rAF 被浏览器挂起，音频不会持续输出，此机制只保证切回后无缝接上。
 - **顺序播放**：非循环时自动切下一首，`await` 音色加载后再开始，避免开头丢音。
 - **进度节流**：进度条与统计文本合并为 100ms 更新一次，避免每帧写 DOM。
 
@@ -440,7 +435,6 @@
 - `devicePixelRatio` 变化（拖到不同缩放屏幕）只在 `resize` 时重算。
 - 极长持续音（duration 大于下落窗口）在当前可见区间二分下可能被提前裁剪。
 - 音色全部为压缩采样，首次解码仍有一定延迟；预加载策略会占用额外流量。
-- 后台标签页定时器会被节流（Chrome 约 ≥1s）；前瞻调度器以 1.5s 窗口覆盖，但极端省电/深度冻结策略下仍可能出现间隙。
 - 移动端未适配 `env(safe-area-inset-*)`，刘海屏/手势条区域可能遮挡底部控件。
 
 # 十三、已知问题与路线图
@@ -479,9 +473,7 @@
 | 参数 | 值 | 说明 |
 | --- | --- | --- |
 | `SoundfontLoader.MAX_VOICES` | 128（降级 64） | 全局复音上限 |
-| `SCHED_LOOKAHEAD` | 1.5s | 前瞻排程窗口 |
-| `SCHED_INTERVAL` | 50ms | 调度器轮询间隔 |
-| `MAX_SCHEDULE_PER_TICK` | 20000 | 单次调度上限 |
+| `MAX_TRIGGER_PER_FRAME` | 256 | 单帧最大触发音符数 |
 | `baseRetriggerFloor` | 0 ~ 0.05s | 按密度自适应 |
 | `PerfArbiter.windowSize` | 2s | 仲裁窗口 |
 | `PerfArbiter.DEGRADE_AT` | 3 | 降级阈值 |
