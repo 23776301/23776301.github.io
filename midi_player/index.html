@@ -201,8 +201,8 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 /* 滑动开关（替代勾选框） */
 .switch{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--dim);user-select:none}
 .switch input{position:absolute;opacity:0;width:0;height:0}
-.switch .track{position:relative;width:34px;height:18px;border-radius:9px;background:#444;transition:background .15s;flex-shrink:0}
-.switch .knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}
+.switch .track{position:relative;width:34px;height:18px;border-radius:9px;background:#c9ccd6;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);transition:background .15s;flex-shrink:0}
+.switch .knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.4);transition:transform .15s}
 .switch input:checked + .track{background:var(--accent)}
 .switch input:checked + .track .knob{transform:translateX(16px)}
 .switch input:focus-visible + .track{outline:2px solid var(--accent);outline-offset:2px}
@@ -2099,7 +2099,7 @@ let userGestureSeen = false;
   });
 
   // 仅再后台预取 The Sound of Silence；其余内置谱（并发测试谱）默认不下载，选到时才按需加载
-  AssetCache.fetch('midi/The Sound of Silence.mid').catch(() => {});
+  _fetchWithProgress('midi/The Sound of Silence.mid').catch(() => {}); // 走 jsDelivr，避免 Pages 流量
 
   loadDefaultTimbre();
 })();
