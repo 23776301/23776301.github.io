@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>私人笔记 · teecatt</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--accent2:#3fb950;--red:#ff3f58;--warn:#e8b64c}
+*{margin:0;padding:0;box-sizing:border-box}
+*{-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+a{text-decoration:none;color:inherit}
+.topbar{height:52px;display:flex;align-items:center;padding:0 20px;gap:14px;border-bottom:1px solid var(--line);background:var(--surface)}
+.topbar .back{color:var(--muted);font-size:13px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;transition:all .15s}
+.topbar .back:hover{color:var(--text);border-color:var(--accent)}
+.topbar h1{font-size:15px;font-weight:600;flex:1}
+.container{max-width:1040px;margin:0 auto;padding:20px;width:100%;flex:1}
+.intro{color:var(--muted);font-size:13px;line-height:1.8;margin-bottom:16px}
+.intro b{color:var(--text)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+.panel h2{font-size:14px;margin-bottom:12px;font-weight:600}
+label{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px}
+label:first-of-type{margin-top:0}
+input,select{width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;outline:none}
+input:focus,select:focus{border-color:var(--accent)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.grid2{grid-template-columns:1fr}}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.btn{background:var(--accent);border:none;color:#fff;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s}
+.btn:hover{background:#4090e0}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:400}
+.btn.ghost:hover{color:var(--text);border-color:var(--accent)}
+.btn:active{opacity:.78}
+.status{font-size:12px;margin-top:10px;min-height:18px;line-height:1.6}
+.status.err{color:var(--red)}.status.ok{color:var(--accent2)}
+.hint{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.7}
+.hint code,.intro code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px}
+details{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-top:14px;background:var(--surface2)}
+summary{cursor:pointer;font-size:12px;color:var(--muted)}
+details[open] summary{margin-bottom:8px}
+.viewer{display:grid;grid-template-columns:240px 1fr;gap:16px;align-items:start}
+@media(max-width:760px){.viewer{grid-template-columns:1fr}}
+.sidebar{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;max-height:70vh;overflow:auto}
+.crumb{font-size:11px;color:var(--muted);margin-bottom:8px;word-break:break-all}
+.item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--muted);transition:all .12s}
+.item:hover{background:var(--surface2);color:var(--text)}
+.item.dir{color:var(--text);font-weight:600}
+.item:active{opacity:.78}
+.content{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:22px;min-height:300px;line-height:1.8;font-size:14px;overflow-wrap:break-word}
+.content h1{font-size:22px;margin:10px 0}.content h2{font-size:18px;margin:12px 0 8px}.content h3{font-size:15px;margin:10px 0 6px}
+.content p{margin:9px 0}.content ul,.content ol{margin:9px 0 9px 24px}
+.content code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;font-size:12px}
+.content pre{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;margin:12px 0}
+.content pre code{background:none;padding:0}
+.content blockquote{border-left:3px solid var(--accent);padding-left:12px;color:var(--muted);margin:12px 0}
+.content a{color:var(--accent)}
+.content img{max-width:100%}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:40px 0}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="../../">← 返回主页</a>
+  <h1>📝 私人笔记</h1>
+</div>
+<div class="container">
+  <div class="intro">
+    笔记放在 <b>GitHub 私有仓</b>里，本页只是一个公开的「查看器」：用你的凭证通过 GitHub API 读取，再用<b>自定义样式</b>渲染。
+    页面本身不含任何笔记内容，别人打开也读不到——权限由 GitHub 仓库决定。
+  </div>
+
+  <div class="panel">
+    <h2>连接私有仓</h2>
+    <label>仓库（owner/repo）</label>
+    <input id="repo" placeholder="例如 teecatt/notes">
+    <div class="grid2">
+      <div>
+        <label>分支</label>
+        <input id="branch" placeholder="main" value="main">
+      </div>
+      <div>
+        <label>路径（可留空）</label>
+        <input id="path" placeholder="" value="">
+      </div>
+    </div>
+    <label>Personal Access Token（fine-grained，仅需该仓 Contents: Read）</label>
+    <input id="token" type="password" placeholder="github_pat_… 或 ghp_…">
+    <div class="row">
+      <button class="btn" id="btnLoad">读取笔记</button>
+      <button class="btn ghost" id="btnSave">记住到本机</button>
+      <button class="btn ghost" id="btnForget">清除</button>
+    </div>
+    <div id="status" class="status"></div>
+    <div class="hint">
+      在本机保存后，下次打开自动连接（仅存于你自己的浏览器 localStorage）。建议用 fine-grained token，只授权目标私有仓的 <code>Contents: Read</code>。
+    </div>
+
+    <details>
+      <summary>为什么这里用 PAT 而不是标准 OAuth？</summary>
+      <div class="hint" style="margin-top:0">
+        GitHub 的 <code>login/oauth/access_token</code> 换 token 接口<b>不返回 CORS 头</b>，纯静态页面无法直接完成 OAuth 的 code→token 交换（实测无 <code>Access-Control-Allow-Origin</code>）。
+        要做「点按钮用 GitHub 登录」，需要一个极小的代理（如 Cloudflare Worker）替你把 code 换成 token。配置代理后可启用下面的 OAuth 模式；PAT 则无需任何服务端。
+      </div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label>OAuth App client_id</label><input id="clientId" placeholder="Iv1.…"></div>
+        <div><label>换 token 代理地址</label><input id="proxy" placeholder="https://your-worker.workers.dev"></div>
+      </div>
+      <div class="row"><button class="btn ghost" id="btnOAuth">用 GitHub 登录（需代理）</button></div>
+      <div id="oauthStatus" class="status"></div>
+    </details>
+  </div>
+
+  <div class="viewer">
+    <div class="sidebar">
+      <div class="crumb" id="crumb">未连接</div>
+      <div id="list"><div class="empty">连接后显示文件</div></div>
+    </div>
+    <div class="content" id="content"><div class="empty">选择左侧文件查看</div></div>
+  </div>
+</div>
+
+<script>
+const API = 'https://api.github.com';
+const $ = id => document.getElementById(id);
+const store = {
+  get(){ try{ return JSON.parse(localStorage.getItem('notes-cfg')||'{}'); }catch(e){ return {}; } },
+  set(o){ try{ localStorage.setItem('notes-cfg', JSON.stringify(o)); }catch(e){} },
+  clear(){ try{ localStorage.removeItem('notes-cfg'); }catch(e){} }
+};
+let cfg = store.get();
+let token = cfg.token || '';
+let curPath = cfg.path || '';
+
+function renderMD(md){
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const inline = s => esc(s)
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g,'<img alt="$1" src="$2">')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g,'<em>$1</em>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const lines = md.replace(/\r\n/g,'\n').split('\n');
+  let html='', inCode=false, list=null;
+  const closeList=()=>{ if(list){ html+='</'+list+'>'; list=null; } };
+  for(const raw of lines){
+    if(/^\s*```/.test(raw)){ closeList(); inCode=!inCode; html+=inCode?'<pre><code>':'</code></pre>'; continue; }
+    if(inCode){ html+=esc(raw)+'\n'; continue; }
+    const h=raw.match(/^(#{1,6})\s+(.*)$/);
+    if(h){ closeList(); const n=h[1].length; html+='<h'+n+'>'+inline(h[2])+'</h'+n+'>'; continue; }
+    if(/^\s*>\s?/.test(raw)){ closeList(); html+='<blockquote>'+inline(raw.replace(/^\s*>\s?/,''))+'</blockquote>'; continue; }
+    const ul=raw.match(/^\s*[-*]\s+(.*)$/), ol=raw.match(/^\s*\d+\.\s+(.*)$/);
+    if(ul||ol){ const t=ul?'ul':'ol'; if(list!==t){ closeList(); list=t; html+='<'+t+'>'; } html+='<li>'+inline((ul||ol)[1])+'</li>'; continue; }
+    if(raw.trim()===''){ closeList(); continue; }
+    closeList(); html+='<p>'+inline(raw)+'</p>';
+  }
+  closeList();
+  return html;
+}
+
+function headers(raw){
+  const h = { 'Accept': raw ? 'application/vnd.github.raw' : 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28' };
+  if(token) h['Authorization'] = 'Bearer ' + token;
+  return h;
+}
+async function ghFetch(path, raw){
+  const res = await fetch(API + path, { headers: headers(raw) });
+  if(!res.ok){
+    let msg = 'HTTP ' + res.status;
+    if(res.status === 401) msg = '401 未授权：token 无效或已过期';
+    else if(res.status === 403) msg = '403 无权限或触发限流：检查 token 对该仓的 Contents 读取权限';
+    else if(res.status === 404) msg = '404 未找到：仓库/分支/路径不存在，或 token 无该仓权限';
+    throw new Error(msg);
+  }
+  return raw ? res.text() : res.json();
+}
+
+async function listDir(path){
+  const repo = $('repo').value.trim(), branch = $('branch').value.trim() || 'main';
+  const p = path ? '/' + path.replace(/^\/+/, '') : '';
+  const data = await ghFetch(`/repos/${repo}/contents${p}?ref=${encodeURIComponent(branch)}`);
+  curPath = path || '';
+  $('crumb').textContent = repo + (curPath ? ' / ' + curPath : ' /');
+  const el = $('list'); el.innerHTML = '';
+  if(curPath){
+    const up = document.createElement('div'); up.className='item'; up.textContent='⬆ ..';
+    up.onclick = () => listDir(curPath.split('/').slice(0,-1).join('/'));
+    el.appendChild(up);
+  }
+  const items = Array.isArray(data) ? data.slice().sort((a,b)=>(a.type===b.type? a.name.localeCompare(b.name) : (a.type==='dir'?-1:1))) : [];
+  if(!items.length){ el.innerHTML += '<div class="empty">空目录</div>'; return; }
+  for(const it of items){
+    const d = document.createElement('div');
+    d.className = 'item' + (it.type==='dir' ? ' dir':'');
+    d.textContent = (it.type==='dir' ? '📁 ' : '📄 ') + it.name;
+    d.onclick = () => it.type==='dir' ? listDir(it.path) : openFile(it.path);
+    el.appendChild(d);
+  }
+}
+async function openFile(path){
+  const repo = $('repo').value.trim(), branch = $('branch').value.trim() || 'main';
+  $('content').innerHTML = '<div class="empty">加载中…</div>';
+  try{
+    const text = await ghFetch(`/repos/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`, true);
+    $('content').innerHTML = /\.(md|markdown)$/i.test(path) ? renderMD(text)
+      : '<pre style="white-space:pre-wrap">' + text.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</pre>';
+  }catch(e){ $('content').innerHTML = '<div class="empty">'+e.message+'</div>'; }
+}
+
+function setStatus(el, msg, cls){ const n=$(el); n.textContent=msg; n.className='status'+(cls?' '+cls:''); }
+
+$('btnSave').onclick = () => {
+  store.set({ repo:$('repo').value.trim(), branch:$('branch').value.trim(), path:$('path').value.trim(), token:$('token').value, clientId:$('clientId').value.trim(), proxy:$('proxy').value.trim() });
+  setStatus('status','已保存到本机浏览器', 'ok');
+};
+$('btnForget').onclick = () => { store.clear(); token=''; $('token').value=''; setStatus('status','已清除本机保存', ''); };
+$('btnLoad').onclick = async () => {
+  token = $('token').value.trim();
+  if(!$('repo').value.trim()){ setStatus('status','请填写仓库 owner/repo','err'); return; }
+  if(!token){ setStatus('status','请填写 PAT','err'); return; }
+  setStatus('status','读取中…','');
+  try{ await listDir($('path').value.trim()); setStatus('status','已连接','ok'); }
+  catch(e){ setStatus('status', e.message, 'err'); }
+};
+
+// ===== OAuth（PKCE，需代理换 token）=====
+function b64url(bytes){ return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+async function pkce(){
+  const v = crypto.getRandomValues(new Uint8Array(32));
+  const verifier = b64url(v);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return { verifier, challenge: b64url(digest) };
+}
+$('btnOAuth').onclick = async () => {
+  const clientId = $('clientId').value.trim(), proxy = $('proxy').value.trim();
+  if(!clientId || !proxy){ setStatus('oauthStatus','需要 client_id 与代理地址（见上方说明）','err'); return; }
+  const { verifier, challenge } = await pkce();
+  sessionStorage.setItem('oauth_verifier', verifier);
+  const redirect = location.origin + location.pathname;
+  location.href = 'https://github.com/login/oauth/authorize?client_id=' + encodeURIComponent(clientId) +
+    '&redirect_uri=' + encodeURIComponent(redirect) +
+    '&scope=' + encodeURIComponent('repo') +
+    '&code_challenge=' + challenge + '&code_challenge_method=S256';
+};
+
+// 处理 OAuth 回调
+(async function(){
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code');
+  if(code){
+    const proxy = cfg.proxy, clientId = cfg.clientId;
+    if(!proxy || !clientId){ setStatus('oauthStatus','收到授权 code，但未配置代理/ client_id，无法换取 token','err'); return; }
+    try{
+      const res = await fetch(proxy, { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, code_verifier: sessionStorage.getItem('oauth_verifier'),
+          client_id: clientId, redirect_uri: location.origin + location.pathname }) });
+      const data = await res.json();
+      if(data.access_token){
+        token = data.access_token; $('token').value = token;
+        history.replaceState({}, '', location.pathname);
+        await listDir($('path').value.trim());
+        setStatus('status','OAuth 登录成功','ok');
+      } else setStatus('oauthStatus','换 token 失败：' + (data.error||'未知'),'err');
+    }catch(e){ setStatus('oauthStatus','换 token 失败：' + e.message,'err'); }
+  }
+})();
+
+// 初始化表单
+$('repo').value = cfg.repo || 'teecatt/notes';
+$('branch').value = cfg.branch || 'main';
+$('path').value = cfg.path || '';
+$('token').value = cfg.token || '';
+$('clientId').value = cfg.clientId || '';
+$('proxy').value = cfg.proxy || '';
+if(cfg.token && cfg.repo) listDir(cfg.path||'').then(()=>setStatus('status','已用本机保存的 token 连接','ok')).catch(e=>setStatus('status',e.message,'err'));
+</script>
+</body>
+</html>
