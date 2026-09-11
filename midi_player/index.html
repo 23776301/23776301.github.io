@@ -138,6 +138,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .ctl-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .ctl-btn.primary:hover{background:#7c3aed}
 .ctl-btn svg{width:16px;height:16px}
+#settingsBtn svg,#paletteToggleBtn svg,#uploadBtn svg{width:18px;height:18px}
 /* 重播图标放大，让外圈尽量贴近按钮边界 */
 #replayBtn svg{width:30px;height:30px}
 /* 配色面板：从控制行下方展开（absolute，不遮挡按钮） */
@@ -179,12 +180,14 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .dbg-toolbar label{display:flex;align-items:center;gap:4px;cursor:pointer}
 .dbg-toolbar input[type=range]{width:64px}
 .appearance-sliders{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+#playModeLabel{color:#fff}
 .dbg-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
 .dbg-actions button{background:#333;color:#fff;border:none;width:26px;height:26px;padding:0;cursor:pointer;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
 .dbg-actions button svg{width:14px;height:14px}
 .dbg-actions button:hover{background:#444}
-.dbg-reset-btn{margin-left:auto;display:inline-flex;align-items:center;gap:5px;background:rgba(255,80,80,.12);color:#ff9b9b;border:1px solid rgba(255,80,80,.35);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
-.dbg-reset-btn:hover{background:rgba(255,80,80,.22);color:#ffb3b3}
+.dbg-reset-btn{margin-left:auto;display:inline-flex;align-items:center;gap:5px;background:#7f1d1d;color:#fff;border:1px solid #b91c1c;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;opacity:1;backdrop-filter:none;-webkit-backdrop-filter:none}
+.dbg-reset-btn:hover{background:#991b1b;color:#fff}
+.dbg-reset-btn:active{background:#6b1616}
 .dbg-reset-btn svg{width:14px;height:14px}
 .dbg-log{
   height:200px;overflow-y:auto;padding:4px 8px;line-height:1.4;
@@ -347,7 +350,7 @@ select:focus{border-color:var(--accent)}
     <div>
       <div class="top-bar">
         <div class="top-bar-row">
-          <button class="ctl-btn primary" id="replayBtn" onclick="replayPlay()" disabled title="重播"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M20 12c0 4.418-3.582 8-8 8s-8-3.582-8-8 3.582-8 8-8a7.984 7.984 0 0 1 6.08 2.8"/><path d="M18.4 4.4V7.2h-2.8"/><path d="M10.5 8.8 15.3 12 10.5 15.2Z" stroke-linejoin="miter"/></svg></button>
+          <button class="ctl-btn primary" id="replayBtn" onclick="replayPlay()" disabled title="重播"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M19 12c0 3.866-3.134 7-7 7s-7-3.134-7-7 3.134-7 7-7a6.986 6.986 0 0 1 5.32 2.45"/><path d="M17.6 5.35V7.8h-2.45"/><path d="M10.5 8.8 15.3 12 10.5 15.2Z" stroke-linejoin="miter"/></svg></button>
           <select id="songSel" onchange="onSongChange(this.value)" style="flex:1">
             <option value="">加载谱库…</option>
           </select>
@@ -430,12 +433,12 @@ select:focus{border-color:var(--accent)}
             </div>
             <div class="row">
               <label>宽度缩放</label>
-              <input type="range" id="pianoWidthSlider" min="1" max="4" step="0.1" value="1" oninput="onPianoWidthChange()">
+              <input type="range" id="pianoWidthSlider" min="1" max="4" step="0.001" value="1" oninput="onPianoWidthChange()">
               <span class="val" id="pianoWidthVal">1.0×</span>
             </div>
             <div class="row">
               <label>水平偏移</label>
-              <input type="range" id="pianoOffsetSlider" min="0" max="100" step="0.1" value="0" oninput="onPianoOffsetChange()">
+              <input type="range" id="pianoOffsetSlider" min="0" max="100" step="0.01" value="0" oninput="onPianoOffsetChange()">
               <span class="val" id="pianoOffsetVal">0%</span>
             </div>
             <div class="row">
@@ -605,7 +608,8 @@ function setStatus(text, sticky){
 function _appendDebug(msg, type) {
   // 调试面板未展开时，把最新日志精简后显示到状态区（去掉 [AudioDebug][LEVEL] 前缀）
   const _dp = document.getElementById('debugPanel');
-  if(!_dp || !_dp.classList.contains('open')){
+  // 仅把 INFO 日志镜像到状态区（去掉前缀），避免性能告警等噪声刷屏
+  if(type === 'log' && (!_dp || !_dp.classList.contains('open'))){
     setStatus(String(msg).replace(/^\[AudioDebug\](\[[A-Za-z]+\])?\s*/, ''));
   }
   if(!_debugContentEl) {
@@ -2053,9 +2057,8 @@ let userGestureSeen = false;
       // switchCurrent:false —— 先保持合成钢琴，等预解码完成再切，避免解码期间丢音
       await SoundfontLoader.load(timbreName, (p, msg) => {
         if(hint && !startedWithFallback) hint.textContent = msg + ' ' + Math.round(p * 100) + '%';
-        if(p < 1) setStatus('音色下载 ' + Math.round(p * 100) + '%');
+        if(p < 1) setStatus('音色[' + timbreDisplayName(timbreName) + ']下载 ' + Math.round(p * 100) + '%');
       }, {switchCurrent: false});
-      setStatus('音色下载完成，解析中…');
       if(hint && !startedWithFallback) hint.textContent = '音色预解码中…';
       await SoundfontLoader.predecodeAll(timbreName);
       timbreReady = true;
@@ -2063,8 +2066,7 @@ let userGestureSeen = false;
       SoundfontLoader.current = timbreName;
       const label = (timbreSel && timbreSel.options[timbreSel.selectedIndex]) ? timbreSel.options[timbreSel.selectedIndex].text : timbreName;
       if(hint) hint.textContent = '当前音色：' + label + ' ✓ 就绪';
-      setStatus('音色完成！');
-      if(startedWithFallback) showToast('古钢琴已就绪，已切换');
+      if(startedWithFallback) showToast('音色[' + timbreDisplayName(timbreName) + ']已就绪，已切换');
       startPlaybackOnce();
       // 默认只预取「三角钢琴」「电钢琴2」（+ 默认曲目的古钢琴），其余音色仅在用户
       // 主动下载、或切到配置了该音色的谱面时才下载（用 _doLoad 避免切换 current）
@@ -2077,16 +2079,16 @@ let userGestureSeen = false;
       console.warn('[AudioDebug] 默认音色加载失败 name=' + timbreName + ' 错误=' + (e && e.message ? e.message : e));
       SoundfontLoader.current = '__synth__';
       if(hint) hint.textContent = '当前：合成钢琴（音色加载失败）';
-      if(!autoPlayTriggered) showToast('音色加载失败，回退合成钢琴');
+      if(!autoPlayTriggered) showToast('音色[' + timbreDisplayName(timbreName) + ']加载失败，回退合成钢琴');
       startPlaybackOnce();
     }
   }
 
   // 并行启动：谱面与音色同时开始下载
+  console.log('[AudioDebug][INFO] 默认下载：谱面[' + DEFAULT_SONG + '][The Sound of Silence.mid] 音色[clavinet][acoustic_grand_piano][electric_piano_2]');
   console.log('[AudioDebug][INFO] 并行加载默认谱面与音色 midi/' + DEFAULT_SONG);
-  _fetchWithProgress('midi/' + DEFAULT_SONG, (p) => setStatus('乐谱下载 ' + Math.round(p) + '%'))
+  _fetchWithProgress('midi/' + DEFAULT_SONG, (p) => setStatus('谱面[' + DEFAULT_SONG + ']下载 ' + Math.round(p) + '%'))
   .then(blob => blob.arrayBuffer()).then(buf => {
-    setStatus('乐谱下载完成！');
     console.log('[AudioDebug][INFO] 默认谱面已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
     midiBuf = buf;
     parseAndPlayMidi(buf, DEFAULT_SONG);
@@ -2325,7 +2327,8 @@ function toggleManageModal(){
 }
 // 重置所有设置：清空本站设置项并刷新
 function resetAllSettings(){
-  const keys = ['panelTransparency', 'panelBlur', 'dbgAutoOpen', 'deletedBuiltin'];
+  // 只重置「设置项」；deletedBuiltin 是用户的删除结果，不随重置恢复
+  const keys = ['panelTransparency', 'panelBlur', 'dbgAutoOpen'];
   try{ keys.forEach(k => localStorage.removeItem(k)); }catch(e){}
   try{ location.reload(); }catch(e){}
 }
@@ -2375,10 +2378,40 @@ async function deleteSong(name){
 }
 async function deleteBuiltinSong(file){
   const set = getDeletedBuiltin(); set.add(file); saveDeletedBuiltin(set);
+  // 真正清理本地缓存：删除该谱面已下载的数据（含 CDN/Pages 两种键名，避免残留）
+  let freed = 0;
   try{
     const cache = await caches.open(AssetCache.cacheName);
-    await cache.delete(new URL(file, location.href).href, {ignoreSearch: true});
+    const keys = await cache.keys();
+    const targets = keys.filter(req => {
+      const u = req.url;
+      return u.indexOf(file.split('/').pop()) >= 0;
+    });
+    for(const req of targets){
+      try{
+        const resp = await cache.match(req);
+        if(resp){ const b = await resp.clone().blob(); freed += b.size; }
+        await cache.delete(req);
+      }catch(e){}
+    }
   }catch(e){}
+  // 删除该内置谱配置的默认音色（若不再被其它未删除的内置谱使用、且不是当前音色）
+  try{
+    const fname = file.split('/').pop();
+    const t = songDefaultTimbre[fname];
+    if(t && t !== '__synth__' && t !== SoundfontLoader.current){
+      const stillNeeded = Object.keys(songDefaultTimbre).some(f => {
+        if(f === fname) return false;
+        if(set.has('midi/' + f) || set.has(f)) return false;
+        return songDefaultTimbre[f] === t;
+      });
+      if(!stillNeeded){
+        try{ await SoundfontLoader.deleteCached(t); }catch(e){}
+      }
+    }
+  }catch(e){}
+  if(freed > 0) console.log('[AudioDebug][INFO] 谱面[' + file.split('/').pop() + ']已删除，释放本地缓存 ' + (freed/1024/1024).toFixed(2) + 'MB');
+  else console.log('[AudioDebug][INFO] 谱面[' + file.split('/').pop() + ']已删除（无本地缓存）');
   await loadSongList();
 }
 async function redownloadBuiltinSong(file, onProgress){
@@ -2477,12 +2510,24 @@ let totalDuration = 0;
 function onMidiFile(event){
   const file = event.target.files[0];
   if(!file) return;
+  const fname = file.name || '';
+  // 非 .mid / .midi 格式：直接拒绝并告警
+  if(!/\.midi?$/i.test(fname)){
+    console.warn('[AudioDebug][WARN] 上传文件非 MIDI 格式：[' + fname + ']');
+    showToast('仅支持 .mid / .midi 文件');
+    event.target.value = '';
+    return;
+  }
   const reader = new FileReader();
   reader.onload = async function(e){
     try{
       stopPlay();
       const buf = e.target.result;
       parseAndPlayMidi(buf, file.name);
+      if(!allNotes.length){
+        throw new Error('谱面为空或格式错误（未解析到任何音符）');
+      }
+      console.log('[AudioDebug][INFO] 谱面[' + fname + ']上传解析成功，共 ' + allNotes.length + ' 个音符');
       // 上传后自动播放
       initAudio();
       if(audioCtx.state === 'suspended') audioCtx.resume();
@@ -2503,6 +2548,7 @@ function onMidiFile(event){
         console.warn('保存到本地缓存失败:', err);
       }
     }catch(err){
+      console.warn('[AudioDebug][WARN] 谱面解析失败：[' + fname + '] ' + (err && err.message ? err.message : err));
       showToast('解析失败：' + err.message);
     }
   };
@@ -3515,15 +3561,22 @@ function _setKeyboardPresetIndex(idx){
   idx = Math.max(0, Math.min(KEYBOARD_PRESETS.length - 1, parseInt(idx, 10) || 0));
   const p = KEYBOARD_PRESETS[idx];
   const lay = _presetLayout(p);
+  // 直接用精确缩放，避免 range step 取整导致音域首键与左边界错位
+  pianoWidthScale = lay.scale;
   const ws = document.getElementById('pianoWidthSlider');
-  if(ws) ws.value = lay.scale;
+  if(ws) ws.value = lay.scale;         // 仅供显示/后续手动微调
   const os = document.getElementById('pianoOffsetSlider');
   if(os) os.value = lay.offsetPct;
+  const wv = document.getElementById('pianoWidthVal');
+  if(wv) wv.textContent = lay.scale.toFixed(1) + '×';
+  const ov = document.getElementById('pianoOffsetVal');
+  if(ov) ov.textContent = (Math.round(lay.offsetPct * 10) / 10) + '%';
   const ks = document.getElementById('keyboardPresetSlider');
   if(ks) ks.value = idx;
   const kv = document.getElementById('keyboardPresetVal');
   if(kv) kv.textContent = p.label;
-  _applyPianoViewFromSliders();
+  _viewOffsetFromPct();                // 用精确 pianoWidthScale 重算 viewOffsetX
+  _applyPianoZoom();
   return p;
 }
 function setKeyboardPreset(keys){
