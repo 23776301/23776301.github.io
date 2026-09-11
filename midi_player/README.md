@@ -239,16 +239,17 @@ MIDI不载声响，是二进制的乐思底稿。
 
 | 图标 | 图标集 | 含义 | 使用位置 |
 | --- | --- | --- | --- |
-| `folder` | Feather | 文件夹 / 上传 | 顶部「上传MIDI」 |
+| `folder-upload` | Arcticons（48 网格） | 上传 | 顶栏「上传MIDI」（纯图标） |
 | `play`（polygon） | 自定义（Feather 风格） | 播放 | 播放/暂停按钮（暂停态） |
 | `pause`（rect×2） | 自定义（Feather 风格） | 暂停 | 播放/暂停按钮（播放态） |
 | `rotate-cw` | Feather | 重播（顺时针回转） | 「重播」 |
 | `repeat` | Bootstrap Icons（`bi`，16 网格） | 列表循环 | 循环按钮（列表态） |
 | `repeat-1` | Bootstrap Icons（`bi`，16 网格） | 单曲循环 | 循环按钮（单曲态） |
 | `settings-minimalistic-bold` | Solar | 设置 / 菜单 | 控制行「设置」 |
-| `round-color-lens` | Material Symbols（`ic`） | 配色编辑 | 配色「自定义」 |
-| `edit-3` | Feather | 编辑（铅笔） | 「管理谱面」 |
-| `maximize-linear` / `minimize-linear` | Solar | 全屏 / 退出全屏 | 控制行「全屏」 |
+| `text-bullet-list-edit-20-filled` | Fluent（20 网格） | 编辑谱面 | 顶栏「管理谱面」 |
+| `round-color-lens` | Material Symbols（`ic`） | 配色栏展开/收起 | 控制行「展开/收起」 |
+| `color-bucket` | GG | 自定义配色 | 配色「自定义」 |
+| `maximize-linear` / `minimize-linear` | Solar | 全屏 / 退出全屏 | 控制行「全屏」（最右） |
 
 ## 4.4 代码写法
 
@@ -282,7 +283,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ## 4.5 约定
 
-- 线性图标沿用 Feather 规格（`24×24 / fill:none / currentColor / stroke-width:2 / round`）；实心图标用 `fill="currentColor"`，viewBox 按其来源（Solar / Material 为 24，Bootstrap Icons 为 16）。
+- 线性图标沿用 Feather 规格（`fill:none / currentColor / round`）；实心图标用 `fill="currentColor"`。viewBox 按来源：Feather / Solar / Material（`ic`）/ GG 为 24，Bootstrap Icons 为 16，Fluent 为 20，Arcticons 为 48。
 - 语义优先：上传用 `folder`、编辑用 `edit-3`、播放控制用 `play` / `pause` / `rotate-cw`、循环用 `bi:repeat`（列表）/ `bi:repeat-1`（单曲）。
 - 图标颜色不写死，交给 `currentColor`；这样新增主题/配色时零成本适配。
 
@@ -330,7 +331,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ## 9.1 设置按钮（控制行内）
 
-- 菜单 / 设置按钮已并入**控制行**，位于「循环」右侧，圆形 `.ctl-btn`，图标为 **`solar:settings-minimalistic-bold`**（实心内联 SVG），风格与尺寸和播放控制按钮一致；点击调用 `toggleMenu()` 展开 / 收起菜单面板。
+- 菜单 / 设置按钮已并入**控制行**，位于「循环」右侧，圆形 `.ctl-btn.primary`（主题紫底 + 白图标，与播放控制一致），图标为 **`solar:settings-minimalistic-bold`**（实心内联 SVG）；点击调用 `toggleMenu()` 展开 / 收起菜单面板。
 - 原移动端可拖拽 FAB 与 PC 顶栏菜单按钮已移除（`.fab-group` 不再存在），`toggleMenu` 对 `#fabGroup` 为 null 的情况做了保护。
 - 遮罩 `.overlay-mask` 仍在，点击可关闭菜单面板。
 
@@ -366,9 +367,9 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.6 PC 布局与全屏
 
 - **视口自适应**：PC 端整页锁定视口高度（`height:100dvh` + `overflow:hidden`），`.layout` 用 `flex:1` 撑满，`.visual-panel` 与 Canvas 以 `flex:1` 占满——**钢琴键始终贴在屏幕底部，无需滚动页面**；菜单面板为浮层，不再挤压绘制区。
-- **顶栏排列**：进度条单独置于顶栏最底部；上传 MIDI 右侧是**管理谱面**圆形图标按钮（`.ctl-btn.primary`，与上传 / 播放控制一致的强调色底 + 白图标）；播放控制、设置、配色方案、力度指示、全屏排在进度条上方。
-- **控制行（`.control-row`）**：顺序为 播放 / 重播 / 循环 / **设置**（`solar:settings-minimalistic-bold`，圆形），均为 `.ctl-btn`；循环按钮为**列表循环（`bi:repeat`）/ 单曲循环（`bi:repeat-1`）两态**。它们位于可收起区域之外，收起配色栏时仍可操作。
-- **全屏按钮**：控制行**最右侧是配色栏展开/收起按钮**，其左侧是**全屏**按钮；全屏按钮**无背景、方形**，图标为 `solar:maximize-linear` / `solar:minimize-linear`（线性矢量 SVG）且使用 `var(--accent)` 主题色，对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。
+- **顶栏排列**：进度条单独置于顶栏最底部；上传 MIDI 与**管理谱面**均为**圆形图标按钮**（`.ctl-btn.primary`，主题紫底 + 白图标，无文字）；上传用 `arcticons:folder-upload`，管理用 `fluent:text-bullet-list-edit-20-filled`。
+- **控制行（`.control-row`）**：顺序为 播放 / 重播 / 循环 / **设置**，以及移动端的**展开/收起**、**全屏**，全部为圆形 `.ctl-btn.primary` 紫色按钮；循环按钮为**列表循环（`bi:repeat`）/ 单曲循环（`bi:repeat-1`）两态**。它们位于可收起区域之外，收起配色栏时仍可操作。
+- **全屏按钮**：位于控制行**最右侧**，图标为 `solar:maximize-linear` / `solar:minimize-linear`（线性矢量 SVG），对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。
 - **配色栏布局**：A/B/C/自定义色板按钮在**移动端为 2×2、PC 端为单行**，与「配色方案」竖排标签、「白键 / 黑键」标签及色带（`paletteSwatch`）底边对齐。
 
 ## 9.7 菜单面板、调试区与滑动开关
@@ -390,7 +391,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ## 9.9 配色栏收起 / 展开
 
-- 控制行**最右侧**的收起/展开按钮（`paletteToggleBtn`）控制配色栏 `paletteRow`（配色方案、力度色带）的显示，默认展开；桌面端够宽时配色栏与播放控制**同行**，此时**隐藏展开按钮**（`@media(min-width:801px)`）。
+- 控制行内的收起/展开按钮（`paletteToggleBtn`，圆形紫色 `.ctl-btn.primary`，图标 `ic:round-color-lens`，收起时旋转 180°）控制配色栏 `paletteRow`（配色方案、力度色带）的显示，默认展开；桌面端够宽时配色栏与播放控制**同行**，此时**隐藏展开按钮**（`@media(min-width:801px)`）。
 - **窄屏（≤800px）**：配色栏 `flex-basis:100%;order:10` 换行到控制行**下方**整行显示，由展开按钮切换。
 - **播放开始后 3 秒内**若未切换配色（`setPalette`）或点击全屏（`toggleFullscreen`），自动收起（`schedulePaletteAutoCollapse`，仅窄屏生效）；手动切换按钮、切换配色或点击全屏都会取消自动收起。
 
@@ -728,3 +729,4 @@ midi_player/
 | 控制栏布局 | 管理按钮移到上传 MIDI 右侧并引用主题色；顺序播放改两个平行右箭头；全屏按钮无背景、带框箭头矢量图标；展开按钮移到最右侧；桌面端配色栏内联并隐藏展开按钮 | `bf7e455` |
 | 设置按钮 | 菜单按钮改为 `arcticons:set-edit` 圆形设置按钮，移入控制行（循环右侧）；移除浮动 FAB 与顶栏菜单按钮；管理/全屏统一主题强调色 | `dcd17b7` |
 | 图标与循环 | 全屏改用 `solar:maximize/minimize-linear`、设置改用 `solar:settings-minimalistic-bold`、配色编辑改用 `ic:round-color-lens`；循环按钮改为列表循环（`bi:repeat`）/ 单曲循环（`bi:repeat-1`）两态，列表循环播到底回到第一首 | `f6d0e80` |
+| 按钮统一 | 上传改为纯图标圆形按钮（`arcticons:folder-upload`），管理改用 `fluent:text-bullet-list-edit-20-filled`；设置/全屏改为圆形紫底按钮，全屏移到最右；展开按钮改用 `ic:round-color-lens`（收起旋转 180°），自定义配色改用 `gg:color-bucket` | `759207a` |
