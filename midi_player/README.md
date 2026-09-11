@@ -369,7 +369,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **视口自适应**：PC 端整页锁定视口高度（`height:100dvh` + `overflow:hidden`），`.layout` 用 `flex:1` 撑满，`.visual-panel` 与 Canvas 以 `flex:1` 占满——**钢琴键始终贴在屏幕底部，无需滚动页面**；菜单面板为浮层，不再挤压绘制区。
 - **顶栏排列**：进度条单独置于顶栏最底部；上传 MIDI 与**管理谱面**均为**圆形图标按钮**（`.ctl-btn.primary`，主题紫底 + 白图标，无文字）；上传用 `arcticons:folder-upload`，管理用 `fluent:text-bullet-list-edit-20-filled`。
 - **控制行（`.control-row`）**：顺序为 播放 / 重播 / 循环 / **设置**，以及移动端的**展开/收起**、**全屏**，全部为圆形 `.ctl-btn.primary` 紫色按钮；循环按钮为**列表循环（`bi:repeat`）/ 单曲循环（`bi:repeat-1`）两态**。它们位于可收起区域之外，收起配色栏时仍可操作。
-- **全屏按钮**：位于控制行**最右侧**，图标为 `solar:maximize-linear` / `solar:minimize-linear`（线性矢量 SVG），对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。
+- **全屏按钮**：位于控制行**最右侧**，图标为 `solar:maximize-linear` / `solar:minimize-linear`（线性矢量 SVG），对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。全屏内另有悬浮控件（见 9.11）。
 - **配色栏布局**：A/B/C/自定义色板按钮在**移动端为 2×2、PC 端为单行**，与「配色方案」竖排标签、「白键 / 黑键」标签及色带（`paletteSwatch`）底边对齐。
 
 ## 9.7 菜单面板、调试区与滑动开关
@@ -383,12 +383,15 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **调试总开关**（默认开启）：关闭后停止 console 采集、`AudioDebugMonitor` 监控与降级自动展开等全部调试功能，日志区隐藏（`body.dbg-off`）。
 - **降级自动展开**：开启时，性能降级会（移动端）展开菜单面板并滚到日志底部；恢复时不自动收起。
 
-## 9.8 钢琴键盘交互
+## 9.8 钢琴键盘交互与手势
 
 - **点击 / 触摸琴键发声**：`#visualCanvas` 上的 Pointer Events 命中键盘区（黑键优先）→ `SoundfontLoader.playNote(midi, 0.9, 0.7)`；支持多指（`_keyPointers` 按 pointerId 记录）。
 - **两种模式都可用**：欣赏模式下自动发声的同时，用户敲击琴键可叠加额外声音；演奏模式则完全依赖用户敲击。
 - **双击渲染区播放 / 暂停**：非钢琴键的渲染区域（下落音符区）内，300ms 内的第二次按下（鼠标双击或触摸双触）等价于播放/暂停（`togglePlay()`）；命中后计数归零，避免三连击重复触发。琴键区仍只负责发声。
-- **坐标换算**：`_canvasPointToKey` 用 `getBoundingClientRect` 把客户端坐标映射到画布像素，再按 `keyAreaH` 判定是否落在键盘区。
+- **拖动上边缘调高度**：按住钢琴上边缘（`keyTop` 附近 ±16px 命中带）上下拖动，实时改变 `pianoHeightPct`（5%–50%，与滑块共享 `_setPianoHeightPct`）。
+- **两指捏合缩放宽度**：双指捏合缩放 `pianoWidthScale`（1x–5x），以捏合中点为锚点并同步平移 `viewOffsetX`（`_clampViewOffset` 限制不越界）。缩放后 `getKeyLayout` 重算键宽，**渲染区与音符轨道同步变化**；`drawScene` 跳过水平不可见的音符（`key.x+w<0 || key.x>C.w`）以省性能，但**播放时间轴不受影响**。
+- **锁定手势**：全屏锁定（`pianoLocked`）时上边缘拖动与捏合一律禁用，落点按普通琴键处理（即「一律视为敲琴键」）。
+- **坐标换算**：`_canvasPointToKey` / `_canvasPos` 用 `getBoundingClientRect` 把客户端坐标映射到画布像素，再按 `keyAreaH` 判定是否落在键盘区。
 
 ## 9.9 配色栏收起 / 展开
 
@@ -401,6 +404,14 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **风格统一**：`manageModal` 使用与菜单面板一致的半透明 + 背景模糊卡片（`.manage-card`），并提供「透明 / 模糊」滑块；滑块值与菜单面板**共享同一组状态**（`_syncManageAppearanceFromPanel` / `applyManageAppearance`），任一处调整都会同步。
 - **点击外部收起**：点击遮罩（`e.target === modal`）自动关闭；点卡片内部不关闭。
 - **内置谱删除 / 重下**：内置谱默认显示垃圾桶图标，点击后加入 `localStorage.deletedBuiltin` 并从谱库下拉中移除、清除缓存；该行图标变为**下载**图标，点击可重新下载并恢复。用户上传谱删除同样使用垃圾桶 SVG。
+
+## 9.11 全屏悬浮控件
+
+- **布局**：`.fs-overlay` 仅在 `.visual-panel:fullscreen` 显示（`display:none` → `block`，面板设 `position:relative`）。四个 42px 圆形紫底按钮：**设置**（左上，`fsSettingsBtn`）、**退出全屏**（右上，`fsExitBtn`）、**锁定**（左中 / 右中，`fsLockLeft` / `fsLockRight`，两者切换**同一个** `pianoLocked` 总锁，图标 `feather:lock` / `feather:unlock` 随状态切换）。
+- **点击即暂停**：任一悬浮按钮的 click 都先 `_fsPauseIfPlaying()`（正在播放则 `pausePlay()`），再执行自身动作（退出 / 打开菜单 / 切换锁定）。
+- **2s 淡出**：`_fsShowControls()` 在进入全屏及全屏内任意 `pointerdown` / `pointermove` 时重置 2s 计时，超时给 `.fs-overlay` 加 `.faded`（按钮 `opacity:.5`）；不可拖动（与旧 debug 悬浮按钮不同）。
+- **菜单可用**：由于浏览器全屏只渲染全屏元素，进入全屏时把 `.control-panel` 与 `.overlay-mask` 临时移入 `.visual-panel`（`_syncFsLayout`），退出时移回原位，从而左上角设置按钮能在全屏内打开菜单。
+- **退出解锁**：退出全屏时 `pianoLocked` 复位为 `false` 并同步图标，避免普通模式下手势被锁却无按钮可解。
 
 # 十、部署、流量与缓存策略（GitHub Pages）
 
@@ -732,3 +743,4 @@ midi_player/
 | 图标与循环 | 全屏改用 `solar:maximize/minimize-linear`、设置改用 `solar:settings-minimalistic-bold`、配色编辑改用 `ic:round-color-lens`；循环按钮改为列表循环（`bi:repeat`）/ 单曲循环（`bi:repeat-1`）两态，列表循环播到底回到第一首 | `f6d0e80` |
 | 按钮统一 | 上传改为纯图标圆形按钮（`arcticons:folder-upload`），管理改用 `fluent:text-bullet-list-edit-20-filled`；设置/全屏改为圆形紫底按钮，全屏移到最右；展开按钮改用 `ic:round-color-lens`（收起旋转 180°），自定义配色改用 `gg:color-bucket` | `759207a` |
 | 双击播放 | 双击（双触）非钢琴键的渲染区等价于播放/暂停 | `8d38638` |
+| 手势与全屏 | 上边缘拖动调钢琴高度（5%–50%）、两指捏合缩放钢琴宽度（1x–5x，渲染区同步、不可见音符跳过渲染、播放不受影响）；全屏新增设置/退出/双锁定悬浮按钮（总锁，锁定时手势视为敲键），2s 淡出、点击即暂停，菜单面板移入全屏元素 | `9f30fd7` |
