@@ -12,7 +12,6 @@
 <style type="text/tailwindcss">
 @custom-variant dark (&:where(.dark, .dark *));
 @theme {
-  --color-primary: #3B82F6;
   --color-bg-light: #FFFFFF;
   --color-bg-dark: #111827;
   --color-surface-light: #F9FAFB;
@@ -35,7 +34,7 @@
 <button id="theme-toggle" class="fixed top-3 right-3 z-40 p-2 rounded-lg text-muted-light dark:text-muted-dark bg-white/80 dark:bg-surface-dark/80 backdrop-blur border border-border-light dark:border-border-dark" title="切换主题"><span class="material-icons text-lg" data-theme-icon>dark_mode</span></button>
 
 <main class="max-w-3xl mx-auto px-6 py-10">
-  <a href="https://down2.top/encrypted_notes/" class="inline-flex items-center gap-1 text-sm text-primary hover:underline mb-6"><span class="material-icons text-base">arrow_back</span> 返回加密笔记</a>
+  <a href="https://down2.top/encrypted_notes/" class="inline-flex items-center gap-1 text-sm text-text-light dark:text-text-dark hover:underline mb-6"><span class="material-icons text-base">arrow_back</span> 返回加密笔记</a>
 
   <h1 class="text-3xl font-bold mb-3">为什么无法暴力破解？</h1>
   <p class="text-muted-light dark:text-muted-dark mb-8">一句话：Argon2id 让<strong>每一次猜测</strong>都必须占用 256 MiB 内存，攻击者的并行优势被内存容量与带宽卡死，成本随密码长度指数爆炸。</p>
