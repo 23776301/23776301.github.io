@@ -126,6 +126,40 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
   .overlay-mask.show{display:block}
 }
 
+/* 菜单面板：采用调试面板的半透明 + 背景模糊风格（透明度/模糊度由面板内滑块调节） */
+.control-panel{background:rgba(0,0,0,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+
+/* 配色方案按钮：移动端 2×2，PC 单行（降低配色栏高度） */
+.pal-grid{display:grid;grid-template-columns:repeat(2,auto);gap:5px;flex-shrink:0}
+@media(min-width:801px){.pal-grid{grid-template-columns:repeat(4,auto)}}
+
+/* 全屏按钮：方形、无圆角，越方越好 */
+.fs-btn{
+  width:26px;height:26px;flex-shrink:0;padding:0;border-radius:0;
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+  border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--text);
+}
+.fs-btn:hover{background:rgba(255,255,255,.1)}
+.fs-btn:active{background:rgba(255,255,255,.18);opacity:1}
+.fs-btn svg{width:14px;height:14px}
+
+/* 菜单面板内的调试区 */
+.dbg-section{margin-top:18px;padding-top:12px;border-top:1px solid var(--border)}
+.dbg-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:10px;color:var(--dim);margin-bottom:6px}
+.dbg-toolbar label{display:flex;align-items:center;gap:4px;cursor:pointer}
+.dbg-toolbar input[type=range]{width:64px}
+.dbg-actions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.dbg-actions button{background:#333;color:#fff;border:none;padding:3px 8px;cursor:pointer;font-size:10px;border-radius:3px}
+.dbg-actions button:hover{background:#444}
+.dbg-log{
+  height:200px;overflow-y:auto;padding:4px 8px;line-height:1.4;
+  font-family:monospace;font-size:11px;
+  background:rgba(0,0,0,.35);border:1px solid #333;border-radius:6px;
+}
+.dbg-off .dbg-body{display:none}
+.dbg-off .dbg-off-hint{display:block}
+.dbg-off-hint{display:none;font-size:11px;color:var(--dim);padding:6px 2px}
+
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--text);font-size:13px;cursor:pointer;transition:all .15s;min-height:40px}
 .btn:hover{background:rgba(255,255,255,.08)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
@@ -233,10 +267,9 @@ select:focus{border-color:var(--accent)}
 </style>
 </head>
 <body>
-<!-- 菜单按钮 + 调试按钮（同组，debug 在菜单下方，二者可一起拖动） -->
+<!-- 移动端菜单按钮（可拖动；PC 端隐藏，改用顶栏菜单按钮） -->
 <div class="fab-group" id="fabGroup">
   <button class="menu-btn" title="菜单">☰</button>
-  <button id="debugTerminalBtn" class="debug-fab" title="调试终端">DEBUG</button>
 </div>
 <!-- 移动端遮罩 -->
 <div class="overlay-mask" id="overlayMask" onclick="toggleMenu()"></div>
@@ -344,12 +377,36 @@ select:focus{border-color:var(--accent)}
         </select>
       </div>
       <div class="timbre-hint" id="timbreHint">正在加载音色…</div>
+
+      <div class="dbg-section" id="dbgSection">
+        <h2 style="margin-top:0">调试</h2>
+        <div class="dbg-toolbar">
+          <label><input id="dbgEnabled" type="checkbox" checked onchange="onDebugEnabledChange()" style="accent-color:var(--accent)">启用调试</label>
+          <label title="面板透明度">透明 <input id="panelOpacity" type="range" min="0.1" max="1" step="0.05" value="0.35" oninput="applyPanelAppearance()"></label>
+          <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="30" oninput="applyPanelAppearance()"></label>
+        </div>
+        <div class="dbg-off-hint">调试已关闭，无日志采集与监控。</div>
+        <div class="dbg-body">
+          <div class="dbg-actions">
+            <button id="debugCopyBtn" onclick="copyDebugTerminal()">copy</button>
+            <button onclick="downloadDebugLog()">下载日志</button>
+            <button onclick="clearDebugTerminal()">clear</button>
+            <button onclick="scrollDebugTop()" title="顶部">↑</button>
+            <button onclick="scrollDebugBottom()" title="底部">↓</button>
+            <label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--dim);cursor:pointer;margin-left:auto">
+              <input id="dbgAutoOpen" type="checkbox" checked onchange="onDbgAutoOpenChange()" style="accent-color:var(--accent)">降级自动展开
+            </label>
+          </div>
+          <div id="debugTerminalContent" class="dbg-log"></div>
+        </div>
+      </div>
     </div>
 
     <!-- 右侧：顶部控制栏 + 可视化 -->
     <div>
       <div class="top-bar">
         <div class="top-bar-row">
+          <button class="btn menu-top-btn" id="menuBtnTop" onclick="toggleMenu()" title="菜单">☰</button>
           <button class="btn primary" onclick="document.getElementById('midiFile').click()" style="white-space:nowrap;flex-shrink:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>上传MIDI</button>
           <input type="file" id="midiFile" accept=".mid,.midi" style="display:none" onchange="onMidiFile(event)">
           <select id="songSel" onchange="onSongChange(this.value)" style="flex:1">
@@ -411,6 +468,7 @@ const _origLog = console.log.bind(console);
 const _origWarn = console.warn.bind(console);
 const _origError = console.error.bind(console);
 let _debugContentEl = null;
+let debugEnabled = true; // 调试总开关：关闭后无日志采集、无监控、无降级自动展开
 
 // 将 console 参数安全转为字符串：对象走 JSON，循环引用等异常时回退 String
 function _fmtArgs(args){
@@ -455,6 +513,7 @@ function _appendDebug(msg, type) {
 
 console.log = function(...args) {
   _origLog(...args);
+  if(!debugEnabled) return;
   const msg = _fmtArgs(args);
   if(msg.includes('AudioDebug')) _appendDebug(msg, 'log');
 };
@@ -462,6 +521,7 @@ console.log = function(...args) {
 const _warnFold = {};
 console.warn = function(...args) {
   _origWarn(...args);
+  if(!debugEnabled) return;
   const msg = _fmtArgs(args);
   if(!msg.includes('AudioDebug')) return;
   const key = msg.slice(0, 28);
@@ -474,77 +534,65 @@ console.warn = function(...args) {
 };
 console.error = function(...args) {
   _origError(...args);
+  if(!debugEnabled) return;
   const msg = _fmtArgs(args);
   if(msg.includes('AudioDebug')) _appendDebug(msg, 'error');
 };
 
-function showDebugTerminal(){
-  const el = document.getElementById('debugTerminal');
+// ===== 调试总开关（默认开启）=====
+function setDebugEnabled(on){
+  debugEnabled = !!on;
+  try{ localStorage.setItem('debugEnabled', debugEnabled ? '1' : '0'); }catch(e){}
+  document.body.classList.toggle('dbg-off', !debugEnabled);
+  const cb = document.getElementById('dbgEnabled');
+  if(cb) cb.checked = debugEnabled;
+}
+function onDebugEnabledChange(){
+  const cb = document.getElementById('dbgEnabled');
+  setDebugEnabled(cb ? cb.checked : true);
+  if(debugEnabled) console.log('[AudioDebug][INFO] 调试已开启');
+}
+
+// 菜单面板透明度 / 背景模糊（沿用原调试面板的调节方式）
+function applyPanelAppearance(){
+  const el = document.getElementById('controlPanel');
   if(!el) return;
-  if(el.style.display === 'none' || el.style.display === '') {
-    el.style.display = 'flex';
-    applyDebugAppearance();
-  }
+  const op = document.getElementById('panelOpacity');
+  const bl = document.getElementById('panelBlur');
+  const alpha = op ? parseFloat(op.value) : 0.35;
+  const blurPct = bl ? parseFloat(bl.value) : 30; // 0-100%
+  const blurPx = blurPct * 0.2;                   // 100% -> 20px
+  el.style.background = 'rgba(0,0,0,' + alpha + ')';
+  const bf = blurPx > 0 ? ('blur(' + blurPx.toFixed(1) + 'px)') : 'none';
+  el.style.backdropFilter = bf;
+  el.style.webkitBackdropFilter = bf;
+  try{
+    localStorage.setItem('panelOpacity', String(alpha));
+    localStorage.setItem('panelBlur', String(blurPct));
+  }catch(e){}
 }
-function hideDebugTerminal(){
-  const el = document.getElementById('debugTerminal');
-  if(el) el.style.display = 'none';
-}
-// 性能降级时是否自动弹出调试窗（默认勾选）
+
+// 性能降级时是否自动展开调试区（默认勾选）
 let dbgAutoOpen = true;
 function onDbgAutoOpenChange(){
   const cb = document.getElementById('dbgAutoOpen');
   dbgAutoOpen = !!(cb && cb.checked);
   try{ localStorage.setItem('dbgAutoOpen', dbgAutoOpen ? '1' : '0'); }catch(e){}
 }
-(function(){
-  try{
-    const s = localStorage.getItem('dbgAutoOpen');
-    if(s !== null) dbgAutoOpen = s === '1';
-  }catch(e){}
-  // 面板 DOM 在脚本之后，轮询等待后同步勾选状态
-  const apply = () => {
-    const cb = document.getElementById('dbgAutoOpen');
-    if(cb) cb.checked = dbgAutoOpen;
-    else setTimeout(apply, 200);
-  };
-  apply();
-})();
-function toggleDebugTerminal() {
-  const el = document.getElementById('debugTerminal');
-  if(el.style.display === 'none' || el.style.display === '') {
-    showDebugTerminal();
-  } else {
-    el.style.display = 'none';
+// 降级时自动展开菜单面板并滚到日志底部
+function autoOpenDebugPanel(){
+  if(!debugEnabled || !dbgAutoOpen) return;
+  if(window.innerWidth <= 800){
+    const panel = document.getElementById('controlPanel');
+    if(panel) panel.classList.add('open');
+    const mask = document.getElementById('overlayMask');
+    if(mask) mask.classList.add('show');
+    const group = document.getElementById('fabGroup');
+    if(group) group.classList.add('hidden-btn');
   }
+  setTimeout(() => { if(typeof scrollDebugBottom === 'function') scrollDebugBottom(); }, 0);
 }
-// 调节调试面板透明度与背景模糊
-function applyDebugAppearance(){
-  const el = document.getElementById('debugTerminal');
-  if(!el) return;
-  const op = document.getElementById('dbgOpacity');
-  const bl = document.getElementById('dbgBlur');
-  const alpha = op ? parseFloat(op.value) : 0.1;
-  const blurPct = bl ? parseFloat(bl.value) : 30; // 0-100%
-  const blurPx = blurPct * 0.2;                   // 100% -> 20px
-  el.style.background = 'rgba(0,0,0,' + alpha + ')';
-  const header = el.firstElementChild;
-  if(header) header.style.background = 'rgba(30,30,30,' + Math.min(1, alpha + 0.08) + ')';
-  const bf = blurPx > 0 ? ('blur(' + blurPx.toFixed(1) + 'px)') : 'none';
-  el.style.backdropFilter = bf;
-  el.style.webkitBackdropFilter = bf;
-}
-// 点击面板外部自动收起（鼠标与触摸）
-function _onDebugOutside(e){
-  const el = document.getElementById('debugTerminal');
-  if(!el || el.style.display === 'none' || el.style.display === '') return;
-  if(el.contains(e.target)) return;
-  const fab = document.getElementById('fabGroup');
-  if(fab && fab.contains(e.target)) return;
-  el.style.display = 'none';
-}
-document.addEventListener('click', _onDebugOutside, true);
-document.addEventListener('touchstart', _onDebugOutside, {passive:true, capture:true});
+
 function clearDebugTerminal() {
   const el = document.getElementById('debugTerminalContent');
   if(el) el.innerHTML = '';
@@ -589,6 +637,41 @@ function copyDebugTerminal(){
     _copyFallback(text);
   }
 }
+// 下载日志文本
+function downloadDebugLog(){
+  const el = document.getElementById('debugTerminalContent');
+  const text = el ? (el.innerText || '') : '';
+  try{
+    const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    a.href = url;
+    a.download = 'midi-player-debug-' + ts + '.log';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }catch(e){}
+}
+
+// 初始化：恢复调试开关、面板外观与自动展开勾选
+(function(){
+  try{
+    const d = localStorage.getItem('debugEnabled');
+    if(d !== null) debugEnabled = d === '1';
+    const a = localStorage.getItem('panelOpacity');
+    const b = localStorage.getItem('panelBlur');
+    if(a !== null){ const el = document.getElementById('panelOpacity'); if(el) el.value = a; }
+    if(b !== null){ const el = document.getElementById('panelBlur'); if(el) el.value = b; }
+    const s = localStorage.getItem('dbgAutoOpen');
+    if(s !== null) dbgAutoOpen = s === '1';
+  }catch(e){}
+  const cb = document.getElementById('dbgEnabled');
+  if(cb) cb.checked = debugEnabled;
+  const ac = document.getElementById('dbgAutoOpen');
+  if(ac) ac.checked = dbgAutoOpen;
+  document.body.classList.toggle('dbg-off', !debugEnabled);
+  applyPanelAppearance();
+})();
 </script>
 
 <script>
@@ -617,7 +700,7 @@ function initAudio(){
     ' baseLatency=' + (audioCtx.baseLatency != null ? (audioCtx.baseLatency * 1000).toFixed(1) + 'ms' : 'N/A') +
     ' outputLatency=' + (audioCtx.outputLatency != null ? (audioCtx.outputLatency * 1000).toFixed(1) + 'ms' : 'N/A') +
     ' state=' + audioCtx.state);
-  AudioDebugMonitor.init();
+  if(debugEnabled) AudioDebugMonitor.init();
 }
 
 /* ============================================================
@@ -645,19 +728,12 @@ const PerfArbiter = {
       console.warn('[AudioDebug] 最近 ' + this.windowSize + 's出现' + total +
         '次性能问题，分别是' + parts.join('、') + '，触发渲染降级');
       applyDegradation(true);
-      // 按勾选设置自动弹出调试窗，并滚动到最新输出
-      if(typeof dbgAutoOpen === 'undefined' || dbgAutoOpen){
-        if(typeof showDebugTerminal === 'function') showDebugTerminal();
-        setTimeout(() => { if(typeof scrollDebugBottom === 'function') scrollDebugBottom(); }, 0);
-      }
+      // 按勾选设置自动展开调试区（不自动收起）
+      if(debugEnabled) autoOpenDebugPanel();
     } else if(this.degraded && this.perSecond.length >= this.windowSize && total <= this.RECOVER_AT){
       this.degraded = false;
       console.log('[AudioDebug][OK] 性能问题已缓解，恢复完整渲染。');
       applyDegradation(false);
-      // 降级取消时自动收起调试窗
-      if(typeof dbgAutoOpen === 'undefined' || dbgAutoOpen){
-        if(typeof hideDebugTerminal === 'function') hideDebugTerminal();
-      }
     }
   }
 };
@@ -696,6 +772,7 @@ const AudioDebugMonitor = {
   liveGrowthReports: 0,
 
   init(){
+    if(!debugEnabled) return;
     if(this.inited) return;
     this.inited = true;
     this.lastAudioTime = audioCtx ? audioCtx.currentTime : 0;
@@ -736,6 +813,7 @@ const AudioDebugMonitor = {
 
   // 每帧调用：记录帧耗时与触发音符数
   frame(ms, notes){
+    if(!debugEnabled) return;
     this.frames++;
     this.frameMsSum += ms;
     this.notesTriggered += notes;
@@ -743,12 +821,13 @@ const AudioDebugMonitor = {
 
   // 每帧调用：记录 drawScene 耗时
   drawFrame(ms){
+    if(!debugEnabled) return;
     this.drawMsSum += ms;
   },
 
   // 采样实际输出音量（RMS），用于探测"界面在跑但没声音"
   sampleRms(){
-    if(!outputAnalyser) return;
+    if(!debugEnabled || !outputAnalyser) return;
     const buf = this._rmsBuf || (this._rmsBuf = new Float32Array(outputAnalyser.fftSize));
     outputAnalyser.getFloatTimeDomainData(buf);
     let sum = 0;
@@ -761,6 +840,7 @@ const AudioDebugMonitor = {
 
   // 每秒汇总一次
   report(){
+    if(!debugEnabled) return;
     if(typeof SoundfontLoader === 'undefined') return;
     const now = performance.now();
     if(now - this.lastReport < 1000) return;
@@ -847,13 +927,13 @@ const AudioDebugMonitor = {
 };
 // 仅在播放时运行诊断，暂停时不做无谓的采样与汇总
 setInterval(() => {
-  if(typeof isPlaying !== 'undefined' && isPlaying){
+  if(debugEnabled && typeof isPlaying !== 'undefined' && isPlaying){
     AudioDebugMonitor.report();
     SoundfontLoader.debugReport();
   }
 }, 1000);
 setInterval(() => {
-  if(typeof isPlaying !== 'undefined' && isPlaying) AudioDebugMonitor.sampleRms();
+  if(debugEnabled && typeof isPlaying !== 'undefined' && isPlaying) AudioDebugMonitor.sampleRms();
 }, 200);
 
 
@@ -2055,7 +2135,6 @@ function toggleMenu(){
 (function(){
   const group = document.getElementById('fabGroup');
   const menuBtn = document.querySelector('.menu-btn');
-  const dbgBtn = document.getElementById('debugTerminalBtn');
   if(!group || !menuBtn) return;
   let fadeTimer = null;
   function showMenuBtn(){
@@ -2168,10 +2247,6 @@ function toggleMenu(){
   }
   menuBtn.addEventListener('mousedown', onDown(toggleMenu));
   menuBtn.addEventListener('touchstart', onDown(toggleMenu), {passive:false});
-  if(dbgBtn){
-    dbgBtn.addEventListener('mousedown', onDown(toggleDebugTerminal));
-    dbgBtn.addEventListener('touchstart', onDown(toggleDebugTerminal), {passive:false});
-  }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('touchmove', onMove, {passive:false});
   document.addEventListener('mouseup', onUp);
@@ -2867,30 +2942,6 @@ setPalette(currentPalette); // 同步按钮选中态并按恢复的配色重绘
     </div>
     <div id="manageList" style="overflow-y:auto;flex:1"></div>
   </div>
-</div>
-
-<!-- ===== 调试终端面板 ===== -->
-<div id="debugTerminal" style="position:fixed;left:0;right:0;bottom:0;height:40%;background:rgba(0,0,0,0.1);z-index:9999;display:none;flex-direction:column;font-family:monospace;font-size:11px;border-top:1px solid #444;">
-  <div style="display:flex;align-items:center;gap:10px;padding:4px 8px;background:rgba(30,30,30,.18);border-bottom:1px solid #444;flex-wrap:wrap;">
-    <span style="color:#0f0;font-weight:bold;">DEBUG</span>
-    <label style="color:#aaa;font-size:10px;display:flex;align-items:center;gap:4px;">透明
-      <input id="dbgOpacity" type="range" min="0.1" max="1" step="0.05" value="0.1" oninput="applyDebugAppearance()" style="width:64px;">
-    </label>
-    <label style="color:#aaa;font-size:10px;display:flex;align-items:center;gap:4px;">模糊
-      <input id="dbgBlur" type="range" min="0" max="100" step="5" value="30" oninput="applyDebugAppearance()" style="width:64px;">
-    </label>
-    <label style="color:#aaa;font-size:10px;display:flex;align-items:center;gap:4px;cursor:pointer;">
-      <input id="dbgAutoOpen" type="checkbox" checked onchange="onDbgAutoOpenChange()" style="accent-color:var(--accent);cursor:pointer;">渲染降级自动弹窗
-    </label>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;">
-      <button id="debugCopyBtn" onclick="copyDebugTerminal()" style="background:#2a4;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">copy</button>
-      <button onclick="scrollDebugTop()" title="顶部" style="background:#333;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">↑</button>
-      <button onclick="scrollDebugBottom()" title="底部" style="background:#333;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">↓</button>
-      <button onclick="clearDebugTerminal()" style="background:#333;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">clear</button>
-      <button onclick="toggleDebugTerminal()" title="关闭" style="background:#c22;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">✕</button>
-    </div>
-  </div>
-  <div id="debugTerminalContent" style="flex:1;overflow-y:auto;padding:4px 8px;line-height:1.4;"></div>
 </div>
 
 </body>
