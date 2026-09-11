@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>加密笔记 · teecatt</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--accent2:#3fb950;--red:#ff3f58;--warn:#e8b64c;--violet:#c822ff}
+*{margin:0;padding:0;box-sizing:border-box}
+*{-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+a{text-decoration:none;color:inherit}
+.topbar{height:52px;display:flex;align-items:center;padding:0 20px;gap:14px;border-bottom:1px solid var(--line);background:var(--surface)}
+.topbar .back{color:var(--muted);font-size:13px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;transition:all .15s}
+.topbar .back:hover{color:var(--text);border-color:var(--accent)}
+.topbar h1{font-size:15px;font-weight:600;flex:1}
+.container{max-width:860px;margin:0 auto;padding:24px 20px 64px;width:100%}
+.intro{color:var(--muted);font-size:13px;line-height:1.8;margin-bottom:20px}
+.intro b{color:var(--text)}
+.tabs{display:flex;gap:8px;margin-bottom:16px}
+.tabs button{flex:1;background:var(--surface);border:1px solid var(--line);color:var(--muted);padding:9px;border-radius:8px;cursor:pointer;font-size:13px;transition:all .15s}
+.tabs button.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px}
+label{display:block;font-size:12px;color:var(--muted);margin:14px 0 6px}
+label:first-child{margin-top:0}
+textarea,input{width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;outline:none;resize:vertical}
+textarea:focus,input:focus{border-color:var(--accent)}
+textarea{min-height:150px;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:12px;line-height:1.6}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.btn{background:var(--accent);border:none;color:#fff;padding:10px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s}
+.btn:hover{background:#4090e0}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:400}
+.btn.ghost:hover{color:var(--text);border-color:var(--accent)}
+.btn:active{opacity:.78}
+.hint{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6}
+.status{font-size:12px;margin-top:10px;min-height:18px}
+.status.err{color:var(--red)}
+.status.ok{color:var(--accent2)}
+.preview{margin-top:16px;padding:16px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;line-height:1.75;font-size:14px}
+.preview h1{font-size:20px;margin:8px 0}.preview h2{font-size:17px;margin:8px 0}.preview h3{font-size:15px;margin:6px 0}
+.preview p{margin:8px 0}.preview ul,.preview ol{margin:8px 0 8px 22px}
+.preview code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;font-size:12px}
+.preview pre{background:#0b0f14;border:1px solid var(--line);border-radius:6px;padding:10px;overflow:auto;margin:10px 0}
+.preview pre code{background:none;padding:0}
+.preview blockquote{border-left:3px solid var(--accent);padding-left:12px;color:var(--muted);margin:10px 0}
+.preview a{color:var(--accent)}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="../../">← 返回主页</a>
+  <h1>🔒 加密笔记</h1>
+</div>
+<div class="container">
+  <div class="intro">
+    内容在本地用 <b>WebCrypto</b> 加密，密文可以直接放在公开页面/仓库里。没有口令的人即使拿到密文也解不开；
+    口令不落任何存储。算法：<b>AES-GCM 256</b>，密钥由 <b>PBKDF2-SHA256</b>（迭代 250000）从口令派生。
+    <div style="margin-top:8px">想要更强的「内存硬」派生？看 <a href="../argon2/" style="color:var(--accent)">Argon2id 演示（512 MiB）→</a></div>
+  </div>
+
+  <div class="tabs">
+    <button id="tabDec" class="active">解密</button>
+    <button id="tabEnc">加密</button>
+  </div>
+
+  <div id="paneDec" class="card">
+    <label>密文（Base64）</label>
+    <textarea id="cipherIn" spellcheck="false"></textarea>
+    <label>口令</label>
+    <input id="decPass" type="password" placeholder="输入口令…">
+    <div class="row">
+      <button class="btn" id="btnDec">解密</button>
+      <button class="btn ghost" id="btnSample">载入演示密文（口令 down2.top）</button>
+    </div>
+    <div id="decStatus" class="status"></div>
+    <div id="decOut" class="preview hidden"></div>
+  </div>
+
+  <div id="paneEnc" class="card hidden">
+    <label>笔记内容（Markdown）</label>
+    <textarea id="plainIn" spellcheck="false" placeholder="在这里写笔记…"></textarea>
+    <label>口令</label>
+    <input id="encPass" type="password" placeholder="设置一个强口令…">
+    <div class="row">
+      <button class="btn" id="btnEnc">生成密文</button>
+      <button class="btn ghost" id="btnCopy" style="display:none">复制密文</button>
+    </div>
+    <div id="encStatus" class="status"></div>
+    <textarea id="cipherOut" spellcheck="false" style="display:none;margin-top:12px" readonly></textarea>
+    <div class="hint">把生成的密文粘贴到公开页面的 <code>SAMPLE</code> 或任意文件里即可；解密只需口令。</div>
+  </div>
+</div>
+
+<script>
+// ===== 最小 Markdown 渲染（先转义，再做基础语法）=====
+function renderMD(md){
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const inline = s => esc(s)
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g,'<em>$1</em>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const lines = md.replace(/\r\n/g,'\n').split('\n');
+  let html='', inCode=false, list=null;
+  const closeList = () => { if(list){ html += '</'+list+'>'; list=null; } };
+  for(const raw of lines){
+    if(/^\s*```/.test(raw)){ closeList(); inCode=!inCode; html += inCode?'<pre><code>':'</code></pre>'; continue; }
+    if(inCode){ html += esc(raw)+'\n'; continue; }
+    const h = raw.match(/^(#{1,6})\s+(.*)$/);
+    if(h){ closeList(); const n=h[1].length; html += '<h'+n+'>'+inline(h[2])+'</h'+n+'>'; continue; }
+    if(/^\s*>\s?/.test(raw)){ closeList(); html += '<blockquote>'+inline(raw.replace(/^\s*>\s?/,''))+'</blockquote>'; continue; }
+    const ul = raw.match(/^\s*[-*]\s+(.*)$/), ol = raw.match(/^\s*\d+\.\s+(.*)$/);
+    if(ul||ol){ const t=ul?'ul':'ol'; if(list!==t){ closeList(); list=t; html+='<'+t+'>'; } html += '<li>'+inline((ul||ol)[1])+'</li>'; continue; }
+    if(raw.trim()===''){ closeList(); continue; }
+    closeList(); html += '<p>'+inline(raw)+'</p>';
+  }
+  closeList();
+  return html;
+}
+
+// ===== 加解密 =====
+const enc = new TextEncoder(), dec = new TextDecoder();
+const b64e = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+async function deriveKey(pass, salt, iter){
+  const base = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:iter, hash:'SHA-256'},
+    base, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+}
+
+async function encryptNote(pass, text){
+  const iter = 250000;
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(pass, salt, iter);
+  const ct = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, enc.encode(text));
+  const blob = {v:1, alg:'AES-GCM', kdf:'PBKDF2-SHA256', iter, salt:b64e(salt), iv:b64e(iv), ct:b64e(ct)};
+  return b64e(enc.encode(JSON.stringify(blob)));
+}
+
+async function decryptNote(pass, blobB64){
+  let blob;
+  try{ blob = JSON.parse(dec.decode(b64d(blobB64.trim()))); }catch(e){ throw new Error('密文格式无法识别'); }
+  if(!blob.ct) throw new Error('密文格式无法识别');
+  const key = await deriveKey(pass, b64d(blob.salt), blob.iter || 250000);
+  let pt;
+  try{ pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:b64d(blob.iv)}, key, b64d(blob.ct)); }
+  catch(e){ throw new Error('口令错误或密文已损坏'); }
+  return dec.decode(pt);
+}
+
+// ===== 演示密文（明文口令：down2.top）=====
+const SAMPLE = 'eyJ2IjoxLCJhbGciOiJBRVMtR0NNIiwia2RmIjoiUEJLREYyLVNIQTI1NiIsIml0ZXIiOjI1MDAwMCwic2FsdCI6ImxndVZnR1NEOHpCb0NqZ2xqVHg2ZHc9PSIsIml2IjoicGYyWktLRm0zNlAwTERRSiIsImN0IjoiQTNEcm9yUkZzalVaR2VIdDdmWFl5UUxINzdJWURTS2FwUU1JTjZuRGMzUW1pT2Z5RndHSFh3SXc3cGtnN0ZhQ1Fqb0F6MFFWK1lRcUVvWlJpMm5ZS0h2TkcrRWp1NFlMZ0FWRExhM1NVMHZGRE5oNlNpZS9uRDhKVTFJWXF1MGJpeEtsNmNzNDl6S0NUaTlQZlNIc2FieitBOXFBRThHRWFEVW5RQlNNbHFOVU50VzZnWmp0MC9KMkVBNi9oUlBaYVl2MG5mcU1kblMyTFAyWnZLTWRsSjdaVFNrc0hYWUJKWmorWUpleFQreWF2T2tDOTh6K214d0IvekUrcEc2UnFiQjBENjB3RzR1Zmp4bG43S0tLZGN5V3UrRHpLekIzUTkyY3FkTDlFOTdXSUNvS2NnUU81WmNNK2JqbVlsbGZmTDVRN1R2WFpJVjVYL000bVhHVm1hSEZTeHRJNmg5L1ZHSSt0cGVtNGV1a3E0eFR0emI3ZmZhdi82MVpnL2lzWWZoUWx6eWFvQ1NGRkJUQU5RVTQycVM0OXhrU3ArQUxrcGNmK0IveEFLdXpjZkRLb0kzZTZlU0RoV1VKUkE9PSJ9';
+
+// ===== UI =====
+const $ = id => document.getElementById(id);
+$('tabDec').onclick = () => { $('tabDec').classList.add('active'); $('tabEnc').classList.remove('active'); $('paneDec').classList.remove('hidden'); $('paneEnc').classList.add('hidden'); };
+$('tabEnc').onclick = () => { $('tabEnc').classList.add('active'); $('tabDec').classList.remove('active'); $('paneEnc').classList.remove('hidden'); $('paneDec').classList.add('hidden'); };
+
+$('btnSample').onclick = () => { $('cipherIn').value = SAMPLE; $('decPass').value = ''; $('decPass').focus(); $('decStatus').textContent = '已载入演示密文，口令为 down2.top'; $('decStatus').className = 'status'; };
+
+$('btnDec').onclick = async () => {
+  const blob = $('cipherIn').value.trim(), pass = $('decPass').value;
+  if(!blob){ $('decStatus').textContent = '请先填入密文'; $('decStatus').className='status err'; return; }
+  if(!pass){ $('decStatus').textContent = '请输入口令'; $('decStatus').className='status err'; return; }
+  $('decStatus').textContent = '解密中…'; $('decStatus').className='status';
+  try{
+    const text = await decryptNote(pass, blob);
+    $('decOut').innerHTML = renderMD(text);
+    $('decOut').classList.remove('hidden');
+    $('decStatus').textContent = '解密成功'; $('decStatus').className='status ok';
+  }catch(e){ $('decOut').classList.add('hidden'); $('decStatus').textContent = e.message; $('decStatus').className='status err'; }
+};
+
+$('btnEnc').onclick = async () => {
+  const text = $('plainIn').value, pass = $('encPass').value;
+  if(!text){ $('encStatus').textContent = '请先写点内容'; $('encStatus').className='status err'; return; }
+  if(pass.length < 4){ $('encStatus').textContent = '口令太短（建议长一些）'; $('encStatus').className='status err'; return; }
+  $('encStatus').textContent = '加密中…'; $('encStatus').className='status';
+  try{
+    const out = await encryptNote(pass, text);
+    $('cipherOut').value = out; $('cipherOut').style.display = 'block'; $('btnCopy').style.display = 'inline-block';
+    $('encStatus').textContent = '已生成密文，可复制到公开页面'; $('encStatus').className='status ok';
+  }catch(e){ $('encStatus').textContent = '加密失败：' + e.message; $('encStatus').className='status err'; }
+};
+
+$('btnCopy').onclick = () => {
+  const t = $('cipherOut').value;
+  const done = () => { $('btnCopy').textContent = '已复制'; setTimeout(()=>$('btnCopy').textContent='复制密文',1200); };
+  if(navigator.clipboard) navigator.clipboard.writeText(t).then(done, done); else { $('cipherOut').select(); document.execCommand('copy'); done(); }
+};
+</script>
+</body>
+</html>

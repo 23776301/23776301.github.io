@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Argon2id 演示 · teecatt</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--accent2:#3fb950;--red:#ff3f58;--warn:#e8b64c;--violet:#c822ff}
+*{margin:0;padding:0;box-sizing:border-box}
+*{-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+a{text-decoration:none;color:inherit}
+.topbar{height:52px;display:flex;align-items:center;padding:0 20px;gap:14px;border-bottom:1px solid var(--line);background:var(--surface)}
+.topbar .back{color:var(--muted);font-size:13px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;transition:all .15s}
+.topbar .back:hover{color:var(--text);border-color:var(--accent)}
+.topbar h1{font-size:15px;font-weight:600;flex:1}
+.container{max-width:820px;margin:0 auto;padding:24px 20px 64px;width:100%}
+.intro{color:var(--muted);font-size:13px;line-height:1.85;margin-bottom:16px}
+.intro b{color:var(--text)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px}
+.card h2{font-size:14px;margin-bottom:12px;font-weight:600}
+label{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px}
+label:first-of-type{margin-top:0}
+input,select{width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;font-family:inherit}
+input:focus,select:focus{border-color:var(--accent)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+@media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.btn{background:var(--accent);border:none;color:#fff;padding:10px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s}
+.btn:hover{background:#4090e0}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:400}
+.btn.ghost:hover{color:var(--text);border-color:var(--accent)}
+.btn:active{opacity:.78}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.status{font-size:12px;margin-top:12px;min-height:18px;line-height:1.7}
+.status.err{color:var(--red)}.status.ok{color:var(--accent2)}.status.warn{color:var(--warn)}
+.out{margin-top:12px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:12px;word-break:break-all;line-height:1.7;display:none}
+.out b{color:var(--accent2)}
+.metrics{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--muted)}
+.metrics b{color:var(--text);font-size:15px}
+.warnbox{background:rgba(232,182,76,.1);border:1px solid rgba(232,182,76,.4);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--warn);line-height:1.7;margin-bottom:16px}
+.hint{font-size:11px;color:var(--muted);line-height:1.7;margin-top:8px}
+.hint code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px}
+.q{color:var(--muted);font-size:12px;line-height:1.8}
+.q b{color:var(--text)}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="../crypto/">← 加密笔记</a>
+  <h1>🧮 Argon2id 演示</h1>
+</div>
+<div class="container">
+  <div class="intro">
+    Argon2id 是<b>内存硬</b>的密钥派生函数：每次「口令 → 密钥」都必须占用指定内存（这里 <b>512 MiB</b>）。
+    这样攻击者每猜一个口令都要付出 512 MiB 内存 + 相应时间，GPU 的并行优势被大幅抹平。
+  </div>
+
+  <div class="warnbox">
+    ⚠️ 512 MiB 是很大的内存。桌面浏览器通常没问题；<b>手机/平板很可能分配失败（OOM）或极慢</b>。
+    实际部署建议：桌面 512 MiB、移动 64–256 MiB。本页用于观察内存与耗时。
+  </div>
+
+  <div class="card">
+    <h2>参数</h2>
+    <label>口令</label>
+    <input id="pass" type="password" placeholder="输入要派生的口令…" value="down2.top">
+    <div class="grid3">
+      <div>
+        <label>内存 m（MiB）</label>
+        <select id="mem">
+          <option value="64">64</option>
+          <option value="128">128</option>
+          <option value="256">256</option>
+          <option value="512" selected>512</option>
+          <option value="1024">1024</option>
+        </select>
+      </div>
+      <div>
+        <label>迭代 t</label>
+        <select id="time">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+        </select>
+      </div>
+      <div>
+        <label>并行 p</label>
+        <select id="par">
+          <option value="1" selected>1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+    </div>
+    <label>盐（随机生成，随密文保存）</label>
+    <input id="salt" readonly>
+    <div class="row">
+      <button class="btn" id="btnRun">派生密钥（Argon2id）</button>
+      <button class="btn ghost" id="btnSim" disabled>模拟切换笔记页（用缓存密钥）</button>
+    </div>
+    <div id="status" class="status"></div>
+    <div class="metrics" id="metrics" style="display:none">
+      <div>耗时<br><b id="mTime">-</b></div>
+      <div>峰值内存（参数）<br><b id="mMem">-</b></div>
+      <div>输出长度<br><b id="mLen">-</b></div>
+    </div>
+    <div class="out" id="out"></div>
+  </div>
+
+  <div class="card">
+    <h2>关于内存的两个常见疑问</h2>
+    <div class="q">
+      <p><b>1. 每次校验口令都要占用 512 MiB 吗？用完就释放吗？</b><br>
+      —— 是的，512 MiB 只在「派生密钥」这一步（解锁/校验）占用；派生完成后工作内存即可释放，留下的密钥只有 32 字节。
+      本页为了确保释放，把派生放进 <b>Web Worker</b>，拿到结果后立即 <code>terminate()</code>，内存交还操作系统。</p>
+      <p style="margin-top:10px"><b>2. 笔记页面结构复杂，每次切页都要占 512 MiB 吗？</b><br>
+      —— <b>不会。</b> 切页/翻目录用的是已缓存的密钥，只做 AES-GCM 解密，内存正比于单篇笔记大小（很小）。
+      512 MiB 只在<b>首次解锁</b>（或锁定后重新解锁）时付一次。真实笔记应用会把密钥缓存进 IndexedDB，之后不再跑 Argon2。</p>
+    </div>
+  </div>
+
+  <div class="hint">
+    说明：Argon2 在浏览器里走 WASM，比原生慢几倍；这里的耗时是「你设备上的真实值」。攻击者虽可换更快的实现，但内存成本无法省掉。
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+// 自托管，不依赖任何第三方 CDN（文件在 notes/vendor/ 下）
+const MEM_SCRIPT = new URL('../vendor/argon2-bundled.min.js', location.href).href;
+
+function randSalt(){
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  return [...b].map(x => x.toString(16).padStart(2,'0')).join('');
+}
+
+async function deriveInWorker(p){
+  const code = `
+    importScripts('${MEM_SCRIPT}');
+    self.onmessage = async (e) => {
+      const d = e.data;
+      try {
+        if (typeof argon2 === 'undefined') throw new Error('argon2 库未加载');
+        const res = await argon2.hash({
+          pass: d.pass, salt: d.salt, time: d.time, mem: d.mem,
+          parallelism: d.par, hashLen: 32, type: 2 /* 2 = Argon2id（本库不导出 Argon2Type）*/
+        });
+        self.postMessage({ ok:true, hashHex: res.hashHex });
+      } catch(err){ self.postMessage({ ok:false, error: String((err && err.message) || err) }); }
+    };
+  `;
+  const url = URL.createObjectURL(new Blob([code], {type:'application/javascript'}));
+  const w = new Worker(url);
+  try{
+    const result = await new Promise((resolve, reject) => {
+      w.onmessage = e => resolve(e.data);
+      w.onerror = e => reject(new Error(e.message || 'Worker 执行失败'));
+      w.postMessage(p);
+    });
+    return result;
+  } finally {
+    w.terminate();
+    URL.revokeObjectURL(url);
+  }
+}
+
+let cachedKeyHex = null;
+
+$('salt').value = randSalt();
+
+$('btnRun').onclick = async () => {
+  const pass = $('pass').value;
+  if(!pass){ $('status').textContent='请输入口令'; $('status').className='status err'; return; }
+  const memMiB = parseInt($('mem').value,10);
+  const params = { pass, salt: $('salt').value, time: parseInt($('time').value,10), mem: memMiB*1024, par: parseInt($('par').value,10) };
+  $('btnRun').disabled = true; $('btnSim').disabled = true;
+  $('status').textContent = '正在 Worker 中派生（占用 ' + memMiB + ' MiB，可能需要数秒）…';
+  $('status').className = 'status warn';
+  $('out').style.display='none'; $('metrics').style.display='none';
+  const t0 = performance.now();
+  try{
+    const res = await deriveInWorker(params);
+    const ms = performance.now() - t0;
+    if(!res.ok) throw new Error(res.error);
+    cachedKeyHex = res.hashHex;
+    $('mTime').textContent = ms.toFixed(0) + ' ms';
+    $('mMem').textContent = memMiB + ' MiB';
+    $('mLen').textContent = '32 B';
+    $('metrics').style.display = 'flex';
+    $('out').style.display = 'block';
+    $('out').innerHTML = '派生密钥（hex，仅演示用）：<br><b>' + res.hashHex + '</b><br><br>' +
+      '✅ Worker 已 terminate()，' + memMiB + ' MiB 工作内存已释放。';
+    $('status').textContent = '派生完成，密钥已缓存（32 B）。切换笔记页无需再次派生。';
+    $('status').className = 'status ok';
+    $('btnSim').disabled = false;
+  }catch(e){
+    $('status').textContent = '派生失败：' + e.message + '（内存过大可能被系统拒绝）';
+    $('status').className = 'status err';
+  }finally{ $('btnRun').disabled = false; }
+};
+
+$('btnSim').onclick = () => {
+  if(!cachedKeyHex) return;
+  const t0 = performance.now();
+  // 真实场景：用缓存的 CryptoKey 做 AES-GCM 解密，几乎瞬时
+  const ms = performance.now() - t0;
+  $('out').style.display = 'block';
+  $('out').innerHTML = '📄 模拟切换到一个笔记页：<br>' +
+    '使用<b>缓存密钥</b>直接 AES-GCM 解密，<b>不重新运行 Argon2</b>，<br>' +
+    '不占用 512 MiB，本次耗时约 <b>' + ms.toFixed(2) + ' ms</b>。';
+  $('status').textContent = '已用缓存密钥解密（无 Argon2、无 512 MiB）';
+  $('status').className = 'status ok';
+};
+
+$('mem').onchange = () => { $('salt').value = randSalt(); };
+</script>
+</body>
+</html>
