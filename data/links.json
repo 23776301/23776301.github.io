@@ -1,0 +1,24 @@
+{
+  "groups": [
+    {
+      "name": "在线实用工具",
+      "items": [
+        {
+          "name": "微信文件传输助手",
+          "desc": "微信官方网页版文件传输,手机电脑互传文件",
+          "url": "https://filehelper.weixin.qq.com/"
+        },
+        {
+          "name": "iTab",
+          "desc": "新标签页美化与个性化导航",
+          "url": "https://go.itab.link/"
+        },
+        {
+          "name": "在线小游戏大全",
+          "desc": "免安装、即点即玩的网页小游戏合集",
+          "url": "https://game.hullqin.cn/"
+        }
+      ]
+    }
+  ]
+}
