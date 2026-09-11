@@ -162,6 +162,47 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .row .val{font-size:12px;color:var(--text);min-width:40px;text-align:right}
 select{flex:1;background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);border-radius:12px;padding:10px 12px;font-size:13px;outline:none;cursor:pointer}
 select:focus{border-color:var(--accent)}
+
+/* ===== 自定义下拉：替代原生 select，修复桌面端 option 白底白字不可读 ===== */
+.csel{position:relative;min-width:0}
+.row .csel,.top-bar .csel{flex:1;min-width:0}
+.csel-trigger{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+  background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);
+  border-radius:12px;padding:10px 12px;font-size:13px;cursor:pointer;text-align:left;
+  font-family:inherit;min-height:40px;transition:border-color .15s,background .15s;
+}
+.csel-trigger:hover{background:rgba(255,255,255,.09)}
+.csel-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.csel.open .csel-trigger{border-color:var(--accent)}
+.csel-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.csel-caret{flex-shrink:0;width:14px;height:14px;color:var(--dim);transition:transform .15s}
+.csel.open .csel-caret{transform:rotate(180deg)}
+.csel-pop{
+  position:fixed;z-index:10050;display:none;
+  background:#1b1b26;border:1px solid var(--border);border-radius:12px;
+  box-shadow:0 16px 48px rgba(0,0,0,.55);padding:6px;
+}
+.csel-pop.open{display:flex;flex-direction:column}
+.csel-search{
+  width:100%;background:rgba(255,255,255,.06);border:1px solid var(--border);
+  color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;outline:none;margin-bottom:6px;
+}
+.csel-search:focus{border-color:var(--accent)}
+.csel-list{overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:1px}
+.csel-group{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;padding:8px 10px 3px;font-weight:600}
+.csel-opt{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 10px;border-radius:8px;font-size:13px;color:var(--text);cursor:pointer;
+  white-space:nowrap;overflow:hidden;
+}
+.csel-opt:hover,.csel-opt.active{background:rgba(255,255,255,.08)}
+.csel-opt.selected{background:rgba(139,92,246,.28);color:#fff;font-weight:600}
+.csel-opt .csel-opt-label{overflow:hidden;text-overflow:ellipsis}
+.csel-opt .csel-check{flex-shrink:0;width:14px;height:14px;opacity:0;color:var(--accent)}
+.csel-opt.selected .csel-check{opacity:1}
+.csel-empty{padding:16px;text-align:center;color:var(--dim);font-size:12px}
+.top-bar .csel-trigger{padding:4px 8px;font-size:12px;border-radius:10px;min-height:28px}
 .hint{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5}
 .progress-wrap{margin:12px 0}
 .progress-bar{height:6px;background:#e5e5e5;border-radius:3px;overflow:hidden;cursor:pointer}
@@ -1252,6 +1293,203 @@ const SoundfontLoader = {
   }
 };
 SoundfontLoader.init();
+
+/* ============================================================
+ * 自定义下拉（替代原生 select）
+ * 原生 <option> 在桌面端由系统绘制，深色主题下常出现白底白字。
+ * 这里保留原生 select 作为数据源（.value/.selectedIndex/.options/.innerHTML 全部照常可用），
+ * 仅在其旁渲染一套可完全自定义样式的弹层列表，双向同步。
+ * ========================================================== */
+const _cselCloses = [];
+function closeAllCustomSelects(){ _cselCloses.slice().forEach(fn => { try{ fn(); }catch(e){} }); }
+function initCustomSelect(select, opts){
+  if(!select) return null;
+  opts = opts || {};
+  const searchable = opts.search !== false;
+  select.style.display = 'none';
+  select.setAttribute('aria-hidden', 'true');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'csel';
+  if(select.style.flex) wrap.style.flex = select.style.flex;
+  wrap.innerHTML =
+    '<button type="button" class="csel-trigger" aria-haspopup="listbox" aria-expanded="false">' +
+      '<span class="csel-label"></span>' +
+      '<svg class="csel-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>' +
+    '</button>' +
+    '<div class="csel-pop" role="listbox">' +
+      (searchable ? '<input class="csel-search" type="text" placeholder="搜索…" autocomplete="off">' : '') +
+      '<div class="csel-list"></div>' +
+    '</div>';
+  select.parentNode.insertBefore(wrap, select.nextSibling);
+
+  const trigger = wrap.querySelector('.csel-trigger');
+  const labelEl = wrap.querySelector('.csel-label');
+  const pop = wrap.querySelector('.csel-pop');
+  const list = wrap.querySelector('.csel-list');
+  const search = wrap.querySelector('.csel-search');
+  // 弹层挂到 body：避免移动端抽屉的 transform 使 fixed 相对面板定位、以及 overflow 裁剪
+  document.body.appendChild(pop);
+  let activeIndex = -1;
+
+  function currentOption(){
+    return select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null;
+  }
+  function syncLabel(){
+    const o = currentOption();
+    labelEl.textContent = o ? o.textContent : (opts.placeholder || '请选择');
+    labelEl.title = labelEl.textContent;
+  }
+  function makeOpt(o){
+    const d = document.createElement('div');
+    d.className = 'csel-opt' + (o.selected ? ' selected' : '');
+    d.setAttribute('role', 'option');
+    d.setAttribute('aria-selected', o.selected ? 'true' : 'false');
+    const t = document.createElement('span');
+    t.className = 'csel-opt-label';
+    t.textContent = o.textContent;
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    c.setAttribute('class', 'csel-check');
+    c.setAttribute('viewBox', '0 0 24 24');
+    c.setAttribute('fill', 'none');
+    c.setAttribute('stroke', 'currentColor');
+    c.setAttribute('stroke-width', '3');
+    c.setAttribute('stroke-linecap', 'round');
+    c.setAttribute('stroke-linejoin', 'round');
+    c.innerHTML = '<polyline points="20 6 9 17 4 12"/>';
+    d.appendChild(t); d.appendChild(c);
+    d.addEventListener('click', function(){ choose(o); });
+    return d;
+  }
+  function buildList(){
+    const q = (search && search.value ? search.value : '').trim().toLowerCase();
+    list.textContent = '';
+    let any = false;
+    Array.prototype.forEach.call(select.children, function(node){
+      if(node.tagName === 'OPTGROUP'){
+        const items = Array.prototype.filter.call(node.children, function(o){
+          return !q || o.textContent.toLowerCase().indexOf(q) >= 0;
+        });
+        if(!items.length) return;
+        any = true;
+        const g = document.createElement('div');
+        g.className = 'csel-group';
+        g.textContent = node.label || '';
+        list.appendChild(g);
+        items.forEach(function(o){ list.appendChild(makeOpt(o)); });
+      } else if(node.tagName === 'OPTION'){
+        if(q && node.textContent.toLowerCase().indexOf(q) < 0) return;
+        any = true;
+        list.appendChild(makeOpt(node));
+      }
+    });
+    if(!any){
+      const e = document.createElement('div');
+      e.className = 'csel-empty';
+      e.textContent = '无匹配项';
+      list.appendChild(e);
+    }
+    activeIndex = -1;
+  }
+  function choose(o){
+    select.value = o.value;
+    syncLabel();
+    close();
+    select.dispatchEvent(new Event('change', {bubbles: true}));
+  }
+  function position(){
+    const r = trigger.getBoundingClientRect();
+    const gap = 4;
+    const spaceBelow = window.innerHeight - r.bottom - gap - 8;
+    const spaceAbove = r.top - gap - 8;
+    const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+    pop.style.left = r.left + 'px';
+    pop.style.width = r.width + 'px';
+    pop.style.maxHeight = Math.max(160, Math.min(420, openUp ? spaceAbove : spaceBelow)) + 'px';
+    if(openUp){ pop.style.top = 'auto'; pop.style.bottom = (window.innerHeight - r.top + gap) + 'px'; }
+    else { pop.style.bottom = 'auto'; pop.style.top = (r.bottom + gap) + 'px'; }
+  }
+  function onDocDown(e){ if(!wrap.contains(e.target) && !pop.contains(e.target)) close(); }
+  function open(){
+    closeAllCustomSelects();
+    if(search) search.value = '';
+    buildList();
+    wrap.classList.add('open');
+    pop.classList.add('open');
+    trigger.setAttribute('aria-expanded', 'true');
+    position();
+    if(search) setTimeout(function(){ try{ search.focus(); }catch(e){} }, 0);
+    document.addEventListener('pointerdown', onDocDown, true);
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+  }
+  function close(){
+    if(!wrap.classList.contains('open')) return;
+    wrap.classList.remove('open');
+    pop.classList.remove('open');
+    trigger.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', onDocDown, true);
+    window.removeEventListener('resize', position);
+    window.removeEventListener('scroll', position, true);
+  }
+  function moveActive(delta){
+    const items = Array.prototype.slice.call(list.querySelectorAll('.csel-opt'));
+    if(!items.length) return;
+    activeIndex = (activeIndex + delta + items.length) % items.length;
+    items.forEach(function(el, i){ el.classList.toggle('active', i === activeIndex); });
+    try{ items[activeIndex].scrollIntoView({block: 'nearest'}); }catch(e){}
+  }
+  trigger.addEventListener('click', function(e){
+    e.stopPropagation();
+    if(wrap.classList.contains('open')) close(); else open();
+  });
+  trigger.addEventListener('keydown', function(e){
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      if(!wrap.classList.contains('open')) open();
+      else moveActive(e.key === 'ArrowDown' ? 1 : -1);
+    } else if(e.key === 'Enter' || e.key === ' '){
+      e.preventDefault();
+      if(wrap.classList.contains('open')) close(); else open();
+    } else if(e.key === 'Escape'){ close(); }
+  });
+  if(search){
+    search.addEventListener('input', function(){ buildList(); });
+    search.addEventListener('keydown', function(e){
+      if(e.key === 'Escape'){ close(); trigger.focus(); }
+      else if(e.key === 'Enter'){ const items = list.querySelectorAll('.csel-opt'); if(activeIndex >= 0 && items[activeIndex]) items[activeIndex].click(); }
+      else if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){ e.preventDefault(); moveActive(e.key === 'ArrowDown' ? 1 : -1); }
+    });
+  }
+
+  // 双向同步：程序修改 value / selectedIndex / 子节点时刷新显示
+  try{
+    const valDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+    const idxDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'selectedIndex');
+    if(valDesc && idxDesc){
+      Object.defineProperty(select, 'value', {
+        configurable: true,
+        get(){ return valDesc.get.call(this); },
+        set(v){ valDesc.set.call(this, v); syncLabel(); if(wrap.classList.contains('open')) buildList(); }
+      });
+      Object.defineProperty(select, 'selectedIndex', {
+        configurable: true,
+        get(){ return idxDesc.get.call(this); },
+        set(v){ idxDesc.set.call(this, v); syncLabel(); if(wrap.classList.contains('open')) buildList(); }
+      });
+    }
+  }catch(e){ console.warn('[AudioDebug] 自定义下拉属性同步初始化失败', e); }
+  new MutationObserver(function(){ syncLabel(); if(wrap.classList.contains('open')) buildList(); })
+    .observe(select, {childList: true, subtree: true});
+
+  _cselCloses.push(close);
+  syncLabel();
+  return {refresh: function(){ syncLabel(); buildList(); }, element: wrap};
+}
+try{
+  initCustomSelect(document.getElementById('timbreSel'), {search: true});
+  initCustomSelect(document.getElementById('songSel'), {search: true});
+}catch(e){ console.warn('[AudioDebug] 自定义下拉初始化失败', e); }
 
 async function onTimbreChange(){
   const sel = document.getElementById('timbreSel');
