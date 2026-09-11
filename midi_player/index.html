@@ -159,6 +159,15 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .dbg-off .dbg-off-hint{display:block}
 .dbg-off-hint{display:none;font-size:11px;color:var(--dim);padding:6px 2px}
 
+/* 滑动开关（替代勾选框） */
+.switch{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--dim);user-select:none}
+.switch input{position:absolute;opacity:0;width:0;height:0}
+.switch .track{position:relative;width:34px;height:18px;border-radius:9px;background:#444;transition:background .15s;flex-shrink:0}
+.switch .knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}
+.switch input:checked + .track{background:var(--accent)}
+.switch input:checked + .track .knob{transform:translateX(16px)}
+.switch input:focus-visible + .track{outline:2px solid var(--accent);outline-offset:2px}
+
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--text);font-size:13px;cursor:pointer;transition:all .15s;min-height:40px}
 .btn:hover{background:rgba(255,255,255,.08)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
@@ -376,9 +385,9 @@ select:focus{border-color:var(--accent)}
       <div class="dbg-section" id="dbgSection">
         <h2 style="margin-top:0">调试</h2>
         <div class="dbg-toolbar">
-          <label><input id="dbgEnabled" type="checkbox" checked onchange="onDebugEnabledChange()" style="accent-color:var(--accent)">启用调试</label>
-          <label title="面板透明度">透明 <input id="panelOpacity" type="range" min="0.1" max="1" step="0.05" value="0.35" oninput="applyPanelAppearance()"></label>
-          <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="30" oninput="applyPanelAppearance()"></label>
+          <label class="switch"><input id="dbgEnabled" type="checkbox" checked onchange="onDebugEnabledChange()"><span class="track"><span class="knob"></span></span>启用调试</label>
+          <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="100" oninput="applyPanelAppearance()"></label>
+          <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="25" oninput="applyPanelAppearance()"></label>
         </div>
         <div class="dbg-off-hint">调试已关闭，无日志采集与监控。</div>
         <div class="dbg-body">
@@ -388,8 +397,9 @@ select:focus{border-color:var(--accent)}
             <button onclick="clearDebugTerminal()">clear</button>
             <button onclick="scrollDebugTop()" title="顶部">↑</button>
             <button onclick="scrollDebugBottom()" title="底部">↓</button>
-            <label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--dim);cursor:pointer;margin-left:auto">
-              <input id="dbgAutoOpen" type="checkbox" checked onchange="onDbgAutoOpenChange()" style="accent-color:var(--accent)">降级自动展开
+            <label class="switch" style="margin-left:auto">
+              <input id="dbgAutoOpen" type="checkbox" checked onchange="onDbgAutoOpenChange()">
+              <span class="track"><span class="knob"></span></span>降级自动展开
             </label>
           </div>
           <div id="debugTerminalContent" class="dbg-log"></div>
@@ -548,21 +558,22 @@ function onDebugEnabledChange(){
   if(debugEnabled) console.log('[AudioDebug][INFO] 调试已开启');
 }
 
-// 菜单面板透明度 / 背景模糊（沿用原调试面板的调节方式）
+// 菜单面板透明度 / 背景模糊：透明滑块 100 = 全透明（alpha 0），0 = 全黑
 function applyPanelAppearance(){
   const el = document.getElementById('controlPanel');
   if(!el) return;
-  const op = document.getElementById('panelOpacity');
+  const tp = document.getElementById('panelTransparency');
   const bl = document.getElementById('panelBlur');
-  const alpha = op ? parseFloat(op.value) : 0.35;
-  const blurPct = bl ? parseFloat(bl.value) : 30; // 0-100%
-  const blurPx = blurPct * 0.2;                   // 100% -> 20px
+  const transparency = tp ? parseFloat(tp.value) : 100; // 0-100
+  const alpha = Math.max(0, Math.min(1, (100 - transparency) / 100));
+  const blurPct = bl ? parseFloat(bl.value) : 25;       // 0-100%
+  const blurPx = blurPct * 0.2;                          // 100% -> 20px
   el.style.background = 'rgba(0,0,0,' + alpha + ')';
   const bf = blurPx > 0 ? ('blur(' + blurPx.toFixed(1) + 'px)') : 'none';
   el.style.backdropFilter = bf;
   el.style.webkitBackdropFilter = bf;
   try{
-    localStorage.setItem('panelOpacity', String(alpha));
+    localStorage.setItem('panelTransparency', String(transparency));
     localStorage.setItem('panelBlur', String(blurPct));
   }catch(e){}
 }
@@ -653,9 +664,9 @@ function downloadDebugLog(){
   try{
     const d = localStorage.getItem('debugEnabled');
     if(d !== null) debugEnabled = d === '1';
-    const a = localStorage.getItem('panelOpacity');
+    const t = localStorage.getItem('panelTransparency');
     const b = localStorage.getItem('panelBlur');
-    if(a !== null){ const el = document.getElementById('panelOpacity'); if(el) el.value = a; }
+    if(t !== null){ const el = document.getElementById('panelTransparency'); if(el) el.value = t; }
     if(b !== null){ const el = document.getElementById('panelBlur'); if(el) el.value = b; }
     const s = localStorage.getItem('dbgAutoOpen');
     if(s !== null) dbgAutoOpen = s === '1';
