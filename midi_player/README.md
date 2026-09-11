@@ -250,7 +250,6 @@ MIDI不载声响，是二进制的乐思底稿。
 | `round-color-lens` | Material Symbols（`ic`） | 配色面板展开/收起 | 控制行「配色」 |
 | `color-bucket` | GG | 自定义配色 | 配色「自定义」 |
 | `debug` | Carbon（32 网格） | 调试面板 | 控制行「调试」（配色左侧） |
-| `lock` / `unlock` | Feather | 锁定 / 解锁钢琴尺寸 | 绘制区左右常驻锁按钮、全屏锁按钮 |
 | `maximize-linear` / `minimize-linear` | Solar | 全屏 / 退出全屏 | 控制行「全屏」（最右） |
 
 ## 4.4 代码写法
@@ -383,15 +382,20 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **欣赏 / 演奏模式**：滑动开关，默认「欣赏模式」——谱面音符自动发声；关闭为「演奏模式」——音符只下落、需用户点击琴键发声。
 - **降级自动展开**：开启时，性能降级会展开**调试面板**并滚到日志底部；恢复时不自动收起。
 
-## 9.8 钢琴键盘交互与手势
+## 9.8 钢琴键盘交互
 
 - **点击 / 触摸琴键发声**：`#visualCanvas` 上的 Pointer Events 命中键盘区（黑键优先）→ `SoundfontLoader.playNote(midi, 0.9, 0.7)`；支持多指（`_keyPointers` 按 pointerId 记录）。
+- **抬起即停 + 高亮即时消失**：`pointerup` / `pointercancel` 时调用 `SoundfontLoader.stopNote(midi)` 立即停止该键 voice（同一键仍被其它手指按住则不停），紫色高亮随 `activeSources`/`activeSynth` 清除，不再残留到固定 0.7s 时长结束。
 - **两种模式都可用**：欣赏模式下自动发声的同时，用户敲击琴键可叠加额外声音；演奏模式则完全依赖用户敲击。
 - **双击渲染区播放 / 暂停**：非钢琴键的渲染区域（下落音符区）内，300ms 内的第二次按下（鼠标双击或触摸双触）等价于播放/暂停（`togglePlay()`）；命中后计数归零，避免三连击重复触发。琴键区仍只负责发声。
-- **拖动上边缘调高度**：按住钢琴上边缘（`keyTop` 附近 ±16px 命中带）上下拖动，实时改变 `pianoHeightPct`（5%–50%，与滑块共享 `_setPianoHeightPct`）。
-- **两指捏合缩放宽度**：双指捏合缩放 `pianoWidthScale`（1x–5x），以捏合中点为锚点并同步平移 `viewOffsetX`（`_clampViewOffset` 限制不越界）。缩放后 `getKeyLayout` 重算键宽，**渲染区与音符轨道同步变化**；`drawScene` 跳过水平不可见的音符（`key.x+w<0 || key.x>C.w`）以省性能，但**播放时间轴不受影响**。
-- **锁定手势**：`pianoLocked` **默认锁定**（左上/左下两个锁按钮切换同一个总锁，见 9.11）；锁定时上边缘拖动与捏合一律禁用，落点按普通琴键处理（即「一律视为敲琴键」）。切换时弹出 Toast：解锁「钢琴尺寸已解锁」、锁定「钢琴尺寸已锁定」。
-- **坐标换算**：`_canvasPointToKey` / `_canvasPos` 用 `getBoundingClientRect` 把客户端坐标映射到画布像素，再按 `keyAreaH` 判定是否落在键盘区。
+- **坐标换算**：`_canvasPointToKey` 用 `getBoundingClientRect` 把客户端坐标映射到画布像素，再按 `keyAreaH` 判定是否落在键盘区。
+- **已移除**：上边缘拖动调高度、两指捏合缩放、锁定按钮 / 总锁——改为菜单面板滑块（见 9.7）。
+
+## 9.8.1 钢琴宽度缩放与版型
+
+- 菜单面板新增两个滑块：**宽度缩放** `pianoWidthSlider`（1.0×–4.0×）与**水平偏移** `pianoOffsetSlider`（0%–100%，0 最左、100 最右），分别控制 `pianoWidthScale` 与 `viewOffsetX`；缩放后 `getKeyLayout` 重算键宽，渲染区与音符轨道同步，`drawScene` 跳过水平不可见音符（`key.x+w<0 || key.x>C.w`）省性能，播放不受影响。
+- **常见钢琴版型**：全尺寸 **88 键**（A0–C8）最多，最小常见为 **25 键**；中间档位 **76 / 61 / 49 / 37 键**。提供预设按钮 `setKeyboardPreset(N)`，按 `88/N` 设缩放并居中（偏移 50%）。
+- 缩放上限 4× ≈ 显示约 22 键，覆盖 25 键版型；如需更细可再调偏移滑块平移可见音域。
 
 ## 9.9 配色面板（独立浮层）
 
@@ -408,12 +412,11 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ## 9.11 全屏悬浮控件
 
-- **锁定按钮（普通 + 全屏常驻）**：`.lock-overlay` 内两个 40px 圆形锁按钮，位于绘制区左右、`top:40%`（靠近顶部 2/5），**不可拖动**；默认锁定，图标 `feather:lock` / `feather:unlock` 随状态切换，点击弹 Toast。两者切换**同一个** `pianoLocked` 总锁。
-- **全屏按钮**：`.fs-overlay` 仅全屏显示，含**设置**（左上，`fsSettingsBtn`）、**退出全屏**（右上，`fsExitBtn`）两个 42px 紫色圆形按钮。
-- **点击即暂停（仅全屏）**：全屏时任一悬浮按钮 click 先 `_fsPauseIfPlaying()`（正在播放则 `pausePlay()`），再执行自身动作；普通模式下点锁按钮不暂停。
-- **2s 淡出 + 吸附**：仅**点击悬浮按钮**会重置 2s 计时（点琴键 / 音符区不算）；超时后所有悬浮按钮 `opacity:.1`，锁定按钮同时滑到左右边缘、只露一半（`.faded` 类）。
+- **按钮**：`.fs-overlay` 仅全屏显示，含**设置**（左上，`fsSettingsBtn`）、**退出全屏**（右上，`fsExitBtn`）两个 42px 紫色圆形按钮。
+- **点击即暂停**：全屏时任一悬浮按钮 click 先 `_fsPauseIfPlaying()`（正在播放则 `pausePlay()`），再执行自身动作。
+- **2s 淡出**：仅**点击悬浮按钮**会重置 2s 计时（点琴键 / 音符区不算）；超时后悬浮按钮 `opacity:.1`（`.faded` 类）。
 - **菜单可用**：由于浏览器全屏只渲染全屏元素，进入全屏时把 `.control-panel` 与 `.overlay-mask` 临时移入 `.visual-panel`（`_syncFsLayout`），退出时移回原位，从而左上角设置按钮能在全屏内打开菜单。
-- **退出不解锁**：`pianoLocked` 保持用户选择（锁按钮常驻，随时可解），不再在退出全屏时强制复位。
+- **已移除**：锁定悬浮按钮与总锁（连同拖动 / 捏合手势）。
 
 ## 9.12 调试面板（独立浮层）
 
@@ -425,6 +428,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.13 选谱与软键盘
 
 - 自定义下拉（音色 / 谱面）弹层 `.csel-pop` 为 `position:fixed` 且挂到 `body`，直接遮挡渲染区；其背景/模糊同样纳入统一面板外观（`_panelTargets`）。
+- **不自动聚焦搜索框**：`open()` 不再调用 `search.focus()`，点击音色 / 谱面列表不会唤醒输入法；用户可手动点搜索框。
 - `viewport` 设 `interactive-widget=overlays-content`，并在 `visualViewport.resize` 中判断键盘高度差（`height < innerHeight-120`）时**跳过画布重算**，使软键盘 / 选谱弹层弹出时渲染区高度不变、由弹层直接遮挡。
 
 # 十、部署、流量与缓存策略（GitHub Pages）
@@ -759,3 +763,4 @@ midi_player/
 | 双击播放 | 双击（双触）非钢琴键的渲染区等价于播放/暂停 | `8d38638` |
 | 手势与全屏 | 上边缘拖动调钢琴高度（5%–50%）、两指捏合缩放钢琴宽度（1x–5x，渲染区同步、不可见音符跳过渲染、播放不受影响）；全屏新增设置/退出/双锁定悬浮按钮（总锁，锁定时手势视为敲键），2s 淡出、点击即暂停，菜单面板移入全屏元素 | `9f30fd7` |
 | 浮动控件重构 | 锁定按钮普通+全屏常驻（左右、顶部2/5、默认锁定、黑底50%、Toast）；所有悬浮按钮 2s 未点击淡到 10%、锁按钮吸附边缘露一半，仅点按钮才重置；调试面板独立（`carbon:debug` 按钮，配色左侧）；菜单/调试/配色/选谱/管理面板共享透明度；配色面板独立浮层、按钮 32px、播放中 2s 自动收起；软键盘/配色展开不改变渲染区高度 | `244c1dc` |
+| 手势改滑块 | 移除上边缘拖动/两指捏合/锁定交互；菜单新增宽度缩放（1–4×）与水平偏移滑块及 88/76/61/49/37/25 键预设；抬起琴键即 `stopNote` 清除高亮；点音色/谱面列表不再自动聚焦搜索框 | `95c5873` |
