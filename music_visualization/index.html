@@ -1,0 +1,1499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>音频可视化</title>
+<style>
+:root{
+  --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --line:#30363d;
+  --text:#e6edf3; --muted:#8b949e; --accent:#ff3f58; --accent2:#c822ff;
+  --hover:#21262d; --radius:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;font-size:13px;display:flex;flex-direction:column}
+
+.topbar{height:48px;display:flex;align-items:center;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);gap:12px;flex-shrink:0}
+.topbar .logo{font-weight:700;font-size:12px;background:linear-gradient(120deg,#58a6ff,#c822ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;flex-shrink:0;line-height:1.15;text-align:center;display:flex;flex-direction:column;justify-content:center}
+.topbar .center-area{flex:1;display:flex;justify-content:center;align-items:center;min-width:0}
+.topbar .upload-zone{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 16px;cursor:pointer;transition:all .2s;max-width:500px;width:100%}
+.topbar .upload-zone:hover{border-color:var(--accent);background:var(--hover)}
+.topbar .upload-zone.has-audio{background:linear-gradient(120deg,rgba(255,63,88,.08),rgba(200,34,255,.08));border-color:rgba(255,63,88,.3)}
+.topbar .upload-zone .uz-filename{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left}
+.topbar .upload-zone .uz-hint{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);flex-shrink:0;white-space:nowrap}
+.topbar .upload-zone .uz-hint svg{width:14px;height:14px;fill:currentColor}
+.topbar .upload-zone .uz-icon{font-size:18px;flex-shrink:0}
+.topbar .upload-zone .uz-text{font-size:13px;color:var(--muted)}
+.topbar select{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;outline:none;flex-shrink:0}
+.topbar select:hover{border-color:var(--accent)}
+
+.main{flex:1;display:flex;overflow:hidden}
+.iconbar{display:none;background:var(--panel);border-right:1px solid var(--line);flex-direction:column;align-items:center;padding:8px 0;gap:4px;flex-shrink:0}
+.iconbar .ibtn{width:44px;height:44px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--muted);transition:all .15s;border:none;background:transparent}
+.iconbar .ibtn:hover{background:var(--hover);color:var(--text)}
+.iconbar .ibtn.active{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+.iconbar .ibtn svg{width:20px;height:20px}
+.iconbar .ibtn span{font-size:9px}
+
+.library{width:260px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.lib-search{padding:10px;border-bottom:1px solid var(--line)}
+.lib-search input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;outline:none}
+.lib-search input:focus{border-color:var(--accent)}
+.lib-body{flex:1;overflow-y:auto;padding:8px}
+.lib-cat{margin-bottom:14px}
+.lib-cat-title{display:flex;justify-content:space-between;align-items:center;padding:4px 6px;margin-bottom:6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.lib-cat-title .count{color:var(--accent)}
+.lib-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.lib-item{aspect-ratio:1.4;background:var(--panel2);border:1px solid var(--line);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;transition:all .15s;position:relative}
+.lib-item:hover{border-color:var(--accent);transform:translateY(-1px)}
+.lib-item.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.lib-item svg{width:70%;height:70%}
+.lib-item .label{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:9px;color:var(--muted);background:linear-gradient(transparent,rgba(0,0,0,.7));padding:4px 2px 2px}
+
+.canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.canvas-toolbar{height:40px;display:flex;align-items:center;padding:0 12px;gap:8px;border-bottom:1px solid var(--line);background:var(--panel);flex-shrink:0}
+.canvas-toolbar .tool-btn{background:transparent;border:1px solid transparent;color:var(--muted);padding:4px 8px;border-radius:5px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px}
+.canvas-toolbar .tool-btn:hover{background:var(--hover);color:var(--text)}
+.canvas-toolbar .tool-btn.active{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.canvas-stage{flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:0;background:var(--panel)}
+.stage-wrap{position:absolute;box-shadow:none;border-radius:0;overflow:hidden}
+#mainCanvas{display:block;cursor:default;touch-action:none}
+
+.player-bar{height:56px;background:var(--panel);border-top:1px solid var(--line);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0}
+.player-bar .play-btn{width:36px;height:36px;border-radius:50%;background:linear-gradient(120deg,var(--accent),var(--accent2));border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.player-bar .play-btn:disabled{opacity:.4;cursor:not-allowed}
+.player-bar .time{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:90px;text-align:center;flex-shrink:0}
+.seek-bar{flex:1;height:6px;background:var(--panel2);border-radius:3px;cursor:pointer;position:relative;overflow:hidden}
+.seek-bar .fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;width:0%}
+.player-bar .vol{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.player-bar .vol input{width:70px;accent-color:var(--accent)}
+.player-bar .loop-btn{background:transparent;border:1px solid var(--line);color:var(--muted);padding:4px 8px;border-radius:5px;cursor:pointer;font-size:11px;flex-shrink:0}
+.player-bar .loop-btn.active{color:var(--accent);border-color:var(--accent)}
+
+.props{width:310px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.props-header{padding:12px 14px;border-bottom:1px solid var(--line);font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px}
+.props-header .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.props-body{flex:1;overflow-y:auto}
+.collapsible{border-bottom:1px solid var(--line)}
+.collapsible .c-head{padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;color:var(--text);user-select:none}
+.collapsible .c-head:hover{background:var(--hover)}
+.collapsible .c-head .arrow{transition:transform .2s;color:var(--muted)}
+.collapsible.open .c-head .arrow{transform:rotate(90deg)}
+.collapsible .c-body{display:none;padding:0 14px 12px}
+.collapsible.open .c-body{display:block}
+
+.field{margin-bottom:10px}
+.field:last-child{margin-bottom:0}
+.field label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+.field input[type=text],.field input[type=number],.field select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:6px 8px;border-radius:5px;font-size:12px;outline:none}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.field input[type=range]{width:100%;accent-color:var(--accent);height:4px}
+.field .range-row{display:flex;align-items:center;gap:8px}
+.field .range-row input[type=range]{flex:1}
+.field .range-row .val{font-size:11px;color:var(--muted);min-width:40px;text-align:right;font-variant-numeric:tabular-nums}
+.field .color-row{display:flex;gap:6px;align-items:center}
+.field input[type=color]{width:30px;height:26px;border:1px solid var(--line);border-radius:4px;background:transparent;cursor:pointer;padding:1px}
+.field .toggle-row{display:flex;justify-content:space-between;align-items:center}
+.field .toggle{position:relative;width:36px;height:20px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:all .2s}
+.field .toggle.on{background:var(--accent);border-color:var(--accent)}
+.field .toggle::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .2s}
+.field .toggle.on::after{transform:translateX(16px)}
+.field .seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.field .seg button{flex:1;background:transparent;border:none;color:var(--muted);padding:5px;font-size:11px;cursor:pointer;transition:all .15s}
+.field .seg button.active{background:color-mix(in srgb,var(--accent) 25%,transparent);color:#fff}
+.empty-props{padding:40px 20px;text-align:center;color:var(--muted);font-size:12px}
+.empty-props svg{width:40px;height:40px;margin-bottom:10px;opacity:.4}
+
+/* 移动端适配 */
+@media(max-width:768px){
+  html,body{overflow:hidden}
+  .topbar{height:40px;padding:0 8px;gap:6px}
+  .topbar .logo{font-size:12px}
+  .topbar .upload-zone{padding:4px 10px}
+  .topbar .upload-zone .uz-filename{font-size:11px}
+  .topbar .upload-zone.has-audio .uz-icon{display:none}
+  .topbar .upload-zone.has-audio .uz-hint span{display:none}
+  .topbar .upload-zone.has-audio .uz-hint svg{width:14px;height:14px}
+  .topbar select{font-size:10px;padding:3px 5px}
+   .main{flex-direction:column;height:calc(100vh - 40px);position:relative}
+  .iconbar{display:flex;position:relative;width:100%;flex-direction:row;border-right:none;border-bottom:1px solid var(--line);padding:0;z-index:10;background:var(--panel);order:-1}
+  .iconbar .ibtn{flex:1;height:40px;flex-direction:row;padding:0;gap:3px;justify-content:center}
+  .iconbar .ibtn span{font-size:9px}
+  .iconbar .ibtn svg{width:16px;height:16px}
+  .library{position:fixed;bottom:0;left:0;right:0;z-index:99;width:100%;max-height:0;border-right:none;border-top:1px solid var(--line);transition:max-height .3s ease;overflow:hidden;background:var(--panel)}
+  .library.mobile-open{max-height:50vh}
+  .canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .canvas-toolbar{height:32px;padding:0 6px;flex-shrink:0}
+  .canvas-toolbar .tool-btn{padding:2px 5px;font-size:10px}
+  .canvas-stage{flex:1;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:0;background:var(--panel)}
+  .stage-wrap{position:relative!important;width:100%!important;height:auto!important}
+  .stage-wrap canvas{width:100%!important;height:auto!important}
+  .player-bar{height:40px;padding:0 6px;gap:6px}
+  .player-bar .play-btn{width:30px;height:30px;font-size:12px}
+  .player-bar .time{font-size:9px;min-width:60px}
+  .player-bar .seek-bar{height:4px}
+  .player-bar .vol{display:none}
+  .player-bar .loop-btn{font-size:9px;padding:2px 5px}
+  .props{position:fixed;bottom:0;left:0;right:0;z-index:100;background:var(--panel);max-height:0;border-top:1px solid var(--line);transition:max-height .3s ease;overflow:hidden}
+  .props.mobile-open{max-height:50vh}
+  .props-header{padding:12px;font-size:13px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .props-body{overflow-y:auto;padding:10px;max-height:calc(50vh - 50px)}
+  .props .close-btn{margin-left:auto;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px}
+}
+
+/* 双端点频率滑条 */
+.dual-range{position:relative;height:36px;display:flex;align-items:center}
+.dual-range .track{position:absolute;left:0;right:0;height:4px;background:var(--panel2);border-radius:2px}
+.dual-range .track-fill{position:absolute;height:4px;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px}
+.dual-range input[type=range]{position:absolute;width:100%;pointer-events:none;-webkit-appearance:none;appearance:none;background:transparent;height:4px;margin:0}
+.dual-range input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid var(--accent);cursor:pointer;pointer-events:auto;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.dual-range input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--accent);cursor:pointer;pointer-events:auto}
+.dual-range .zindex-min{z-index:3}
+.dual-range .zindex-max{z-index:4}
+.dual-inputs{display:flex;gap:6px;margin-top:4px}
+.dual-inputs .num-input{flex:1;display:flex;align-items:center;gap:4px}
+.dual-inputs .num-input input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:4px 6px;border-radius:4px;font-size:11px;outline:none;text-align:right}
+.dual-inputs .num-input input:focus{border-color:var(--accent)}
+.dual-inputs .num-input span{font-size:10px;color:var(--muted);white-space:nowrap}
+
+/* 多色渐变编辑器 */
+.color-list{display:flex;flex-direction:column;gap:4px}
+.color-list-item{display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--panel2);border:1px solid var(--line);border-radius:5px}
+.color-list-item input[type=color]{width:26px;height:22px;border:1px solid var(--line);border-radius:3px;background:transparent;cursor:pointer;padding:0}
+.color-list-item .color-hex{flex:1;font-size:11px;color:var(--muted);font-family:monospace}
+.color-list-item .arrow-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:12px;border-radius:3px}
+.color-list-item .arrow-btn:hover{background:var(--hover);color:var(--text)}
+.color-list-item .del-btn{background:transparent;border:none;color:#ff6b6b;cursor:pointer;padding:2px 4px;font-size:12px;border-radius:3px}
+.color-list-item .del-btn:hover{background:rgba(255,107,107,.15)}
+.color-add-btn{width:100%;background:var(--panel2);border:1px dashed var(--line);color:var(--muted);padding:6px;border-radius:5px;cursor:pointer;font-size:12px;margin-top:4px}
+.color-add-btn:hover{border-color:var(--accent);color:var(--accent)}
+.color-preview{height:14px;border-radius:3px;margin-bottom:6px;border:1px solid var(--line)}
+
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#484f58}
+#fileInput{display:none}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo"><span>Music</span><span>Visualizer</span></div>
+  <div class="center-area">
+    <div class="upload-zone" id="uploadZone">
+      <span class="uz-icon">🎵</span>
+      <span class="uz-filename" id="uploadText">点击上传音频文件</span>
+      <span class="uz-hint" id="uploadHint" style="display:none">
+        <svg viewBox="0 0 24 24"><path d="M9 16c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-5h2l-4-4-4 4h2v5zm-4 4h14c.55 0 1-.45 1-1v-1c0-.55-.45-1-1-1H5c-.55 0-1 .45-1 1v1c0 .55.45 1 1 1z"/></svg>
+        重新上传
+      </span>
+    </div>
+  </div>
+  <input type="file" id="fileInput" accept="audio/*">
+</div>
+
+<div class="main">
+  <div class="iconbar">
+    <button class="ibtn active" data-tool="elements" title="元素">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>元素</span>
+    </button>
+    <button class="ibtn" data-tool="background" title="背景">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      <span>背景</span>
+    </button>
+    <button class="ibtn" data-tool="props" title="属性">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      <span>属性</span>
+    </button>
+    <button class="ibtn" id="mobilePreview" title="收起面板">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      <span>收起面板</span>
+    </button>
+  </div>
+
+  <div class="library" id="library">
+    <div class="lib-body" id="libBody"></div>
+  </div>
+
+  <div class="canvas-area">
+    <div class="canvas-toolbar">
+      <button class="tool-btn" id="btnZoomOut">−</button>
+      <span id="zoomLabel" style="font-size:11px;color:var(--muted);min-width:40px;text-align:center">100%</span>
+      <button class="tool-btn" id="btnZoomIn">+</button>
+      <button class="tool-btn" id="btnFit">⛶ 适配</button>
+      <div style="flex:1"></div>
+      <select id="aspectSelect" title="画布比例/分辨率" style="background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:3px 8px;border-radius:5px;font-size:11px;cursor:pointer;outline:none">
+        <option value="16:9">16:9 · 1280×720</option>
+        <option value="9:16">9:16 · 720×1280</option>
+        <option value="1:1">1:1 · 1280×1280</option>
+        <option value="4:5">4:5 · 1024×1280</option>
+        <option value="4:3">4:3 · 1280×960</option>
+      </select>
+    </div>
+    <div class="canvas-stage" id="canvasStage">
+      <div class="stage-wrap" id="stageWrap">
+        <canvas id="mainCanvas" width="1280" height="720"></canvas>
+      </div>
+    </div>
+    <div class="player-bar">
+      <button class="play-btn" id="playBtn" disabled>▶</button>
+      <span class="time" id="timeDisplay">00:00 / 00:00</span>
+      <div class="seek-bar" id="seekBar"><div class="fill" id="seekFill"></div></div>
+      <div class="vol">
+        <span style="font-size:11px;color:var(--muted)">🔊</span>
+        <input type="range" id="volSlider" min="0" max="1" step="0.01" value="1">
+      </div>
+      <button class="loop-btn active" id="loopBtn">🔁 循环</button>
+    </div>
+  </div>
+
+  <div class="props">
+    <div class="props-header"><span class="dot"></span><span id="propsTitle">属性</span></div>
+    <div class="props-body" id="propsBody">
+      <div class="empty-props">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <div>从左侧选择或添加元素<br>点击画布上的元素编辑属性</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 静态资源缓存（示例音频等），版本化缓存名
+const AssetCache = {
+  cacheName: 'music-viz-assets-v1',
+  _abs(url){ return new URL(url, window.location.href).href; },
+  async fetch(url) {
+    const absUrl = this._abs(url);
+    try {
+      const cache = await caches.open(this.cacheName);
+      const cached = await cache.match(absUrl, {ignoreSearch: true});
+      if (cached) return cached.clone();
+      const resp = await fetch(url);
+      if (resp.ok) cache.put(absUrl, resp.clone());
+      return resp;
+    } catch(e) {
+      return fetch(url);
+    }
+  }
+};
+
+"use strict";
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+const stageWrap = document.getElementById('stageWrap');
+const canvasStage = document.getElementById('canvasStage');
+
+const CFG = {
+  canvas: { w:1280, h:720, aspect:'16:9', zoom:1, bgType:'solid', bgColor:'#000000',
+    gradColor1:'#00ced1', gradColor2:'#000000', gradStops:[0,25,50,75,100],
+    gradAngle:360, gradRadius:640, bgImage:'', bgBlur:0, bgDarken:0 },
+  elements: [], selectedId: null,
+  audio: null, audioCtx: null, analyser: null, freq: null, wave: null,
+  playing: false, loop: true, volume: 1, smoothing: 0.8,
+};
+window.__CFG = CFG;
+
+/* ============================================================
+   配置持久化（localStorage）
+   ============================================================ */
+const STORAGE_KEY = 'music-viz-config-v1';
+let _saveTimer = null;
+function scheduleSave(){
+  if(_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(saveConfig, 300);
+}
+function saveConfig(){
+  try{
+    const data = {
+      canvas: {...CFG.canvas, bgImage:''}, // object URL 无法跨会话，不保存
+      elements: CFG.elements.map(e=>({ id:e.id, type:e.type, params:e.params })),
+      volume: CFG.volume, loop: CFG.loop, smoothing: CFG.smoothing,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }catch(e){}
+}
+function loadConfig(){
+  let data;
+  try{ data = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); }catch(e){ return false; }
+  if(!data || !data.canvas) return false;
+  Object.assign(CFG.canvas, data.canvas, { bgImage:'' });
+  if(CFG.canvas.bgType==='image') CFG.canvas.bgType='solid'; // 图片无法恢复
+  if(typeof data.volume==='number') CFG.volume = data.volume;
+  if(typeof data.loop==='boolean') CFG.loop = data.loop;
+  if(typeof data.smoothing==='number') CFG.smoothing = data.smoothing;
+  if(Array.isArray(data.elements) && data.elements.length){
+    CFG.elements = data.elements.map(e=>({
+      id:e.id, type:e.type, params:{ ...defaultElementParams(e.type), ...e.params }, _env:null
+    }));
+    _eid = Math.max(...CFG.elements.map(e=>e.id), 0);
+    CFG.selectedId = CFG.elements[CFG.elements.length-1].id;
+  }
+  return true;
+}
+
+let _ac = null;
+function ensureCtx(){ if(!_ac || _ac.state==='closed') _ac = new (window.AudioContext||window.webkitAudioContext)(); return _ac; }
+
+/* ============================================================
+   样式定义
+   ============================================================ */
+const VISUAL_STYLES = [
+  {id:'bars',name:'频谱柱',cat:'visualizer'},{id:'bars-mirror',name:'镜像柱',cat:'visualizer'},
+  {id:'bars-3d',name:'3D柱',cat:'visualizer'},{id:'waveform-zigzag',name:'锯齿波',cat:'visualizer'},
+  {id:'circle-radial',name:'放射圆',cat:'visualizer'},{id:'circle-wave',name:'圆形波',cat:'visualizer'},
+  {id:'circle-pulse',name:'脉冲圆',cat:'visualizer'},{id:'circular-bars',name:'圆形柱',cat:'visualizer'},
+  {id:'spectrum-line',name:'频谱线',cat:'visualizer'},{id:'spectrum-area',name:'频谱面积',cat:'visualizer'},
+];
+
+function defaultElementParams(type){
+  const base = { x:50, y:50, w:80, h:30, opacity:1, rotation:0 };
+  // 可视化元素 — 含全部高级参数
+  return {...base, w:80, h:60, y:50,
+    // 颜色系统:多色数组
+    colorMode:'gradient', colors:['#ff0000','#0000ff','#00ff00'],
+    // 动画包络(attack/release)
+    useEnvelope:true, attack:50, release:300,
+    // 音频响应
+    gain:1.2, smoothing:0.8, barCount:64, lineWidth:3,
+    mirror:false, logScale:true, freqMin:20, freqMax:16000,
+    glow:false, glowBlur:12, invert:false, rounded:true,
+    innerRadius:25,
+  };
+}
+
+let _eid = 0;
+function addElement(type){
+  const el = { id:++_eid, type, params:defaultElementParams(type), _env:null };
+  el.params.x = 50;
+  el.params.y = 50;
+  CFG.elements.push(el);
+  CFG.selectedId = el.id;
+  scheduleSave();
+  renderLibrary(); renderProps();
+  const lib=document.getElementById('library');
+  const propsPanel=document.querySelector('.props');
+  lib.classList.remove('mobile-open');
+  propsPanel.classList.remove('mobile-open');
+  void propsPanel.offsetHeight;
+  propsPanel.classList.add('mobile-open');
+  document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
+  document.querySelector('.ibtn[data-tool="props"]')?.classList.add('active');
+  _lastTool='props';
+  document.getElementById('mobilePreview').classList.remove('active');
+  return el;
+}
+function getSelected(){ return CFG.elements.find(e=>e.id===CFG.selectedId); }
+function removeElement(id){
+  CFG.elements = CFG.elements.filter(e=>e.id!==id);
+  if(CFG.selectedId===id) CFG.selectedId = null;
+  scheduleSave();
+  renderProps();
+}
+
+/* ============================================================
+   颜色工具:多色渐变插值
+   ============================================================ */
+function hexToRgb(hex){
+  hex = hex.replace('#','');
+  if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  return { r:parseInt(hex.slice(0,2),16), g:parseInt(hex.slice(2,4),16), b:parseInt(hex.slice(4,6),16) };
+}
+function rgbToHex(r,g,b){
+  return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
+}
+function lerpColor(c1,c2,t){
+  const a=hexToRgb(c1), b=hexToRgb(c2);
+  return rgbToHex(a.r+(b.r-a.r)*t, a.g+(b.g-a.g)*t, a.b+(b.b-a.b)*t);
+}
+// 多色均匀梯度:colors 数组, t in [0,1]
+function multiColor(colors, t){
+  t = Math.max(0, Math.min(1, t));
+  if(!colors || colors.length===0) return '#ff3f58';
+  if(colors.length===1) return colors[0];
+  const seg = 1/(colors.length-1);
+  const idx = Math.min(colors.length-2, Math.floor(t/seg));
+  const localT = (t - idx*seg)/seg;
+  return lerpColor(colors[idx], colors[idx+1], localT);
+}
+// 渐变颜色查表：按颜色数组缓存 256 级 LUT，避免逐柱逐帧解析 hex
+const _gradCache = new Map();
+function gradientLUT(colors){
+  const key = colors.join(',');
+  let lut = _gradCache.get(key);
+  if(lut) return lut;
+  lut = new Array(256);
+  for(let i=0;i<256;i++) lut[i] = multiColor(colors, i/255);
+  if(_gradCache.size >= 32) _gradCache.clear();
+  _gradCache.set(key, lut);
+  return lut;
+}
+function elemColor(p, t){
+  if(p.colorMode==='solid') return p.colors[0] || '#ff3f58';
+  if(p.colorMode==='rainbow'){
+    // 基于播放进度而非墙钟时间：暂停时颜色随之冻结
+    const clock = CFG.audio ? CFG.audio.currentTime : 0;
+    return `hsl(${(t*300 + clock*30)%360},100%,60%)`;
+  }
+  const lut = gradientLUT(p.colors);
+  return lut[Math.max(0, Math.min(255, Math.round(t*255)))];
+}
+
+/* ============================================================
+   包络跟随器 (peak follower with attack/release)
+   cur: 当前包络值, target: 目标值(0-1), dt: 秒
+   attackMs/releaseMs: 时间常数
+   ============================================================ */
+function envStep(cur, target, dt, attackMs, releaseMs){
+  const atk = Math.max(0.001, attackMs/1000);
+  const rel = Math.max(0.001, releaseMs/1000);
+  const k = target > cur ? (1 - Math.exp(-dt/atk)) : (1 - Math.exp(-dt/rel));
+  return cur + (target - cur) * k;
+}
+
+/* ============================================================
+   频率数据获取(带包络跟随 + 频率范围过滤)
+   ============================================================ */
+function getFreqBars(p, el, n, dt){
+  if(!CFG.analyser) return new Array(n).fill(0);
+  const f = CFG.freq; // 每帧在 render() 中统一取样一次
+  const sr = CFG.audioCtx ? CFG.audioCtx.sampleRate : 44100;
+  const nyquist = sr/2;
+  const minBin = Math.max(0, Math.floor(p.freqMin/nyquist * f.length));
+  const maxBin = Math.min(f.length-1, Math.ceil(p.freqMax/nyquist * f.length));
+  const range = Math.max(1, maxBin - minBin);
+  // 初始化/调整包络数组
+  if(!el._env || el._env.length !== n) el._env = new Array(n).fill(0);
+  const out = [];
+  for(let i=0;i<n;i++){
+    let idx;
+    if(p.logScale){ idx = minBin + Math.floor(Math.pow(i/n, 1.5) * range); }
+    else { idx = minBin + Math.floor((i/n) * range); }
+    idx = Math.min(maxBin, Math.max(minBin, idx));
+    const target = Math.min(1, (f[idx]/255) * p.gain);
+    if(p.useEnvelope && dt > 0){
+      el._env[i] = envStep(el._env[i], target, dt, p.attack, p.release);
+      out.push(el._env[i]);
+    } else {
+      out.push(target);
+    }
+  }
+  return out;
+}
+
+/* ============================================================
+   10种可视化绘制函数
+   ============================================================ */
+const DRAW = {};
+
+DRAW['bars'] = function(ctx,p,W,H,el,dt){
+  const bars = getFreqBars(p,el,p.barCount,dt);
+  const bw = W/p.barCount;
+  for(let i=0;i<p.barCount;i++){
+    const v = bars[i];
+    const bh = v*H; if(bh<0.5) continue;
+    ctx.fillStyle = elemColor(p, i/p.barCount);
+    const x=i*bw+bw*0.12, y=H-bh;
+    if(p.rounded){ const r=Math.min(bw*0.3,bh*0.3);
+      ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+bw*0.76-r,y);
+      ctx.quadraticCurveTo(x+bw*0.76,y,x+bw*0.76,y+r);
+      ctx.lineTo(x+bw*0.76,y+bh-r); ctx.quadraticCurveTo(x+bw*0.76,y+bh,x+bw*0.76-r,y+bh);
+      ctx.lineTo(x+r,y+bh); ctx.quadraticCurveTo(x,y+bh,x,y+bh-r);
+      ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.fill();
+    } else ctx.fillRect(x,y,bw*0.76,bh);
+  }
+};
+
+DRAW['bars-mirror'] = function(ctx,p,W,H,el,dt){
+  const bars = getFreqBars(p,el,p.barCount,dt);
+  const bw = W/p.barCount, mid = H/2;
+  for(let i=0;i<p.barCount;i++){
+    const v = bars[i], bh = v*H*0.48; if(bh<0.5) continue;
+    ctx.fillStyle = elemColor(p, i/p.barCount);
+    const x=i*bw+bw*0.12;
+    ctx.fillRect(x,mid-bh,bw*0.76,bh);
+    ctx.fillRect(x,mid,bw*0.76,bh);
+  }
+  ctx.fillStyle='rgba(255,255,255,0.15)'; ctx.fillRect(0,mid-0.5,W,1);
+};
+
+DRAW['bars-3d'] = function(ctx,p,W,H,el,dt){
+  const bars = getFreqBars(p,el,p.barCount,dt);
+  const bw = W/p.barCount, depth = bw*0.5;
+  for(let i=0;i<p.barCount;i++){
+    const v = bars[i], bh = v*H*0.85; if(bh<0.5) continue;
+    const x=i*bw+bw*0.1, y=H-bh, w=bw*0.7;
+    const baseColor = elemColor(p, i/p.barCount);
+    ctx.fillStyle = baseColor; ctx.fillRect(x,y,w,bh);
+    ctx.fillStyle = lerpColor(baseColor,'#ffffff',0.3);
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+depth,y-depth*0.6);
+      ctx.lineTo(x+w+depth,y-depth*0.6); ctx.lineTo(x+w,y); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = lerpColor(baseColor,'#000000',0.35);
+    ctx.beginPath(); ctx.moveTo(x+w,y); ctx.lineTo(x+w+depth,y-depth*0.6);
+      ctx.lineTo(x+w+depth,y+bh-depth*0.6); ctx.lineTo(x+w,y+bh); ctx.closePath(); ctx.fill();
+  }
+};
+
+DRAW['waveform-zigzag'] = function(ctx,p,W,H,el,dt){
+  const bars = getFreqBars(p,el,p.barCount,dt);
+  ctx.beginPath(); ctx.lineWidth = p.lineWidth;
+  const bw = W/p.barCount;
+  for(let i=0;i<p.barCount;i++){
+    const v = bars[i]*p.gain;
+    const x = i*bw, y = H/2 - Math.min(1,v)*H*0.45;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    ctx.lineTo(x+bw, H/2 + Math.min(1,v)*H*0.45);
+  }
+  ctx.strokeStyle = p.colorMode==='solid'?p.colors[0]:multiColor(p.colors,0.5);
+  ctx.stroke();
+};
+
+DRAW['circle-radial'] = function(ctx,p,W,H,el,dt){
+  const bars = getFreqBars(p,el,p.barCount,dt);
+  const cx=W/2, cy=H/2, R=Math.min(W,H)*p.innerRadius/100;
+  for(let i=0;i<p.barCount;i++){
+    const v = bars[i]*p.gain;
+    const ang = (i/p.barCount)*Math.PI*2 - Math.PI/2;
+    const len = Math.min(1,v)*Math.min(W,H)*0.35;
+    const x1=cx+Math.cos(ang)*R, y1=cy+Math.sin(ang)*R;
+    const x2=cx+Math.cos(ang)*(R+len), y2=cy+Math.sin(ang)*(R+len);
+    ctx.strokeStyle = elemColor(p, i/p.barCount);
+    ctx.lineWidth = Math.max(1, (Math.PI*2*R/p.barCount)*0.6);
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  }
+};
+
+DRAW['circle-wave'] = function(ctx,p,W,H,el,dt){
+  if(!CFG.analyser) return;
+  const w = CFG.wave; // 每帧在 render() 中统一取样一次
+  const cx=W/2, cy=H/2, R=Math.min(W,H)*0.35;
+  ctx.beginPath();
+  const n = 180;
+  for(let i=0;i<=n;i++){
+    const idx = Math.floor((i/n)*w.length);
+    const v = (w[idx]-128)/128*p.gain;
+    const ang = (i/n)*Math.PI*2;
+    const r = R + v*R*0.4;
+    const x = cx+Math.cos(ang)*r, y = cy+Math.sin(ang)*r;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  }
+  ctx.closePath();
+  ctx.strokeStyle = p.colorMode==='solid'?p.colors[0]:multiColor(p.colors,0.5);
+  ctx.lineWidth = p.lineWidth;
+  if(p.glow){ctx.shadowColor=p.colors[0];ctx.shadowBlur=p.glowBlur;}
+  ctx.stroke(); ctx.shadowBlur=0;
+};
+
+DRAW['circle-pulse'] = function(ctx,p,W,H,el,dt){
+  const bars = getFreqBars(p,el,p.barCount,dt);
+  let avg=0; bars.forEach(v=>avg+=v); avg/=bars.length;
+  const cx=W/2, cy=H/2, baseR=Math.min(W,H)*0.2;
+  for(let ring=0;ring<3;ring++){
+    const r = baseR + ring*baseR*0.5 + avg*baseR*0.3*(1-ring*0.2);
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+    ctx.strokeStyle = elemColor(p, ring/3);
+    ctx.lineWidth = p.lineWidth*(1-ring*0.2);
+    ctx.globalAlpha = 1-ring*0.3; ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+  ctx.beginPath(); ctx.arc(cx,cy,baseR*0.4+avg*baseR*0.2,0,Math.PI*2);
+  ctx.fillStyle = elemColor(p,0.5); ctx.fill();
+};
+
+DRAW['circular-bars'] = function(ctx,p,W,H,el,dt){
+  const bars = getFreqBars(p,el,p.barCount,dt);
+  const cx=W/2, cy=H/2;
+  for(let i=0;i<p.barCount;i++){
+    const v = bars[i]*p.gain;
+    const ang = (i/p.barCount)*Math.PI*2 - Math.PI/2;
+    const len = Math.min(1,v)*Math.min(W,H)*0.42;
+    ctx.strokeStyle = elemColor(p, i/p.barCount);
+    ctx.lineWidth = Math.max(2, (Math.PI*2*Math.min(W,H)*0.15/p.barCount)*0.7);
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(ang)*8, cy+Math.sin(ang)*8);
+    ctx.lineTo(cx+Math.cos(ang)*(8+len), cy+Math.sin(ang)*(8+len));
+    ctx.stroke();
+  }
+};
+
+DRAW['spectrum-line'] = function(ctx,p,W,H,el,dt){
+  const bars = getFreqBars(p,el,p.barCount,dt);
+  ctx.beginPath(); ctx.lineWidth = p.lineWidth;
+  for(let i=0;i<p.barCount;i++){
+    const v = bars[i]*p.gain;
+    const x = (i/p.barCount)*W, y = H - Math.min(1,v)*H*0.9;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  }
+  ctx.strokeStyle = p.colorMode==='solid'?p.colors[0]:multiColor(p.colors,0.5);
+  if(p.glow){ctx.shadowColor=p.colors[0];ctx.shadowBlur=p.glowBlur;}
+  ctx.stroke(); ctx.shadowBlur=0;
+};
+
+DRAW['spectrum-area'] = function(ctx,p,W,H,el,dt){
+  const bars = getFreqBars(p,el,p.barCount,dt);
+  ctx.beginPath(); ctx.moveTo(0,H);
+  for(let i=0;i<p.barCount;i++){
+    const v = bars[i]*p.gain;
+    const x = (i/p.barCount)*W, y = H - Math.min(1,v)*H*0.9;
+    ctx.lineTo(x,y);
+  }
+  ctx.lineTo(W,H); ctx.closePath();
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, p.colors[0]);
+  grad.addColorStop(1, (p.colors[1]||p.colors[0])+'00');
+  ctx.fillStyle = p.colorMode==='solid'?p.colors[0]+'88':grad;
+  ctx.fill();
+};
+
+/* ============================================================
+   背景
+   ============================================================ */
+let _bgImg = null;
+function drawBackground(cfg){
+  const c = cfg.canvas;
+  ctx.save();
+  if(c.bgType==='solid'){ ctx.fillStyle=c.bgColor; ctx.fillRect(0,0,canvas.width,canvas.height); }
+  else if(c.bgType==='gradient-linear'||c.bgType==='gradient-radial'){
+    let grad;
+    if(c.bgType==='gradient-linear'){
+      const rad=c.gradAngle*Math.PI/180;
+      grad=ctx.createLinearGradient(canvas.width/2-Math.cos(rad)*canvas.width/2, canvas.height/2-Math.sin(rad)*canvas.height/2,
+        canvas.width/2+Math.cos(rad)*canvas.width/2, canvas.height/2+Math.sin(rad)*canvas.height/2);
+    } else {
+      const r=c.gradRadius;
+      grad=ctx.createRadialGradient(canvas.width/2,canvas.height/2,0,canvas.width/2,canvas.height/2,r);
+    }
+    for(let i=0;i<c.gradStops.length;i++){
+      const t=i/(c.gradStops.length-1);
+      const color=i===0?c.gradColor1:i===c.gradStops.length-1?c.gradColor2:lerpColor(c.gradColor1,c.gradColor2,t);
+      grad.addColorStop(c.gradStops[i]/100,color);
+    }
+    ctx.fillStyle=grad; ctx.fillRect(0,0,canvas.width,canvas.height);
+  } else if(c.bgType==='image' && c.bgImage){
+    const img=_bgImg;
+    if(img&&img.complete){
+      if(c.bgBlur>0){ ctx.filter=`blur(${c.bgBlur}px)`; ctx.drawImage(img,0,0,canvas.width,canvas.height); ctx.filter='none'; }
+      else { ctx.drawImage(img,0,0,canvas.width,canvas.height); }
+      if(c.bgDarken>0){ ctx.fillStyle=`rgba(0,0,0,${c.bgDarken})`; ctx.fillRect(0,0,canvas.width,canvas.height); }
+    } else { ctx.fillStyle=c.bgColor; ctx.fillRect(0,0,canvas.width,canvas.height); }
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   主渲染循环 (含 dt 计算 + 低音缩放)
+   ============================================================ */
+let _lastFrameTime = 0;
+function render(){
+  requestAnimationFrame(render);
+  const now = performance.now();
+  const dt = _lastFrameTime ? Math.min(0.1, (now-_lastFrameTime)/1000) : 0.016;
+  _lastFrameTime = now;
+
+  drawBackground(CFG);
+  // 每帧只取样一次频谱/时域，供所有元素复用
+  if(CFG.analyser){
+    CFG.analyser.getByteFrequencyData(CFG.freq);
+    CFG.analyser.getByteTimeDomainData(CFG.wave);
+  }
+  // 只对频谱元素应用缩放，画板和背景保持不变
+  const z = CFG.canvas.zoom;
+  ctx.save();
+  ctx.translate(canvas.width/2, canvas.height/2);
+  ctx.scale(z, z);
+  ctx.translate(-canvas.width/2, -canvas.height/2);
+  const sorted = [...CFG.elements].sort((a,b)=>a.params.y - b.params.y);
+  for(const el of sorted){
+    const p = el.params;
+    const ew = canvas.width*p.w/100, eh = canvas.height*p.h/100;
+    const ex = canvas.width*p.x/100 - ew/2, ey = canvas.height*p.y/100 - eh/2;
+    ctx.save();
+    ctx.globalAlpha = p.opacity;
+    const cx = ex+ew/2, cy = ey+eh/2;
+    ctx.translate(cx, cy);
+    // 镜像/翻转在元素中心处生效，对所有效果通用
+    if(p.mirror) ctx.scale(-1, 1);
+    if(p.invert) ctx.scale(1, -1);
+    if(p.rotation) ctx.rotate(p.rotation*Math.PI/180);
+    ctx.translate(-ew/2, -eh/2);
+    const fn = DRAW[el.type];
+    if(fn) fn(ctx, p, ew, eh, el, dt);
+    ctx.restore();
+  }
+  // 选中框（与元素同一坐标系）
+  const sel = getSelected();
+  if(sel){
+    const p = sel.params;
+    const ew = canvas.width*p.w/100, eh = canvas.height*p.h/100;
+    const ex = canvas.width*p.x/100-ew/2, ey = canvas.height*p.y/100-eh/2;
+    ctx.save();
+    ctx.setLineDash([6/z, 4/z]);
+    ctx.lineWidth = 1.5/z;
+    ctx.strokeStyle = 'rgba(88,166,255,0.95)';
+    ctx.strokeRect(ex, ey, ew, eh);
+    ctx.setLineDash([]);
+    const hs = 6/z;
+    ctx.fillStyle = 'rgba(88,166,255,0.95)';
+    [[ex,ey],[ex+ew,ey],[ex,ey+eh],[ex+ew,ey+eh]].forEach(([hx,hy])=>ctx.fillRect(hx-hs/2,hy-hs/2,hs,hs));
+    ctx.restore();
+  }
+  ctx.restore();
+  updateSeekUI();
+}
+
+/* ============================================================
+   音频
+   ============================================================ */
+function loadAudio(file){
+  if(!file) return;
+  if(CFG.audio){ CFG.audio.pause(); CFG.audio.src=''; }
+  const url = URL.createObjectURL(file);
+  const audio = new Audio(url);
+  audio.loop=CFG.loop; audio.volume=CFG.volume;
+  const ac = ensureCtx();
+  if(ac.state==='suspended') ac.resume();
+  const src = ac.createMediaElementSource(audio);
+  const analyser = ac.createAnalyser();
+  analyser.fftSize=2048;
+  analyser.smoothingTimeConstant=CFG.smoothing;
+  src.connect(analyser); analyser.connect(ac.destination);
+  CFG.audio=audio; CFG.audioCtx=ac; CFG.analyser=analyser;
+  CFG.freq=new Uint8Array(analyser.frequencyBinCount);
+  CFG.wave=new Uint8Array(analyser.fftSize);
+  document.getElementById('uploadText').textContent=file.name;
+  document.getElementById('uploadZone').classList.add('has-audio');
+  document.getElementById('uploadHint').style.display='flex';
+  document.getElementById('playBtn').disabled=false;
+  audio.addEventListener('loadedmetadata', ()=>updateTimeDisplay());
+  audio.addEventListener('timeupdate', ()=>updateTimeDisplay());
+  audio.play().then(()=>{
+    CFG.playing=true;
+    document.getElementById('playBtn').textContent='⏸';
+  }).catch(()=>{});
+}
+async function togglePlay(){
+  if(!CFG.audio) return;
+  const ac = ensureCtx();
+  if(ac.state==='suspended'){ try{ await ac.resume(); }catch(e){ console.error('resume failed',e); } }
+  if(CFG.audio.paused){
+    try{ await CFG.audio.play(); }catch(e){ console.error('play failed',e); return; }
+    document.getElementById('playBtn').textContent='⏸'; CFG.playing=true;
+  } else {
+    CFG.audio.pause();
+    document.getElementById('playBtn').textContent='▶'; CFG.playing=false;
+  }
+}
+function fmtTime(s){ if(!isFinite(s))return'00:00'; const m=Math.floor(s/60),ss=Math.floor(s%60); return `${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`; }
+function updateTimeDisplay(){
+  const a=CFG.audio;
+  document.getElementById('timeDisplay').textContent=`${fmtTime(a?a.currentTime:0)} / ${fmtTime(a?a.duration:0)}`;
+}
+let _lastSeekUI = 0;
+function updateSeekUI(){
+  const a=CFG.audio;
+  if(!a||!a.duration) return;
+  const now=performance.now();
+  if(now-_lastSeekUI<100) return; // 100ms 节流，避免每帧写 DOM
+  _lastSeekUI=now;
+  document.getElementById('seekFill').style.width=(a.currentTime/a.duration*100)+'%';
+}
+
+/* ============================================================
+   元素库渲染
+   ============================================================ */
+function renderLibrary(){
+  const body=document.getElementById('libBody');
+  const tool=document.querySelector('.ibtn.active')?.dataset.tool||'elements';
+  let items=[];
+  if(tool==='elements') items=[...VISUAL_STYLES];
+  const cats={};
+  items.forEach(i=>{ if(!cats[i.cat])cats[i.cat]=[]; cats[i.cat].push(i); });
+  const catNames={visualizer:'音频可视化'};
+  let html='';
+  for(const [cat,list] of Object.entries(cats)){
+    html+=`<div class="lib-cat"><div class="lib-cat-title"><span>${catNames[cat]||cat}</span><span class="count">${list.length}</span></div><div class="lib-grid">`;
+    for(const item of list){
+      html+=`<div class="lib-item" data-type="${item.id}" title="${item.name}">${thumbSVG(item.id)}<div class="label">${item.name}</div></div>`;
+    }
+    html+=`</div></div>`;
+  }
+  if(tool==='background'){
+    html = `<div style="padding:14px"><div class="lib-cat-title"><span>画布背景</span></div>
+      <div class="field"><label>背景类型</label><div class="seg" id="bgTypeSeg">
+        <button data-v="solid" class="${CFG.canvas.bgType==='solid'?'active':''}">纯色</button>
+        <button data-v="gradient-linear" class="${CFG.canvas.bgType==='gradient-linear'?'active':''}">线性渐变</button>
+        <button data-v="gradient-radial" class="${CFG.canvas.bgType==='gradient-radial'?'active':''}">径向渐变</button>
+        <button data-v="image" class="${CFG.canvas.bgType==='image'?'active':''}">图片</button>
+      </div></div>
+      <div class="field" id="bgSolidField"><label>背景颜色</label><div class="color-row"><input type="color" id="bgColor" value="${CFG.canvas.bgColor}"><span style="font-size:11px;color:var(--muted)">${CFG.canvas.bgColor}</span></div></div>
+      <div class="field" id="bgGradField" style="display:${CFG.canvas.bgType.startsWith('gradient')?'block':'none'}">
+        <label>起始颜色</label><div class="color-row" style="margin-bottom:6px"><input type="color" id="gradColor1" value="${CFG.canvas.gradColor1}"><span style="font-size:11px;color:var(--muted)">${CFG.canvas.gradColor1}</span></div>
+        <label>结束颜色</label><div class="color-row" style="margin-bottom:8px"><input type="color" id="gradColor2" value="${CFG.canvas.gradColor2}"><span style="font-size:11px;color:var(--muted)">${CFG.canvas.gradColor2}</span></div>
+        <label>渐变分布</label>
+        <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">
+          <span style="font-size:10px;color:var(--muted);width:25px">0%</span>
+          <span style="font-size:10px;color:var(--muted);width:25px;text-align:center">25%</span>
+          <span style="font-size:10px;color:var(--muted);width:25px;text-align:center">50%</span>
+          <span style="font-size:10px;color:var(--muted);width:25px;text-align:center">75%</span>
+          <span style="font-size:10px;color:var(--muted);width:25px;text-align:right">100%</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${CFG.canvas.gradStops.map((s,i)=>i===0||i===4?'':`
+            <div style="display:flex;align-items:center;gap:4px">
+              <span style="font-size:10px;color:var(--muted);width:25px">${[25,50,75][i-1]}%</span>
+              <input type="range" data-grad-stop="${i}" min="0" max="100" value="${s}" style="flex:1">
+              <span style="font-size:10px;color:var(--muted);width:25px;text-align:right">${s}%</span>
+            </div>
+          `).join('')}
+        </div>
+        ${CFG.canvas.bgType==='gradient-linear'?`<label style="margin-top:8px">渐变角度</label><div class="range-row"><input type="range" id="gradAngle" min="0" max="360" value="${CFG.canvas.gradAngle}"><span class="val" id="gradAngleVal">${CFG.canvas.gradAngle}°</span></div>`:''}
+        ${CFG.canvas.bgType==='gradient-radial'?`<label style="margin-top:8px">渐变半径</label><div class="range-row"><input type="range" id="gradRadius" min="100" max="1000" value="${CFG.canvas.gradRadius}"><span class="val" id="gradRadiusVal">${CFG.canvas.gradRadius}px</span></div>`:''}
+      </div>
+      <div class="field" id="bgImgField" style="display:${CFG.canvas.bgType==='image'?'block':'none'}">
+        <label>背景图片</label><button onclick="document.getElementById('bgImgInput').click()" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:8px;border-radius:5px;cursor:pointer;font-size:12px">选择图片</button>
+        <input type="file" id="bgImgInput" accept="image/*" style="display:none">
+        <label style="margin-top:8px">模糊</label><div class="range-row"><input type="range" id="bgBlur" min="0" max="20" value="${CFG.canvas.bgBlur}"><span class="val" id="bgBlurVal">${CFG.canvas.bgBlur}</span></div>
+        <label>暗化</label><div class="range-row"><input type="range" id="bgDarken" min="0" max="1" step="0.05" value="${CFG.canvas.bgDarken}"><span class="val" id="bgDarkenVal">${Math.round(CFG.canvas.bgDarken*100)}%</span></div>
+      </div></div>`;
+  }
+  body.innerHTML=html;
+  body.querySelectorAll('.lib-item').forEach(el=>el.addEventListener('click',()=>addElement(el.dataset.type)));
+  const seg=document.getElementById('bgTypeSeg');
+  if(seg) seg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{CFG.canvas.bgType=b.dataset.v;scheduleSave();renderLibrary();}));
+  const bc=document.getElementById('bgColor'); if(bc)bc.addEventListener('input',e=>{CFG.canvas.bgColor=e.target.value;scheduleSave();});
+  const g1=document.getElementById('gradColor1'); if(g1)g1.addEventListener('input',e=>{CFG.canvas.gradColor1=e.target.value;scheduleSave();});
+  const g2=document.getElementById('gradColor2'); if(g2)g2.addEventListener('input',e=>{CFG.canvas.gradColor2=e.target.value;scheduleSave();});
+  body.querySelectorAll('[data-grad-stop]').forEach(inp=>inp.addEventListener('input',e=>{
+    const idx=+e.target.dataset.gradStop;
+    CFG.canvas.gradStops[idx]=+e.target.value;
+    e.target.nextElementSibling.textContent=e.target.value+'%';
+    scheduleSave();
+  }));
+  const ga=document.getElementById('gradAngle'); if(ga)ga.addEventListener('input',e=>{CFG.canvas.gradAngle=+e.target.value;document.getElementById('gradAngleVal').textContent=e.target.value+'°';scheduleSave();});
+  const gr=document.getElementById('gradRadius'); if(gr)gr.addEventListener('input',e=>{CFG.canvas.gradRadius=+e.target.value;document.getElementById('gradRadiusVal').textContent=e.target.value+'px';scheduleSave();});
+  const bl=document.getElementById('bgBlur'); if(bl)bl.addEventListener('input',e=>{CFG.canvas.bgBlur=+e.target.value;document.getElementById('bgBlurVal').textContent=e.target.value;scheduleSave();});
+  const bd=document.getElementById('bgDarken'); if(bd)bd.addEventListener('input',e=>{CFG.canvas.bgDarken=+e.target.value;document.getElementById('bgDarkenVal').textContent=Math.round(e.target.value*100)+'%';scheduleSave();});
+  const bi=document.getElementById('bgImgInput'); if(bi)bi.addEventListener('change',e=>loadBgImage(e.target.files[0]));
+}
+function loadBgImage(file){
+  if(!file) return;
+  const url=URL.createObjectURL(file);
+  _bgImg=new Image(); _bgImg.src=url;
+  CFG.canvas.bgImage=url; CFG.canvas.bgType='image';
+  renderLibrary();
+}
+
+function thumbSVG(id){
+  const c1='#ff3f58', c2='#c822ff';
+  const defs=`<defs><linearGradient id="tg${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs>`;
+  if(id.includes('bars')){
+    let bars='';
+    for(let i=0;i<8;i++){ const h=20+((i*7)%40); bars+=`<rect x="${5+i*11}" y="${65-h}" width="7" height="${h}" rx="2" fill="url(#tg${id})"/>`; }
+    return `<svg viewBox="0 0 100 70">${defs}${bars}</svg>`;
+  }
+  if(id.includes('wave')||id==='spectrum-line'||id==='spectrum-area'){
+    return `<svg viewBox="0 0 100 70">${defs}<path d="M5,35 Q15,10 25,35 T45,35 T65,35 T85,35 T95,35" stroke="url(#tg${id})" fill="none" stroke-width="2.5"/></svg>`;
+  }
+  if(id.includes('circle')||id==='circular-bars'){
+    return `<svg viewBox="0 0 100 70">${defs}<circle cx="50" cy="35" r="18" stroke="url(#tg${id})" fill="none" stroke-width="2"/><circle cx="50" cy="35" r="26" stroke="url(#tg${id})" fill="none" stroke-width="1.5" stroke-dasharray="4 3"/></svg>`;
+  }
+  return `<svg viewBox="0 0 100 70">${defs}<rect x="20" y="20" width="60" height="30" rx="4" stroke="url(#tg${id})" fill="none" stroke-width="2"/></svg>`;
+}
+
+/* ============================================================
+   属性面板渲染 (含全部高级参数 UI)
+   ============================================================ */
+function renderProps(){
+  const body=document.getElementById('propsBody');
+  const sel=getSelected();
+  const title=document.getElementById('propsTitle');
+  const propsPanel=document.querySelector('.props');
+  if(!sel){
+    title.textContent='属性';
+    body.innerHTML=`<div class="empty-props"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><div>从左侧选择或添加元素<br>点击画布上的元素编辑属性</div></div>`;
+    propsPanel.classList.remove('mobile-open');
+    return;
+  }
+  propsPanel.classList.add('mobile-open');
+  const p=sel.params;
+  const isVis=VISUAL_STYLES.some(s=>s.id===sel.type);
+  const styleName=VISUAL_STYLES.find(s=>s.id===sel.type)?.name||sel.type;
+  title.textContent=styleName;
+
+  let html='';
+
+  if(isVis){
+    // 动画包络（最前）
+    html+=collapsible('动画包络', true, `
+      ${toggleField('启用包络跟随','useEnvelope',p.useEnvelope)}
+      <div class="field" style="display:${p.useEnvelope?'block':'none'}">
+        <label>上升时间 (Attack) — 激发到峰值的速度</label>
+        <div class="range-row"><input type="range" data-field="attack" min="1" max="1000" value="${p.attack}"><span class="val">${p.attack}ms</span></div>
+      </div>
+      <div class="field" style="display:${p.useEnvelope?'block':'none'}">
+        <label>下降时间 (Release) — 静止到最低的速度</label>
+        <div class="range-row"><input type="range" data-field="release" min="10" max="2000" value="${p.release}"><span class="val">${p.release}ms</span></div>
+      </div>
+      ${rangeField('平滑度(Analyser)','smoothing',p.smoothing,0,0.98,0.01,'')}
+    `);
+    // 音频响应（第二）
+    html+=collapsible('音频响应', true, `
+      ${rangeField('灵敏度(增益)','gain',p.gain,0.1,5,0.05,'x')}
+      ${rangeField('柱数/密度','barCount',p.barCount,8,256,1,'')}
+      ${rangeField('线宽','lineWidth',p.lineWidth,1,12,0.5,'px')}
+      ${dualRangeField('频率范围','freqMin','freqMax',p.freqMin,p.freqMax,20,20000,'Hz')}
+      ${toggleField('对数频率映射','logScale',p.logScale)}
+      ${toggleField('镜像','mirror',p.mirror)}
+      ${toggleField('垂直翻转','invert',p.invert)}
+      ${toggleField('圆角柱','rounded',p.rounded)}
+      ${toggleField('发光效果','glow',p.glow)}
+      <div class="field" style="display:${p.glow?'block':'none'}">${rangeField('发光强度','glowBlur',p.glowBlur,1,40,1,'px')}</div>
+    `);
+  }
+
+  // 变换
+  html+=collapsible('变换', true, `
+    ${rangeField('位置 X','x',p.x,0,100,0.1,'%')}
+    ${rangeField('位置 Y','y',p.y,0,100,0.1,'%')}
+    ${rangeField('宽度','w',p.w,5,100,0.5,'%')}
+    ${rangeField('高度','h',p.h,2,100,0.5,'%')}
+    ${rangeField('旋转','rotation',p.rotation,-180,180,1,'°')}
+    ${rangeField('不透明度','opacity',p.opacity,0,1,0.01,'')}
+  `);
+
+  if(isVis){
+    // 颜色系统:多色渐变编辑器
+    html+=collapsible('颜色', true, colorEditorHTML(p));
+    // 圆形特有
+    if(sel.type.includes('circle')||sel.type==='circular-bars'){
+      html+=collapsible('圆形参数', false, `${rangeField('内圈半径','innerRadius',p.innerRadius,5,60,1,'%')}`);
+    }
+  }
+
+  html+=`<div style="padding:16px"><button onclick="removeElement(${sel.id})" style="width:100%;background:transparent;border:1px solid #ff3f58;color:#ff3f58;padding:10px;border-radius:5px;cursor:pointer;font-size:13px">🗑 删除元素</button></div>`;
+
+  body.innerHTML=html;
+  bindPropsFields(sel);
+  body.querySelectorAll('.c-head').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
+}
+
+/* 多色渐变编辑器 HTML */
+function colorEditorHTML(p){
+  let items = '';
+  p.colors.forEach((c,i)=>{
+    items += `<div class="color-list-item">
+      <input type="color" data-color-idx="${i}" value="${c}" data-field="color_${i}">
+      <span class="color-hex">${c}</span>
+      <button class="arrow-btn" data-color-up="${i}" title="上移" ${i===0?'disabled style="opacity:0.3"':''}>▲</button>
+      <button class="arrow-btn" data-color-down="${i}" title="下移" ${i===p.colors.length-1?'disabled style="opacity:0.3"':''}>▼</button>
+      <button class="del-btn" data-color-del="${i}" title="删除" ${p.colors.length<=1?'disabled style="opacity:0.3"':''}>✕</button>
+    </div>`;
+  });
+  const previewStyle = p.colors.length>1
+    ? `background:linear-gradient(90deg, ${p.colors.join(', ')})`
+    : `background:${p.colors[0]}`;
+  return `
+    <div class="field"><label>颜色模式</label><div class="seg" data-field="colorMode">
+      <button data-v="solid" class="${p.colorMode==='solid'?'active':''}">纯色</button>
+      <button data-v="gradient" class="${p.colorMode==='gradient'?'active':''}">渐变</button>
+      <button data-v="rainbow" class="${p.colorMode==='rainbow'?'active':''}">彩虹</button>
+    </div></div>
+    <div class="field" style="display:${p.colorMode==='gradient'?'block':'none'}">
+      <label>渐变颜色(可添加/排序/删除)</label>
+      <div class="color-preview" style="${previewStyle}"></div>
+      <div class="color-list">${items}</div>
+      <button class="color-add-btn" id="colorAddBtn">+ 添加颜色</button>
+    </div>
+    <div class="field" style="display:${p.colorMode==='solid'?'block':'none'}">
+      <label>颜色</label><div class="color-row"><input type="color" data-field="solidColor" value="${p.colors[0]}"><span style="font-size:11px;color:var(--muted)">${p.colors[0]}</span></div>
+    </div>
+  `;
+}
+
+/* 双端点频率滑条 HTML */
+function dualRangeField(label, minField, maxField, minVal, maxVal, absMin, absMax, unit){
+  return `<div class="field">
+    <label>${label}</label>
+    <div class="dual-range" data-dual-min="${minField}" data-dual-max="${maxField}" data-abs-min="${absMin}" data-abs-max="${absMax}">
+      <div class="track"></div>
+      <div class="track-fill" style="left:${(minVal-absMin)/(absMax-absMin)*100}%;right:${100-(maxVal-absMin)/(absMax-absMin)*100}%"></div>
+      <input type="range" class="zindex-min" min="${absMin}" max="${absMax}" value="${minVal}" data-field="${minField}">
+      <input type="range" class="zindex-max" min="${absMin}" max="${absMax}" value="${maxVal}" data-field="${maxField}">
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px">
+      <span>${minVal}${unit}</span><span>${maxVal}${unit}</span>
+    </div>
+  </div>`;
+}
+
+function collapsible(title, open, content){
+  return `<div class="collapsible ${open?'open':''}"><div class="c-head"><span>${title}</span><span class="arrow">▶</span></div><div class="c-body">${content}</div></div>`;
+}
+function rangeField(label, field, val, min, max, step, suffix){
+  return `<div class="field"><label>${label}</label><div class="range-row"><input type="range" data-field="${field}" min="${min}" max="${max}" step="${step}" value="${val}"><span class="val">${Number(val).toFixed(step<1?2:0)}${suffix}</span></div></div>`;
+}
+function toggleField(label, field, val){
+  return `<div class="field"><div class="toggle-row"><label style="margin-bottom:0">${label}</label><div class="toggle ${val?'on':''}" data-field="${field}"></div></div></div>`;
+}
+
+/* 属性面板字段绑定 */
+function bindPropsFields(sel){
+  const body=document.getElementById('propsBody');
+  const p=sel.params;
+  body.querySelectorAll('[data-field]').forEach(el=>{
+    const field=el.dataset.field;
+    if(el.type==='range'){
+      el.addEventListener('input',()=>{
+        p[field]=parseFloat(el.value);
+        const valEl=el.parentElement.querySelector('.val');
+        if(valEl) valEl.textContent=parseFloat(el.value).toFixed(parseFloat(el.step)<1?2:0);
+        if(field==='smoothing'){ CFG.smoothing=p.smoothing; if(CFG.analyser) CFG.analyser.smoothingTimeConstant=p.smoothing; }
+        scheduleSave();
+      });
+    } else if(el.type==='color'){
+      el.addEventListener('input',()=>{
+        if(field.startsWith('color_')){
+          const idx=parseInt(field.split('_')[1]);
+          p.colors[idx]=el.value;
+          const hexEl=el.parentElement.querySelector('.color-hex');
+          if(hexEl) hexEl.textContent=el.value;
+          updateColorPreview(p);
+        } else if(field==='solidColor'){
+          p.colors[0]=el.value;
+        } else {
+          p[field]=el.value;
+        }
+        const s=el.parentElement.querySelector('span');
+        if(s&&!s.classList.contains('color-hex')) s.textContent=el.value;
+        scheduleSave();
+      });
+    } else if(el.type==='text'||el.type==='number'){
+      el.addEventListener('input',()=>{
+        if(field.endsWith('_num')){
+          const realField=field.replace('_num','');
+          p[realField]=parseFloat(el.value)||0;
+          // 同步滑条
+          const range=body.querySelector(`[data-field="${realField}"]`);
+          if(range) range.value=p[realField];
+          updateDualRangeFill(el.closest('.dual-range')||body.querySelector(`[data-dual-min="${realField}"],[data-dual-max="${realField}"]`));
+        } else {
+          p[field]=el.value;
+        }
+      });
+    } else if(el.tagName==='SELECT'){
+      el.addEventListener('change',()=>{p[field]=el.value;});
+    } else if(el.classList.contains('toggle')){
+      el.addEventListener('click',()=>{
+        p[field]=!p[field]; el.classList.toggle('on');
+        scheduleSave();
+        renderProps();
+      });
+    } else if(el.classList.contains('seg')){
+      el.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+        p[field]=b.dataset.v;
+        el.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        scheduleSave();
+        renderProps();
+      }));
+    }
+  });
+  // 多色编辑器:上移/下移/删除/添加
+  body.querySelectorAll('[data-color-up]').forEach(b=>b.addEventListener('click',()=>{
+    const i=parseInt(b.dataset.colorUp);
+    if(i>0){ [p.colors[i-1],p.colors[i]]=[p.colors[i],p.colors[i-1]]; scheduleSave(); renderProps(); }
+  }));
+  body.querySelectorAll('[data-color-down]').forEach(b=>b.addEventListener('click',()=>{
+    const i=parseInt(b.dataset.colorDown);
+    if(i<p.colors.length-1){ [p.colors[i+1],p.colors[i]]=[p.colors[i],p.colors[i+1]]; scheduleSave(); renderProps(); }
+  }));
+  body.querySelectorAll('[data-color-del]').forEach(b=>b.addEventListener('click',()=>{
+    const i=parseInt(b.dataset.colorDel);
+    if(p.colors.length>1){ p.colors.splice(i,1); scheduleSave(); renderProps(); }
+  }));
+  const addBtn=document.getElementById('colorAddBtn');
+  if(addBtn) addBtn.addEventListener('click',()=>{
+    p.colors.push('#'+Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'));
+    scheduleSave(); renderProps();
+  });
+  // 双端点滑条同步
+  body.querySelectorAll('.dual-range').forEach(dr=>{
+    const minInput=dr.querySelector('.zindex-min');
+    const maxInput=dr.querySelector('.zindex-max');
+    const labels=dr.parentElement.querySelectorAll('span');
+    const updateFill=()=>{
+      const absMin=parseFloat(dr.dataset.absMin), absMax=parseFloat(dr.dataset.absMax);
+      const mn=parseFloat(minInput.value), mx=parseFloat(maxInput.value);
+      const fill=dr.querySelector('.track-fill');
+      if(fill){
+        fill.style.left=((mn-absMin)/(absMax-absMin)*100)+'%';
+        fill.style.right=(100-(mx-absMin)/(absMax-absMin)*100)+'%';
+      }
+      if(labels.length>=2){
+        labels[0].textContent=mn+'Hz';
+        labels[1].textContent=mx>=1000?(mx/1000)+'kHz':mx+'Hz';
+      }
+      if(minInput.dataset.field) p[minInput.dataset.field]=mn;
+      if(maxInput.dataset.field) p[maxInput.dataset.field]=mx;
+    };
+    minInput.addEventListener('input',()=>{
+      if(parseFloat(minInput.value)>parseFloat(maxInput.value)) minInput.value=maxInput.value;
+      updateFill();
+    });
+    maxInput.addEventListener('input',()=>{
+      if(parseFloat(maxInput.value)<parseFloat(minInput.value)) maxInput.value=minInput.value;
+      updateFill();
+    });
+  });
+}
+function updateColorPreview(p){
+  const prev=document.querySelector('.color-preview');
+  if(prev&&p.colors.length>1) prev.style.background=`linear-gradient(90deg, ${p.colors.join(', ')})`;
+}
+function updateDualRangeFill(dr){ if(!dr) return;
+  const minInput=dr.querySelector('.zindex-min'), maxInput=dr.querySelector('.zindex-max');
+  if(!minInput||!maxInput) return;
+  const absMin=parseFloat(dr.dataset.absMin), absMax=parseFloat(dr.dataset.absMax);
+  const mn=parseFloat(minInput.value), mx=parseFloat(maxInput.value);
+  const fill=dr.querySelector('.track-fill');
+  if(fill){ fill.style.left=((mn-absMin)/(absMax-absMin)*100)+'%'; fill.style.right=(100-(mx-absMin)/(absMax-absMin)*100)+'%'; }
+}
+
+/* ============================================================
+   画布交互：移动 / 四角自由缩放 / 两指等比缩放
+   ============================================================ */
+let _drag=null;                 // { mode:'move'|'resize', el, ... }
+let _pinch=null;                // { el, startDist, startW, startH }
+const _pointers=new Map();      // pointerId -> 画布像素坐标
+
+function canvasPos(e){
+  const rect=canvas.getBoundingClientRect();
+  return { x:(e.clientX-rect.left)/rect.width*canvas.width, y:(e.clientY-rect.top)/rect.height*canvas.height };
+}
+// 画布像素坐标 -> 元素世界坐标（逆缩放变换，保证缩放后命中/拖动仍准确）
+function worldPoint(mx,my){
+  const z=CFG.canvas.zoom, cx=canvas.width/2, cy=canvas.height/2;
+  return { x: cx+(mx-cx)/z, y: cy+(my-cy)/z };
+}
+function worldRect(p){
+  const ew=canvas.width*p.w/100, eh=canvas.height*p.h/100;
+  return { x:canvas.width*p.x/100-ew/2, y:canvas.height*p.y/100-eh/2, w:ew, h:eh };
+}
+// 元素在画布像素坐标下的矩形（用于命中检测，已考虑缩放）
+function screenRect(p){
+  const r=worldRect(p), z=CFG.canvas.zoom, cx=canvas.width/2, cy=canvas.height/2;
+  const x1=cx+(r.x-cx)*z, y1=cy+(r.y-cy)*z;
+  const x2=cx+(r.x+r.w-cx)*z, y2=cy+(r.y+r.h-cy)*z;
+  return { x:Math.min(x1,x2), y:Math.min(y1,y2), w:Math.abs(x2-x1), h:Math.abs(y2-y1) };
+}
+const HANDLE_CURSOR={ nw:'nwse-resize', se:'nwse-resize', ne:'nesw-resize', sw:'nesw-resize' };
+function getHandleAt(wx,wy,p){
+  const r=worldRect(p);
+  const hit=16/Math.max(0.05, CFG.canvas.zoom);
+  const corners={ nw:[r.x,r.y], ne:[r.x+r.w,r.y], sw:[r.x,r.y+r.h], se:[r.x+r.w,r.y+r.h] };
+  for(const k in corners){
+    const [hx,hy]=corners[k];
+    if(Math.abs(wx-hx)<=hit && Math.abs(wy-hy)<=hit) return k;
+  }
+  return null;
+}
+function selectElement(el){
+  CFG.selectedId=el.id;
+  document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
+  document.querySelector('.ibtn[data-tool="props"]')?.classList.add('active');
+  _lastTool='props';
+  document.getElementById('mobilePreview').classList.remove('active');
+  renderProps();
+}
+function clampNum(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+// 拖动/缩放期间轻量同步属性面板数值控件，避免整面板重建
+function syncField(field, value, digits){
+  const input=document.getElementById('propsBody').querySelector('[data-field="'+field+'"]');
+  if(!input) return;
+  input.value=value;
+  const v=input.parentElement.querySelector('.val');
+  if(v) v.textContent=Number(value).toFixed(digits);
+}
+function hitElementAt(mx,my){
+  for(let i=CFG.elements.length-1;i>=0;i--){
+    const r=screenRect(CFG.elements[i].params);
+    if(mx>=r.x&&mx<=r.x+r.w&&my>=r.y&&my<=r.y+r.h) return CFG.elements[i];
+  }
+  return null;
+}
+
+canvas.addEventListener('pointerdown',e=>{
+  const pt=canvasPos(e);
+  _pointers.set(e.pointerId, pt);
+  // 两指：等比缩放（长宽同比）
+  if(_pointers.size===2){
+    const pts=[..._pointers.values()];
+    const mx=(pts[0].x+pts[1].x)/2, my=(pts[0].y+pts[1].y)/2;
+    const el=getSelected() || hitElementAt(mx,my);
+    if(el){
+      selectElement(el);
+      _pinch={ el, startDist:Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y) || 1,
+               startW:el.params.w, startH:el.params.h };
+    }
+    _drag=null;
+    e.preventDefault();
+    return;
+  }
+  if(_pointers.size>2) return;
+
+  const wpt=worldPoint(pt.x,pt.y);
+  const sel=getSelected();
+  if(sel){
+    const h=getHandleAt(wpt.x,wpt.y,sel.params);
+    if(h){
+      _drag={ mode:'resize', el:sel, handle:h, rect:worldRect(sel.params) };
+      try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
+      e.preventDefault();
+      return;
+    }
+  }
+  const hit=hitElementAt(pt.x,pt.y);
+  if(hit){
+    selectElement(hit);
+    _drag={ mode:'move', el:hit,
+            offX:wpt.x-canvas.width*hit.params.x/100,
+            offY:wpt.y-canvas.height*hit.params.y/100 };
+    try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
+    e.preventDefault();
+  } else {
+    CFG.selectedId=null; renderProps();
+  }
+});
+
+canvas.addEventListener('pointermove',e=>{
+  if(_pointers.has(e.pointerId)) _pointers.set(e.pointerId, canvasPos(e));
+  const pt=canvasPos(e);
+
+  // 两指等比缩放
+  if(_pinch && _pointers.size>=2){
+    const pts=[..._pointers.values()];
+    const d=Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y) || 1;
+    const f=d/_pinch.startDist;
+    const p=_pinch.el.params;
+    p.w=clampNum(_pinch.startW*f, 2, 100);
+    p.h=clampNum(_pinch.startH*f, 2, 100);
+    syncField('w', p.w, 1); syncField('h', p.h, 1);
+    e.preventDefault();
+    return;
+  }
+
+  // 四角自由（非等比）缩放
+  if(_drag && _drag.mode==='resize'){
+    const wpt=worldPoint(pt.x,pt.y);
+    const { handle, rect }=_drag;
+    let left=rect.x, top=rect.y, right=rect.x+rect.w, bottom=rect.y+rect.h;
+    const minW=canvas.width*0.02, minH=canvas.height*0.02;
+    if(handle.indexOf('w')>=0) left=clampNum(left, right-canvas.width, right-minW);
+    if(handle.indexOf('e')>=0) right=clampNum(right, left+minW, left+canvas.width);
+    if(handle.indexOf('n')>=0) top=clampNum(top, bottom-canvas.height, bottom-minH);
+    if(handle.indexOf('s')>=0) bottom=clampNum(bottom, top+minH, top+canvas.height);
+    const p=_drag.el.params;
+    p.w=(right-left)/canvas.width*100;
+    p.h=(bottom-top)/canvas.height*100;
+    p.x=((left+right)/2)/canvas.width*100;
+    p.y=((top+bottom)/2)/canvas.height*100;
+    syncField('w', p.w, 1); syncField('h', p.h, 1);
+    syncField('x', p.x, 1); syncField('y', p.y, 1);
+    e.preventDefault();
+    return;
+  }
+
+  // 移动
+  if(_drag && _drag.mode==='move'){
+    const wpt=worldPoint(pt.x,pt.y);
+    const p=_drag.el.params;
+    p.x=(wpt.x-_drag.offX)/canvas.width*100;
+    p.y=(wpt.y-_drag.offY)/canvas.height*100;
+    syncField('x', p.x, 1); syncField('y', p.y, 1);
+    e.preventDefault();
+    return;
+  }
+
+  // 悬停：命中四角显示缩放光标，命中元素显示移动光标
+  const wpt=worldPoint(pt.x,pt.y);
+  const sel=getSelected();
+  const h=sel?getHandleAt(wpt.x,wpt.y,sel.params):null;
+  if(h) canvas.style.cursor=HANDLE_CURSOR[h];
+  else if(hitElementAt(pt.x,pt.y)) canvas.style.cursor='move';
+  else canvas.style.cursor='default';
+});
+
+function onPointerEnd(e){
+  _pointers.delete(e.pointerId);
+  let changed=false;
+  if(_pinch && _pointers.size<2){ _pinch=null; changed=true; }
+  if(_drag && _pointers.size===0){ _drag=null; changed=true; }
+  if(changed){ scheduleSave(); renderProps(); }
+  if(_pointers.size===0) canvas.style.cursor='default';
+}
+canvas.addEventListener('pointerup',onPointerEnd);
+canvas.addEventListener('pointercancel',onPointerEnd);
+canvas.addEventListener('pointerleave',()=>{ if(!_drag&&!_pinch) canvas.style.cursor='default'; });
+
+/* ============================================================
+   画布比例 & 缩放
+   ============================================================ */
+function setAspect(aspect){
+  CFG.canvas.aspect=aspect;
+  const [w,h]=aspect.split(':').map(Number);
+  const base=1280;
+  if(w>=h){ canvas.width=base; canvas.height=Math.round(base*h/w); }
+  else { canvas.height=base; canvas.width=Math.round(base*w/h); }
+  stageWrap.style.width=canvas.width+'px';
+  stageWrap.style.height=canvas.height+'px';
+  applyZoom();
+  scheduleSave();
+}
+function applyZoom(){
+  const z=CFG.canvas.zoom;
+  document.getElementById('zoomLabel').textContent=Math.round(z*100)+'%';
+}
+/* ============================================================
+   事件绑定
+   ============================================================ */
+document.getElementById('uploadZone').addEventListener('click',()=>document.getElementById('fileInput').click());
+document.getElementById('fileInput').addEventListener('change',e=>loadAudio(e.target.files[0]));
+document.getElementById('playBtn').addEventListener('click',togglePlay);
+document.getElementById('aspectSelect').addEventListener('change',e=>setAspect(e.target.value));
+document.getElementById('volSlider').addEventListener('input',e=>{CFG.volume=+e.target.value;if(CFG.audio)CFG.audio.volume=CFG.volume;});
+document.getElementById('loopBtn').addEventListener('click',function(){
+  CFG.loop=!CFG.loop; this.classList.toggle('active',CFG.loop);
+  if(CFG.audio) CFG.audio.loop=CFG.loop;
+});
+const seekBar=document.getElementById('seekBar');
+let _seekDragging=false;
+let _seekPreviewPct=0;
+function seekPreview(clientX){
+  if(!CFG.audio||!CFG.audio.duration) return;
+  const rect=seekBar.getBoundingClientRect();
+  _seekPreviewPct=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
+  document.getElementById('seekFill').style.width=(_seekPreviewPct*100)+'%';
+  const sec=CFG.audio.duration*_seekPreviewPct;
+  document.getElementById('timeDisplay').textContent=`${fmtTime(sec)} / ${fmtTime(CFG.audio.duration)}`;
+}
+function seekApply(){
+  if(!CFG.audio||!CFG.audio.duration) return;
+  CFG.audio.currentTime=_seekPreviewPct*CFG.audio.duration;
+}
+seekBar.addEventListener('mousedown',e=>{_seekDragging=true;seekPreview(e.clientX);});
+document.addEventListener('mousemove',e=>{if(_seekDragging)seekPreview(e.clientX);});
+document.addEventListener('mouseup',()=>{if(_seekDragging){seekApply();_seekDragging=false;}});
+seekBar.addEventListener('touchstart',e=>{_seekDragging=true;seekPreview(e.touches[0].clientX);e.preventDefault();},{passive:false});
+document.addEventListener('touchmove',e=>{if(_seekDragging)seekPreview(e.touches[0].clientX);});
+document.addEventListener('touchend',()=>{if(_seekDragging){seekApply();_seekDragging=false;}});
+let _lastTool='elements';
+let _panelTimer=null;
+document.querySelectorAll('.ibtn[data-tool]').forEach(b=>b.addEventListener('click',()=>{
+  const lib=document.getElementById('library');
+  const propsPanel=document.querySelector('.props');
+  const tool=b.dataset.tool;
+  const isActive=b.classList.contains('active');
+  document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
+  propsPanel.classList.remove('mobile-open');
+  if(_panelTimer) clearTimeout(_panelTimer);
+  if(isActive){
+    lib.classList.remove('mobile-open');
+  }else{
+    b.classList.add('active');
+    _lastTool=tool;
+    if(tool==='props'){
+      lib.classList.remove('mobile-open');
+      void propsPanel.offsetHeight;
+      renderProps();
+      propsPanel.classList.add('mobile-open');
+    }else{
+      lib.classList.remove('mobile-open');
+      void lib.offsetHeight;
+      _panelTimer=setTimeout(()=>{
+        renderLibrary();
+        lib.classList.add('mobile-open');
+      },30);
+    }
+  }
+  document.getElementById('mobilePreview').classList.remove('active');
+}));
+document.getElementById('mobilePreview').addEventListener('click',function(){
+  const lib=document.getElementById('library');
+  const propsPanel=document.querySelector('.props');
+  const isOpen=lib.classList.contains('mobile-open')||propsPanel.classList.contains('mobile-open');
+  lib.classList.remove('mobile-open');
+  propsPanel.classList.remove('mobile-open');
+  if(isOpen){
+    document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+  }else{
+    document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
+    document.querySelector(`.ibtn[data-tool="${_lastTool}"]`)?.classList.add('active');
+    if(_lastTool==='props'){
+      renderProps();
+      propsPanel.classList.add('mobile-open');
+    }else{
+      renderLibrary();
+      lib.classList.add('mobile-open');
+    }
+    this.classList.remove('active');
+  }
+});
+// 缩放按钮：点击+长按连续调整
+let zoomTimer=null, zoomInterval=null;
+function startZoom(dir){
+  const step=dir>0?0.05:-0.05;
+  CFG.canvas.zoom=Math.max(0.1,Math.min(2,CFG.canvas.zoom+step));
+  applyZoom();
+  zoomTimer=setTimeout(()=>{
+    zoomInterval=setInterval(()=>{
+      CFG.canvas.zoom=Math.max(0.1,Math.min(2,CFG.canvas.zoom+step*2));
+      applyZoom();
+    },30);
+  },300);
+}
+function stopZoom(){
+  if(zoomTimer){clearTimeout(zoomTimer);zoomTimer=null;}
+  if(zoomInterval){clearInterval(zoomInterval);zoomInterval=null;}
+}
+const zin=document.getElementById('btnZoomIn');
+const zout=document.getElementById('btnZoomOut');
+zin.addEventListener('mousedown',()=>startZoom(1));
+zin.addEventListener('mouseup',stopZoom);
+zin.addEventListener('mouseleave',stopZoom);
+zin.addEventListener('touchstart',e=>{e.preventDefault();startZoom(1);});
+zin.addEventListener('touchend',stopZoom);
+zout.addEventListener('mousedown',()=>startZoom(-1));
+zout.addEventListener('mouseup',stopZoom);
+zout.addEventListener('mouseleave',stopZoom);
+zout.addEventListener('touchstart',e=>{e.preventDefault();startZoom(-1);});
+zout.addEventListener('touchend',stopZoom);
+document.getElementById('btnFit').addEventListener('click',()=>{CFG.canvas.zoom=1;applyZoom();});
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space'&&!e.target.matches('input,select,textarea')){e.preventDefault();togglePlay();}
+  if(e.code==='Delete'&&CFG.selectedId){removeElement(CFG.selectedId);}
+});
+/* ============================================================
+   初始化
+   ============================================================ */
+const _restored = loadConfig();
+setAspect(CFG.canvas.aspect || '16:9');
+document.getElementById('volSlider').value = CFG.volume;
+document.getElementById('loopBtn').classList.toggle('active', CFG.loop);
+renderLibrary();
+if(_restored && CFG.elements.length) renderProps();
+else addElement('bars');
+requestAnimationFrame(render);
+// 保持默认100%缩放，不自动适配（窗口尺寸变化不改缩放，避免默认被压到很小）
+
+// 自动加载演示音频
+AssetCache.fetch('demo.ogg').then(r=>r.blob()).then(blob=>{
+  const file=new File([blob],'demo.ogg',{type:'audio/ogg'});
+  loadAudio(file);
+}).catch(()=>{});
+</script>
+</body>
+</html>

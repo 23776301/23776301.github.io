@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个人实用工具 · teecatt</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--accent2:#3fb950;--hover:#21262d;--violet:#c822ff;--yellow:#d29922}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+a{text-decoration:none;color:var(--accent)}
+.topbar{height:52px;display:flex;align-items:center;padding:0 20px;gap:14px;border-bottom:1px solid var(--line);background:var(--surface)}
+.topbar .back{color:var(--muted);font-size:13px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;transition:all .15s}
+.topbar .back:hover{color:var(--text);border-color:var(--accent)}
+.topbar h1{font-size:15px;font-weight:600;flex:1}
+.container{max-width:960px;margin:0 auto;padding:24px 20px 60px}
+.platform-title{display:flex;align-items:center;gap:8px;margin:28px 0 14px;font-size:14px;font-weight:600;color:var(--text)}
+.platform-title::after{content:'';flex:1;height:1px;background:var(--line)}
+.platform-title .tag{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:2px 8px}
+.tool-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:16px}
+.tool-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.tool-head h2{font-size:16px;font-weight:600}
+.status{padding:2px 10px;border-radius:10px;font-size:10px;font-weight:600;letter-spacing:.3px}
+.status-ready{background:rgba(63,185,80,.15);color:var(--accent2);border:1px solid rgba(63,185,80,.4)}
+.status-wip{background:rgba(210,153,34,.15);color:var(--yellow);border:1px solid rgba(210,153,34,.4)}
+.tool-desc{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px}
+.block-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px;font-weight:600}
+.cmd{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.cmd code{flex:1;font-size:13px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;color:#d2e6ff;overflow-x:auto;white-space:nowrap}
+.copy-btn{flex-shrink:0;background:transparent;border:1px solid var(--line);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;transition:all .15s;min-height:28px}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.copy-btn.ok{border-color:var(--accent2);color:var(--accent2)}
+.file-list{display:flex;flex-wrap:wrap;gap:8px}
+.file-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--muted);transition:all .15s}
+.file-chip:hover{border-color:var(--accent);color:var(--text)}
+.file-chip .dl{color:var(--accent);font-size:11px}
+.empty{padding:60px 20px;text-align:center;color:var(--muted);font-size:13px}
+footer{border-top:1px solid var(--line);padding:16px;text-align:center;font-size:11px;color:var(--muted)}
+.loading{text-align:center;color:var(--muted);padding:60px 0;font-size:13px}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="../">← 返回主页</a>
+  <h1>个人实用工具</h1>
+</div>
+<div class="container" id="container">
+  <div class="loading">加载中...</div>
+</div>
+<footer>teecatt · 工具数据由 tools 仓库 workflow 自动同步</footer>
+<script>
+(function(){
+  var container = document.getElementById('container');
+  var PLATFORM_ORDER = ['General','Linux','Android','Windows'];
+  var PLATFORM_LABEL = {General:'通用',Linux:'Linux',Android:'Android',Windows:'Windows'};
+  function esc(s){ var d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
+  // 站点根绝对路径:任何以 tools/、data/ 开头的仓库路径统一转为 /tools/... /data/...,避免子目录下相对解析错误
+  function abs(p){ if(!p) return p; return p.indexOf('/')===0 ? p : '/'+p; }
+  function copyText(text, btn){
+    function done(){ btn.classList.add('ok'); var old=btn.textContent; btn.textContent='已复制'; setTimeout(function(){ btn.textContent=old; btn.classList.remove('ok'); },1500); }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done, function(){ fallback(); });
+    } else { fallback(); }
+    function fallback(){
+      var ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
+      ta.select(); try{ document.execCommand('copy'); done(); }catch(e){} document.body.removeChild(ta);
+    }
+  }
+  function renderTool(t){
+    var html='<div class="tool-card">';
+    html+='<div class="tool-head"><h2>'+esc(t.name)+'</h2><span class="status status-'+(t.status==='wip'?'wip':'ready')+'">'+(t.status==='wip'?'WIP':'已就绪')+'</span></div>';
+    html+='<div class="tool-desc">'+esc(t.desc)+'</div>';
+    if(t.install){ html+='<div class="block-title">一键安装</div><div class="cmd"><code>'+esc(t.install)+'</code><button class="copy-btn">复制</button></div>'; }
+    if(t.deploy){ html+='<div class="block-title">一键部署</div><div class="cmd"><code>'+esc(t.deploy)+'</code><button class="copy-btn">复制</button></div>'; }
+    if(t.commands && t.commands.length){ html+='<div class="block-title">常用命令</div>'; t.commands.forEach(function(c){ html+='<div class="cmd"><code>'+esc(c)+'</code><button class="copy-btn">复制</button></div>'; }); }
+    if(t.files && t.files.length){ html+='<div class="block-title">部署文件</div><div class="file-list">'; t.files.forEach(function(f){ var name=f.split('/').pop(); html+='<a class="file-chip" href="'+esc(abs(f))+'" download="'+esc(name)+'"><span>'+esc(name)+'</span><span class="dl">下载 ↓</span></a>'; }); html+='</div>'; }
+    if(t.docs){ html+='<div class="block-title">文档</div><div class="cmd"><code>'+esc('文档: '+t.docs)+'</code><a class="copy-btn" href="'+esc(abs(t.docs))+'" style="text-decoration:none;display:inline-flex;align-items:center;padding:4px 10px">阅读 →</a></div>'; }
+    html+='</div>';
+    return html;
+  }
+  function render(data){
+    if(!data || !data.tools || !data.tools.length){ container.innerHTML='<div class="empty">暂无工具数据</div>'; return; }
+    var groups={}; data.tools.forEach(function(t){ if(!groups[t.platform]) groups[t.platform]=[]; groups[t.platform].push(t); });
+    var html='';
+    PLATFORM_ORDER.forEach(function(p){ if(!groups[p]) return;
+      html+='<div class="platform-title">'+esc(PLATFORM_LABEL[p]||p)+' <span class="tag">'+groups[p].length+' 个工具</span></div>';
+      groups[p].forEach(function(t){ html+=renderTool(t); });
+    });
+    container.innerHTML=html;
+    container.querySelectorAll('.copy-btn').forEach(function(btn){
+      if(btn.tagName==='A') return;
+      var code=btn.parentElement.querySelector('code');
+      if(code) btn.addEventListener('click', function(){ copyText(code.textContent, btn); });
+    });
+  }
+  fetch('../data/catalog.json').then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(render)
+    .catch(function(){ container.innerHTML='<div class="empty">工具数据加载失败,请稍后刷新</div>'; });
+})();
+</script>
+</body>
+</html>

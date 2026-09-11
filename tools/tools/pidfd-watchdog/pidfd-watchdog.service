@@ -1,0 +1,13 @@
+[Unit]
+Description=pidfd-watchdog: Event-driven process watchdog
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/local/bin/pidfd-watchdog
+PIDFile=/tmp/pidfd-watchdog.pid
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
