@@ -1017,10 +1017,12 @@ const AudioDebugMonitor = {
     const liveNodes = sampleLive + synthLive;
     const activeKeys = SoundfontLoader.activeSources.filter(s => s !== null).length;
 
-    // 输出静音探测：正在播放且本窗口触发过音符，但实际输出持续为0
+    // 输出静音探测：仅「欣赏模式」有意义（音符应自动发声）。
+    // 音游模式由用户按键决定发声，音符间隔静音属正常，不监测。
     const playing = (typeof isPlaying !== 'undefined') && isPlaying;
+    const autoSounding = _autoSoundingMode();
     const silentSec = this.lastLoudTime ? (now - this.lastLoudTime) / 1000 : 0;
-    if(playing && this.notesTriggered > 0 && silentSec > 1.5){
+    if(autoSounding && playing && this.notesTriggered > 0 && silentSec > 1.5){
       console.warn('[AudioDebug] ★输出静音 ' + silentSec.toFixed(1) + 's 但仍在触发音符! rms=' +
         this.rmsLast.toFixed(6) + ' minRms=' + this.rmsMinWindow.toFixed(6) +
         ' state=' + (audioCtx ? audioCtx.state : 'null') +
@@ -1077,6 +1079,10 @@ const AudioDebugMonitor = {
     this.rmsMinWindow = 1;
   }
 };
+// 是否处于「音符应自动发声」的模式（欣赏模式）；音游模式不监测输出静音
+function _autoSoundingMode(){
+  try{ return typeof playMode === 'undefined' || playMode === 'appreciate'; }catch(e){ return true; }
+}
 // 仅在播放时运行诊断，暂停时不做无谓的采样与汇总
 setInterval(() => {
   if(debugEnabled && typeof isPlaying !== 'undefined' && isPlaying){
@@ -2543,6 +2549,7 @@ function pausePlay(){
   currentTime = (audioCtx.currentTime - playStartTime) * playSpeed;
   const _pb = document.getElementById('playBtn');
   _pb.innerHTML = PLAY_ICON; _pb.title = '播放';
+  requestStaticRedraw(); // 清掉暂停瞬间可能残留的按键高亮
 }
 
 function stopPlay(){
@@ -3593,11 +3600,27 @@ function _canvasPointToKey(e){
   if(!hit){ for(const k of cachedLayout.keys){ if(!k.isBlack && px >= k.x && px < k.x + k.w){ hit = k; break; } } }
   return hit ? hit.midi : null;
 }
+// 暂停状态下的静态重绘：用户敲键 / 松键时刷新按键高亮（播放中由 playLoop 负责）
+let _staticRedrawPending = false;
+function requestStaticRedraw(){
+  if(typeof isPlaying !== 'undefined' && isPlaying) return;
+  if(_staticRedrawPending) return;
+  _staticRedrawPending = true;
+  requestAnimationFrame(() => {
+    _staticRedrawPending = false;
+    if(isPlaying) return;
+    const fallDur = 2.0 / fallSpeedMultiplier;
+    const leftIdx = lowerBound(allNotes, currentTime - fallDur);
+    const rightIdx = lowerBound(allNotes, currentTime + fallDur);
+    drawScene(allNotes, leftIdx, rightIdx, currentTime);
+  });
+}
 function _userPlayKey(midi){
   if(midi == null) return;
   initAudio();
   if(audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
   SoundfontLoader.playNote(midi, 0.9, 0.7); // 用户敲击：固定力度与时长
+  requestStaticRedraw(); // 暂停时也要立即显示按下紫色高亮
 }
 let _lastCanvasTap = 0;
 canvas.addEventListener('pointerdown', (e) => {
@@ -3622,6 +3645,7 @@ function _endCanvasPointer(e){
   if(midi == null) return;
   for(const m of _keyPointers.values()){ if(m === midi) return; }
   try{ SoundfontLoader.stopNote(midi); }catch(_){}
+  requestStaticRedraw(); // 清除高亮
 }
 canvas.addEventListener('pointerup', _endCanvasPointer);
 canvas.addEventListener('pointercancel', _endCanvasPointer);
