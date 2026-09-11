@@ -917,14 +917,15 @@ const SoundfontLoader = {
     }
   },
 
-  async load(name, onProgress){
+  async load(name, onProgress, opts){
+    const switchCurrent = !opts || opts.switchCurrent !== false;
     if(name === '__synth__'){ this.current = '__synth__'; return; }
-    if(this.loaded[name] && this.loaded[name].ready){ this.current = name; return; }
+    if(this.loaded[name] && this.loaded[name].ready){ if(switchCurrent) this.current = name; return; }
     if(this.loading) await this.loading;
     this.loading = this._doLoad(name, onProgress);
     await this.loading;
     this.loading = null;
-    this.current = name;
+    if(switchCurrent) this.current = name;
   },
 
   // 校验内容是否为合法音色 JS：防止把 HTML 错误页或截断文件当 JS 解析
@@ -1056,16 +1057,17 @@ const SoundfontLoader = {
     return names[midi % 12] + Math.floor(midi / 12 - 1);
   },
 
-  // 预解码当前音色的所有88个音
-  async predecodeAll(){
-    if(this.current === '__synth__') return;
+  // 预解码指定音色的所有88个音（默认当前音色）；不改变 current，便于后台预解码后再无缝切换
+  async predecodeAll(name){
+    name = name || this.current;
+    if(name === '__synth__') return;
     // 分批解码，每批8个，避免同时解码88个导致主线程阻塞、音频时间线暂停
     const batchSize = 8;
     const midis = [];
     for(let midi = 21; midi <= 108; midi++) midis.push(midi);
     for(let i = 0; i < midis.length; i += batchSize){
       const batch = midis.slice(i, i + batchSize);
-      await Promise.all(batch.map(m => this._getBuffer(this.current, m)));
+      await Promise.all(batch.map(m => this._getBuffer(name, m)));
     }
   },
 
@@ -1516,13 +1518,21 @@ async function onTimbreChange(){
   }
 }
 
-// 先加载MIDI（立即解析、启用按钮），音色后台并行加载
+// 内置谱默认音色配置：谱子文件名 -> 音色id
+const songDefaultTimbre = {
+  'Rush E 3.mid': 'clavinet', // 古钢琴
+  'The Sound of Silence.mid': '__synth__', // 合成钢琴
+};
+
+// 并行加载默认谱面与默认音色：谱面就绪即可播放；音色未就绪先用合成钢琴抢跑，
+// 音色下载并预解码完成后无缝切回（不打断正在发声的音符）
 (function(){
   const hint = document.getElementById('timbreHint');
   let midiBuf = null;
-  let defaultTimbreReady = false; // 谱子对应音色是否加载完成
-  let defaultTimbreFallback = false; // 是否fallback到合成钢琴
-  let autoPlayTriggered = false; // 是否已触发自动播放（避免重复播放）
+  let autoPlayTriggered = false;    // 是否已触发自动播放（避免重复播放）
+  let timbreReady = false;          // 默认音色是否已加载并预解码完成
+  let timbreFailed = false;         // 默认音色是否加载失败
+  let startedWithFallback = false;  // 是否已用合成钢琴抢跑
   const DEFAULT_SONG = 'Rush E 3.mid';
 
   // 轻量Toast提示
@@ -1541,10 +1551,9 @@ async function onTimbreChange(){
   }
   window.showToast = showToast;
 
-  // 尝试自动播放：需默认音色就绪或fallback
-  function tryAutoPlay(){
+  // 开始播放（只在首次调用时真正触发）
+  function startPlaybackOnce(){
     if(!midiBuf || autoPlayTriggered) return;
-    if(!defaultTimbreReady && !defaultTimbreFallback) return;
     autoPlayTriggered = true;
     initAudio();
     if(audioCtx.state === 'suspended'){
@@ -1556,56 +1565,64 @@ async function onTimbreChange(){
       };
       document.addEventListener('click', startOnInteract);
       document.addEventListener('touchstart', startOnInteract);
+      if(hint) hint.textContent = '点击页面即可开始播放（浏览器自动播放限制）';
     } else {
       startPlay();
     }
   }
 
-  // fallback到合成钢琴
-  function fallbackToSynth(reason){
-    if(defaultTimbreFallback || defaultTimbreReady) return;
-    defaultTimbreFallback = true;
+  // 音色未就绪：用合成钢琴立即起播，避免等待下载
+  function startWithFallback(){
+    if(timbreReady) return;
+    if(!timbreFailed) startedWithFallback = true;
     SoundfontLoader.current = '__synth__';
-    console.warn('[AudioDebug] 回退合成钢琴，原因：' + reason);
-    if(hint) hint.textContent = '当前：合成钢琴';
-    showToast(reason + '，回退为合成钢琴，现在开始播放');
-    if(midiBuf) tryAutoPlay();
+    if(hint && !timbreFailed) hint.textContent = '古钢琴下载中… 先用合成钢琴播放';
+    startPlaybackOnce();
   }
 
-  // 加载谱子对应的默认音色
-  async function loadDefaultTimbreForSong(filename){
-    const timbreName = songDefaultTimbre[filename];
-    if(!timbreName){
-      fallbackToSynth('该谱子未配置默认音色');
+  // 加载谱子对应的默认音色：先下载+预解码（不切 current），完成后再无缝切换
+  async function loadDefaultTimbre(){
+    const timbreName = songDefaultTimbre[DEFAULT_SONG];
+    if(!timbreName || timbreName === '__synth__'){
+      timbreReady = true;
+      if(hint) hint.textContent = '当前：合成钢琴';
+      startPlaybackOnce();
       return;
     }
     // 同步下拉菜单选中状态
     const timbreSel = document.getElementById('timbreSel');
     if(timbreSel && timbreSel.value !== timbreName) timbreSel.value = timbreName;
     try{
+      // switchCurrent:false —— 先保持合成钢琴，等预解码完成再切，避免解码期间丢音
       await SoundfontLoader.load(timbreName, (p, msg) => {
-        if(hint && !defaultTimbreFallback) hint.textContent = msg + ' ' + Math.round(p * 100) + '%';
-      });
-      if(defaultTimbreFallback) return; // 已fallback，不再切换
-      if(hint) hint.textContent = '当前音色：预解码中…';
-      await SoundfontLoader.predecodeAll();
-      if(defaultTimbreFallback) return;
-      defaultTimbreReady = true;
-      if(hint) hint.textContent = '当前音色：' + (timbreSel.options[timbreSel.selectedIndex]?.text || timbreName) + ' ✓ 就绪';
-      if(midiBuf) tryAutoPlay();
+        if(hint && !startedWithFallback) hint.textContent = msg + ' ' + Math.round(p * 100) + '%';
+      }, {switchCurrent: false});
+      if(hint && !startedWithFallback) hint.textContent = '音色预解码中…';
+      await SoundfontLoader.predecodeAll(timbreName);
+      timbreReady = true;
+      // 无缝升级：仅改 current，后续音符用新音色，已发声的旧 voice 自然衰减
+      SoundfontLoader.current = timbreName;
+      const label = (timbreSel && timbreSel.options[timbreSel.selectedIndex]) ? timbreSel.options[timbreSel.selectedIndex].text : timbreName;
+      if(hint) hint.textContent = '当前音色：' + label + ' ✓ 就绪';
+      if(startedWithFallback) showToast('古钢琴已就绪，已切换');
+      startPlaybackOnce();
       // 后台预加载其他常用音色（不阻塞播放，用_doLoad避免切换current）
       const PRELOAD = ['acoustic_grand_piano', 'electric_piano_2'].filter(n => n !== timbreName);
       for(const name of PRELOAD){
         try{ await SoundfontLoader._doLoad(name, null); }catch(e){}
       }
     }catch(e){
+      timbreFailed = true;
       console.warn('[AudioDebug] 默认音色加载失败 name=' + timbreName + ' 错误=' + (e && e.message ? e.message : e));
-      fallbackToSynth('音色加载失败');
+      SoundfontLoader.current = '__synth__';
+      if(hint) hint.textContent = '当前：合成钢琴（音色加载失败）';
+      if(!autoPlayTriggered) showToast('音色加载失败，回退合成钢琴');
+      startPlaybackOnce();
     }
   }
 
-  // 1. 先加载默认MIDI，解析后加载对应音色
-  console.log('[AudioDebug][INFO] 加载默认谱面 midi/' + DEFAULT_SONG);
+  // 并行启动：谱面与音色同时开始下载
+  console.log('[AudioDebug][INFO] 并行加载默认谱面与音色 midi/' + DEFAULT_SONG);
   AssetCache.fetch('midi/' + DEFAULT_SONG).then(r => {
     if(!r.ok) throw new Error('MIDI加载失败');
     return r.arrayBuffer();
@@ -1613,11 +1630,13 @@ async function onTimbreChange(){
     console.log('[AudioDebug][INFO] 默认谱面已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
     midiBuf = buf;
     parseAndPlayMidi(buf, DEFAULT_SONG);
-    // 加载谱子对应的默认音色
-    loadDefaultTimbreForSong(DEFAULT_SONG);
+    if(timbreReady) startPlaybackOnce();
+    else startWithFallback();
   }).catch(e => {
     if(hint) hint.textContent = 'MIDI加载失败：' + e.message;
   });
+
+  loadDefaultTimbre();
 })();
 
 // 加载谱子列表
@@ -1672,12 +1691,6 @@ async function getUserSong(name){
     req.onerror = () => reject(req.error);
   });
 }
-
-// 内置谱默认音色配置：谱子文件名 -> 音色id
-const songDefaultTimbre = {
-  'Rush E 3.mid': 'clavinet', // 古钢琴
-  'The Sound of Silence.mid': '__synth__', // 合成钢琴
-};
 
 async function loadSongList(){
   const sel = document.getElementById('songSel');

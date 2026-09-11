@@ -297,7 +297,7 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 - **时钟**：以 `audioCtx.currentTime` 为准推进 `currentTime`，避免 `performance.now` 与音频时钟漂移。
 - **控制**：播放/暂停/停止/重播、进度条拖拽 seek、0.2x–2x 变速、顺序播放/单曲循环。
 - **定位**：seek 与开始播放都用二分 `lowerBound(allNotes, time)` 找起始音符，避免线性扫描。
-- **自动播放**：默认谱面与音色就绪后尝试自动播放；若 AudioContext 处于 suspended，则挂到首次点击/触摸后恢复。
+- **并行加载与自动播放**：进入页面即**并行**下载默认谱面与默认音色（早期版本为串行）。谱面解析完成即可起播：若音色尚未就绪，先用**合成钢琴**抢跑，待音色下载并**预解码完成后无缝切回**——只切换 `current`，不打断正在发声的 voice，避免解码期间丢音；音色加载失败则保持合成钢琴。若 AudioContext 处于 suspended，则挂到首次点击/触摸后恢复。
 - **回到前台自动续播**：不因失焦暂停。`visibilitychange` 回到前台时，若仍在播放且音频上下文被浏览器挂起，则自动 `resume()` 并确保渲染循环运行。注：后台期间 rAF 被浏览器挂起，音频不会持续输出，此机制保证切回后接上。
 - **顺序播放**：非循环时自动切下一首，`await` 音色加载后再开始，避免开头丢音。
 - **进度节流**：进度条与统计文本合并为 100ms 更新一次，避免每帧写 DOM。
@@ -347,6 +347,15 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 - 视口变化：`resize`（rAF 合并）、`orientationchange`、`fullscreenchange`、`visualViewport` 均触发重算布局，确保钢琴键盘始终可见。
 - **安全区**：目前仅使用 `100dvh` 处理移动端视口，尚未适配 `env(safe-area-inset-*)`（见路线图）。
 
+## 9.5 自定义下拉（音色 / 谱面）
+
+原生 `<select>` 的 `<option>` 由操作系统绘制，深色主题下在桌面端常出现**白底白字**、无法用 CSS 可靠着色的问题。为此用自定义下拉替换：
+
+- **原生 select 保留为数据源**：`.value` / `.selectedIndex` / `.options` / `.innerHTML` / `.appendChild` 等接口照常可用，仅在视觉上隐藏，其余业务代码零改动。
+- **双向同步**：覆写实例上的 `value` / `selectedIndex` setter，并监听子节点变化（`MutationObserver`），程序化改值或动态重建选项时自动刷新触发按钮文案；用户在下拉中选择时回写原生 select 并派发 `change`。
+- **弹层 portal 到 `document.body`**：使用 `position:fixed`，避免移动端抽屉的 `transform` 使 fixed 相对面板定位，以及面板 `overflow` 裁剪。
+- **交互**：分组标题、选中高亮、**搜索过滤**（55 种音色快速定位）、方向键 / 回车 / Esc 键盘操作、点击外部或滚动时自动关闭 / 重新定位。
+
 # 十、部署、流量与缓存策略（GitHub Pages）
 
 > 本章与「性能」分离：性能关注**运行时的帧率与音频延迟**，本章关注**网络流量、加载速度、存储与托管成本**。
@@ -368,6 +377,20 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 
 - 单个音色文件约 2–4.5 MB（如 `lead_7_fifths-ogg.js` 4.5 MB、`violin-ogg.js` 3.6 MB）。
 - 默认加载：`Rush E 3.mid`（2.6 MB）+ 默认音色 `clavinet`（2.6 MB）≈ **5.2 MB**；若再后台预加载 `acoustic_grand_piano`（2.6 MB）与 `electric_piano_2`（2.3 MB），首次会话网络开销约 **10 MB**。
+
+**传输压缩实测（GitHub Pages / Fastly）**
+
+| 资源 | 原始 | gzip 传输 | 说明 |
+| --- | --- | --- | --- |
+| `index.html` | 111 KB | **34 KB** | 文本，压缩 3.3× |
+| `soundfonts/clavinet-ogg.js` | 2.67 MB | **1.73 MB** | base64 文本，压缩约 1.35× |
+| `midi/Rush E 3.mid` | 2.70 MB | 2.70 MB | 二进制，几乎不可压 |
+| `*.ogg` | 1.58 MB | 1.58 MB | 二进制，几乎不可压 |
+
+- **HTML 快只是因为小且压得狠**，音色慢的根因是体积（2.67 MB），默认谱面本身也有 2.7 MB，二者量级相同。
+- GitHub Pages 支持 **gzip 但不支持 brotli**（请求 `br` 会回落到 identity）。
+- 把音色后缀从 `.js` 改成 `.html` **无收益**：压缩由内容/内容类型决定，与扩展名无关。
+- 若把 base64 还原成裸 OGG 二进制，虽省去 33% base64 膨胀，但 OGG 不可再压，反而比「gzip 后的 base64」（1.73 MB）更大，故当前方案在传输上并不吃亏。
 
 ## 10.3 客户端缓存策略
 
@@ -612,4 +635,11 @@ midi_player/
 | UI/配色 | 配色栏与全彩取色板；直角梯形色带；FAB 组与边界钳制；移动端全屏键盘可见 | `14de350d`、`4a30ea72`、`5fe0a7a8`、`d941dac8`、`d681b35c` |
 | 谱面 | `Rush E3.mid` → `Rush E 3.mid` 重命名与默认音色映射 | `eab13838`、`052ccd20`、`238c2366`、`8decacb3` |
 | 代码审查 | 修复 `drawScene` 签名、XSS、Path2D 分配、DOM/resize 节流；清理死代码 | `4bd17281` |
+
+## 2026-09 交互与加载体验
+
+| 主题 | 摘要 | 代表 commit |
+| --- | --- | --- |
+| 加载体验 | 默认谱面与音色改为**并行**下载；谱面就绪即用合成钢琴抢跑，音色下载并预解码完成后**无缝切回**（只切 `current`，不打断发声 voice） | `本提交` |
+| UI | 音色 / 谱面下拉改为**自定义深色弹层**（分组、搜索、键盘操作、portal 定位），修复桌面端原生 `option` 白底白字不可读 | `本提交` |
 | 文档 | 性能复盘与优化笔记；部署/流量/缓存章节；主题拆分 | `476b6812`、`a9429e31` |
