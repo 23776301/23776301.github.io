@@ -1,0 +1,24 @@
+{
+  "services": [
+    {
+      "name": "smbd",
+      "cmd": "/usr/sbin/smbd --daemon",
+      "enabled": true
+    },
+    {
+      "name": "nmbd",
+      "cmd": "/usr/sbin/nmbd --daemon",
+      "enabled": true
+    },
+    {
+      "name": "vsftpd",
+      "cmd": "/usr/sbin/vsftpd /etc/vsftpd.conf",
+      "enabled": true
+    },
+    {
+      "name": "sshd",
+      "cmd": "/usr/sbin/sshd",
+      "enabled": true
+    }
+  ]
+}
