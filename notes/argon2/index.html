@@ -1,222 +1,134 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
-<title>Argon2id 演示 · teecatt</title>
-<style>
-:root{--bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--accent2:#3fb950;--red:#ff3f58;--warn:#e8b64c;--violet:#c822ff}
-*{margin:0;padding:0;box-sizing:border-box}
-*{-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
-a{text-decoration:none;color:inherit}
-.topbar{height:52px;display:flex;align-items:center;padding:0 20px;gap:14px;border-bottom:1px solid var(--line);background:var(--surface)}
-.topbar .back{color:var(--muted);font-size:13px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;transition:all .15s}
-.topbar .back:hover{color:var(--text);border-color:var(--accent)}
-.topbar h1{font-size:15px;font-weight:600;flex:1}
-.container{max-width:820px;margin:0 auto;padding:24px 20px 64px;width:100%}
-.intro{color:var(--muted);font-size:13px;line-height:1.85;margin-bottom:16px}
-.intro b{color:var(--text)}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px}
-.card h2{font-size:14px;margin-bottom:12px;font-weight:600}
-label{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px}
-label:first-of-type{margin-top:0}
-input,select{width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;font-family:inherit}
-input:focus,select:focus{border-color:var(--accent)}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-@media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
-.btn{background:var(--accent);border:none;color:#fff;padding:10px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s}
-.btn:hover{background:#4090e0}
-.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:400}
-.btn.ghost:hover{color:var(--text);border-color:var(--accent)}
-.btn:active{opacity:.78}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.status{font-size:12px;margin-top:12px;min-height:18px;line-height:1.7}
-.status.err{color:var(--red)}.status.ok{color:var(--accent2)}.status.warn{color:var(--warn)}
-.out{margin-top:12px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:12px;word-break:break-all;line-height:1.7;display:none}
-.out b{color:var(--accent2)}
-.metrics{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--muted)}
-.metrics b{color:var(--text);font-size:15px}
-.warnbox{background:rgba(232,182,76,.1);border:1px solid rgba(232,182,76,.4);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--warn);line-height:1.7;margin-bottom:16px}
-.hint{font-size:11px;color:var(--muted);line-height:1.7;margin-top:8px}
-.hint code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px}
-.q{color:var(--muted);font-size:12px;line-height:1.8}
-.q b{color:var(--text)}
-</style>
+<title>为什么无法暴力破解？· 加密笔记</title>
+<script>
+(function(){try{var s=localStorage.getItem("en-theme")||"dark";var d=s==="dark"||(s==="system"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches);if(d)document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark");}catch(e){}})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script>
+tailwind.config={darkMode:"class",theme:{extend:{
+  colors:{primary:"#3B82F6","bg-light":"#FFFFFF","bg-dark":"#111827","surface-light":"#F9FAFB","surface-dark":"#1F2937","border-light":"#E5E7EB","border-dark":"#374151","text-light":"#1F2937","text-dark":"#F9FAFB","muted-light":"#6B7280","muted-dark":"#9CA3AF"},
+  fontFamily:{sans:["Inter","system-ui","sans-serif"]}
+}}};
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>*{-webkit-tap-highlight-color:transparent}</style>
 </head>
-<body>
-<div class="topbar">
-  <a class="back" href="../crypto/">← 加密笔记</a>
-  <h1>🧮 Argon2id 演示</h1>
-</div>
-<div class="container">
-  <div class="intro">
-    Argon2id 是<b>内存硬</b>的密钥派生函数：每次「口令 → 密钥」都必须占用指定内存（这里 <b>512 MiB</b>）。
-    这样攻击者每猜一个口令都要付出 512 MiB 内存 + 相应时间，GPU 的并行优势被大幅抹平。
-    <div style="margin-top:8px">已用它做成品：<a href="../vault/" style="color:var(--accent)">加密笔记库（密文放公开仓，解锁一次即可）→</a></div>
-  </div>
+<body class="bg-bg-light dark:bg-bg-dark text-text-light dark:text-text-dark font-sans min-h-screen">
 
-  <div class="warnbox">
-    ⚠️ 512 MiB 是很大的内存。桌面浏览器通常没问题；<b>手机/平板很可能分配失败（OOM）或极慢</b>。
-    实际部署建议：桌面 512 MiB、移动 64–256 MiB。本页用于观察内存与耗时。
-  </div>
+<button id="theme-toggle" class="fixed top-3 right-3 z-40 p-2 rounded-lg text-muted-light dark:text-muted-dark bg-white/80 dark:bg-surface-dark/80 backdrop-blur border border-border-light dark:border-border-dark" title="切换主题"><span class="material-icons text-lg" data-theme-icon>dark_mode</span></button>
 
-  <div class="card">
-    <h2>参数</h2>
-    <label>口令</label>
-    <input id="pass" type="password" placeholder="输入要派生的口令…" value="down2.top">
-    <div class="grid3">
-      <div>
-        <label>内存 m（MiB）</label>
-        <select id="mem">
-          <option value="64">64</option>
-          <option value="128">128</option>
-          <option value="256">256</option>
-          <option value="512" selected>512</option>
-          <option value="1024">1024</option>
-        </select>
+<main class="max-w-3xl mx-auto px-6 py-10">
+  <a href="https://down2.top/encrypted_notes/" class="inline-flex items-center gap-1 text-sm text-primary hover:underline mb-6"><span class="material-icons text-base">arrow_back</span> 返回加密笔记</a>
+
+  <h1 class="text-3xl font-bold mb-3">为什么无法暴力破解？</h1>
+  <p class="text-muted-light dark:text-muted-dark mb-8">一句话：Argon2id 让<strong>每一次猜测</strong>都必须占用 512 MiB 内存，攻击者的并行优势被内存容量与带宽卡死，成本随密码长度指数爆炸。</p>
+
+  <article class="prose prose-lg dark:prose-invert max-w-none">
+    <h2>关键点</h2>
+    <ul>
+      <li><strong>内存硬</strong>：本页每次验证用 Argon2id <code>m=512 MiB, t=4, p=1</code>，一次猜测就吃掉 512 MiB。</li>
+      <li><strong>并行受内存限制</strong>：想同时猜 N 个口令，就要 N×512 MiB 内存。一张 80 GB 的 H100 最多约 150 路并发，不是无限。</li>
+      <li><strong>空间指数增长</strong>：随机密码每多 1 位，搜索空间 ×62。成本不是线性，是指数。</li>
+      <li><strong>只保护强密码</strong>：Argon2 抬高每次猜测成本，但救不了字典词 / 短数字。请用长随机密码。</li>
+    </ul>
+
+    <h2>破解时间估算</h2>
+    <p>下表为<strong>数量级估算</strong>（平均时间 = 搜索空间 ÷ (2 × 猜测速率)）。密码为随机、字符集 62（A–Z a–z 0–9）。</p>
+
+    <div class="not-prose my-6">
+      <div class="overflow-x-auto rounded-xl border border-border-light dark:border-border-dark">
+        <table class="w-full text-sm border-collapse">
+          <thead><tr class="bg-surface-light dark:bg-surface-dark border-b border-border-light dark:border-border-dark">
+            <th class="text-left py-3 px-3 font-semibold">密码长度</th>
+            <th class="text-right py-3 px-2 font-semibold whitespace-nowrap">单核 CPU</th>
+            <th class="text-right py-3 px-2 font-semibold whitespace-nowrap">9950X 16 核</th>
+            <th class="text-right py-3 px-2 font-semibold whitespace-nowrap">1× H100</th>
+            <th class="text-right py-3 px-2 font-semibold whitespace-nowrap">100× H100</th>
+            <th class="text-right py-3 px-2 font-semibold whitespace-nowrap">1000× H100</th>
+          </tr></thead>
+          <tbody>
+            <tr class="border-b border-border-light dark:border-border-dark/60">
+              <td class="py-2.5 px-3 font-mono font-semibold">6 位</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">900 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">56 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">6 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">21.9 天</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">2.2 天</td>
+            </tr>
+            <tr class="border-b border-border-light dark:border-border-dark/60">
+              <td class="py-2.5 px-3 font-mono font-semibold">8 位</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">345.9 万年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">21.6 万年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">2.3 万年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">231 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap">23 年</td>
+            </tr>
+            <tr class="border-b border-border-light dark:border-border-dark/60">
+              <td class="py-2.5 px-3 font-mono font-semibold">10 位</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">133.0 亿年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">8.3 亿年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">8,865.3 万年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">88.7 万年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">8.9 万年</td>
+            </tr>
+            <tr class="border-b border-border-light dark:border-border-dark/60">
+              <td class="py-2.5 px-3 font-mono font-semibold">12 位</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">5.11×10<sup>13</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">3.19×10<sup>12</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">3,407.8 亿年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">34.1 亿年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">3.4 亿年</td>
+            </tr>
+            <tr class="border-b border-border-light dark:border-border-dark/60">
+              <td class="py-2.5 px-3 font-mono font-semibold">14 位</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.96×10<sup>17</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.23×10<sup>16</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.31×10<sup>15</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.31×10<sup>13</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">1.31×10<sup>12</sup> 年</td>
+            </tr>
+            <tr>
+              <td class="py-2.5 px-3 font-mono font-semibold">16 位</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">7.55×10<sup>20</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">4.72×10<sup>19</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">5.04×10<sup>18</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">5.04×10<sup>16</sup> 年</td>
+              <td class="text-right py-2.5 px-2 whitespace-nowrap text-green-500 font-semibold">5.04×10<sup>15</sup> 年</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <div>
-        <label>迭代 t</label>
-        <select id="time">
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3" selected>3</option>
-          <option value="4">4</option>
-        </select>
-      </div>
-      <div>
-        <label>并行 p</label>
-        <select id="par">
-          <option value="1" selected>1</option>
-          <option value="2">2</option>
-        </select>
-      </div>
+      <p class="text-xs text-muted-light dark:text-muted-dark mt-2">估算假设：单核 ≈1 次/秒；9950X 16 核 ≈16 次/秒；1× H100 ≈150 次/秒；100× / 1000× 按比例。实际受内存带宽、实现与调度影响，可能有数量级偏差。</p>
     </div>
-    <label>盐（随机生成，随密文保存）</label>
-    <input id="salt" readonly>
-    <div class="row">
-      <button class="btn" id="btnRun">派生密钥（Argon2id）</button>
-      <button class="btn ghost" id="btnSim" disabled>模拟切换笔记页（用缓存密钥）</button>
-    </div>
-    <div id="status" class="status"></div>
-    <div class="metrics" id="metrics" style="display:none">
-      <div>耗时<br><b id="mTime">-</b></div>
-      <div>峰值内存（参数）<br><b id="mMem">-</b></div>
-      <div>输出长度<br><b id="mLen">-</b></div>
-    </div>
-    <div class="out" id="out"></div>
+
+    <h2>结论</h2>
+    <p>只要使用 <strong>10 位以上</strong>的随机密码，即便动用 <strong>1000 张 H100</strong> 也要数万年；<strong>12 位以上</strong>基本不可行。</p>
+  </article>
+
+  <div class="mt-8 p-4 rounded-xl border border-green-500/40 bg-green-500/10 text-sm leading-relaxed">
+    <strong class="text-green-600 dark:text-green-400">没必要尝试暴力破解。</strong>
+    与其堆机器，不如换一个更长的随机密码——代价是零。
   </div>
 
-  <div class="card">
-    <h2>关于内存的两个常见疑问</h2>
-    <div class="q">
-      <p><b>1. 每次校验口令都要占用 512 MiB 吗？用完就释放吗？</b><br>
-      —— 是的，512 MiB 只在「派生密钥」这一步（解锁/校验）占用；派生完成后工作内存即可释放，留下的密钥只有 32 字节。
-      本页为了确保释放，把派生放进 <b>Web Worker</b>，拿到结果后立即 <code>terminate()</code>，内存交还操作系统。</p>
-      <p style="margin-top:10px"><b>2. 笔记页面结构复杂，每次切页都要占 512 MiB 吗？</b><br>
-      —— <b>不会。</b> 切页/翻目录用的是已缓存的密钥，只做 AES-GCM 解密，内存正比于单篇笔记大小（很小）。
-      512 MiB 只在<b>首次解锁</b>（或锁定后重新解锁）时付一次。真实笔记应用会把密钥缓存进 IndexedDB，之后不再跑 Argon2。</p>
-    </div>
-  </div>
-
-  <div class="hint">
-    说明：Argon2 在浏览器里走 WASM，比原生慢几倍；这里的耗时是「你设备上的真实值」。攻击者虽可换更快的实现，但内存成本无法省掉。
-  </div>
-</div>
+  <footer class="mt-10 pt-6 border-t border-border-light dark:border-border-dark text-xs text-muted-light dark:text-muted-dark">
+    参数与本页实际使用一致：Argon2id m=512 MiB · t=4 · p=1 · AES-256-CTR。数字为数量级估算，非精确基准。
+  </footer>
+</main>
 
 <script>
-const $ = id => document.getElementById(id);
-// 自托管，不依赖任何第三方 CDN（文件在 notes/vendor/ 下）
-const MEM_SCRIPT = new URL('../vendor/argon2-bundled.min.js', location.href).href;
-
-function randSalt(){
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  return [...b].map(x => x.toString(16).padStart(2,'0')).join('');
-}
-
-async function deriveInWorker(p){
-  const code = `
-    importScripts('${MEM_SCRIPT}');
-    self.onmessage = async (e) => {
-      const d = e.data;
-      try {
-        if (typeof argon2 === 'undefined') throw new Error('argon2 库未加载');
-        const res = await argon2.hash({
-          pass: d.pass, salt: d.salt, time: d.time, mem: d.mem,
-          parallelism: d.par, hashLen: 32, type: 2 /* 2 = Argon2id（本库不导出 Argon2Type）*/
-        });
-        self.postMessage({ ok:true, hashHex: res.hashHex });
-      } catch(err){ self.postMessage({ ok:false, error: String((err && err.message) || err) }); }
-    };
-  `;
-  const url = URL.createObjectURL(new Blob([code], {type:'application/javascript'}));
-  const w = new Worker(url);
-  try{
-    const result = await new Promise((resolve, reject) => {
-      w.onmessage = e => resolve(e.data);
-      w.onerror = e => reject(new Error(e.message || 'Worker 执行失败'));
-      w.postMessage(p);
-    });
-    return result;
-  } finally {
-    w.terminate();
-    URL.revokeObjectURL(url);
-  }
-}
-
-let cachedKeyHex = null;
-
-$('salt').value = randSalt();
-
-$('btnRun').onclick = async () => {
-  const pass = $('pass').value;
-  if(!pass){ $('status').textContent='请输入口令'; $('status').className='status err'; return; }
-  const memMiB = parseInt($('mem').value,10);
-  const params = { pass, salt: $('salt').value, time: parseInt($('time').value,10), mem: memMiB*1024, par: parseInt($('par').value,10) };
-  $('btnRun').disabled = true; $('btnSim').disabled = true;
-  $('status').textContent = '正在 Worker 中派生（占用 ' + memMiB + ' MiB，可能需要数秒）…';
-  $('status').className = 'status warn';
-  $('out').style.display='none'; $('metrics').style.display='none';
-  const t0 = performance.now();
-  try{
-    const res = await deriveInWorker(params);
-    const ms = performance.now() - t0;
-    if(!res.ok) throw new Error(res.error);
-    cachedKeyHex = res.hashHex;
-    $('mTime').textContent = ms.toFixed(0) + ' ms';
-    $('mMem').textContent = memMiB + ' MiB';
-    $('mLen').textContent = '32 B';
-    $('metrics').style.display = 'flex';
-    $('out').style.display = 'block';
-    $('out').innerHTML = '派生密钥（hex，仅演示用）：<br><b>' + res.hashHex + '</b><br><br>' +
-      '✅ Worker 已 terminate()，' + memMiB + ' MiB 工作内存已释放。';
-    $('status').textContent = '派生完成，密钥已缓存（32 B）。切换笔记页无需再次派生。';
-    $('status').className = 'status ok';
-    $('btnSim').disabled = false;
-  }catch(e){
-    $('status').textContent = '派生失败：' + e.message + '（内存过大可能被系统拒绝）';
-    $('status').className = 'status err';
-  }finally{ $('btnRun').disabled = false; }
-};
-
-$('btnSim').onclick = () => {
-  if(!cachedKeyHex) return;
-  const t0 = performance.now();
-  // 真实场景：用缓存的 CryptoKey 做 AES-GCM 解密，几乎瞬时
-  const ms = performance.now() - t0;
-  $('out').style.display = 'block';
-  $('out').innerHTML = '📄 模拟切换到一个笔记页：<br>' +
-    '使用<b>缓存密钥</b>直接 AES-GCM 解密，<b>不重新运行 Argon2</b>，<br>' +
-    '不占用 512 MiB，本次耗时约 <b>' + ms.toFixed(2) + ' ms</b>。';
-  $('status').textContent = '已用缓存密钥解密（无 Argon2、无 512 MiB）';
-  $('status').className = 'status ok';
-};
-
-$('mem').onchange = () => { $('salt').value = randSalt(); };
+(function(){
+  var K='en-theme';
+  var get=function(){return localStorage.getItem(K)||'dark';};
+  function apply(p){var d=p==='dark'||(p==='system'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.classList.toggle('dark',d);document.querySelectorAll('[data-theme-icon]').forEach(function(e){e.textContent=d?'light_mode':'dark_mode';});}
+  apply(get());
+  document.getElementById('theme-toggle').onclick=function(){var n=get()==='dark'?'light':'dark';localStorage.setItem(K,n);apply(n);};
+})();
 </script>
 </body>
 </html>
