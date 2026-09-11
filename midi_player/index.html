@@ -1,0 +1,2560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIDI 播放器 · 88键可视化</title>
+<style>
+:root{
+  --bg:#0d0d14; --panel:#16161f; --border:#2a2a3a; --text:#e8e8f0;
+  --dim:#8a8aa0; --accent:#8b5cf6; --accent2:#6366f1; --ok:#2fbf6f; --warn:#e8b64c;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh;overflow-x:hidden}
+.container{max-width:1200px;margin:0 auto;padding:16px}
+h1{font-size:22px;font-weight:700;margin-bottom:4px}
+.subtitle{color:var(--dim);font-size:13px;margin-bottom:16px}
+.layout{display:grid;grid-template-columns:340px 1fr;gap:16px}
+@media(max-width:800px){
+  .layout{grid-template-columns:1fr}
+  .container{padding:0}
+  h1,.subtitle{display:none}
+  body{overflow:hidden;height:100vh;height:100dvh}
+}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+.visual-panel{padding:12px}
+.panel h2{font-size:14px;font-weight:600;margin-bottom:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+
+/* 菜单/调试按钮组（可拖拽，自动淡出） */
+.fab-group{
+  position:fixed;left:0;top:67%;transform:translateY(-50%);
+  z-index:10000;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  transition:opacity .4s ease, transform .4s ease, left .3s ease;
+  opacity:1;
+}
+.fab-group.faded{opacity:0.5}
+.fab-group.hidden-btn{display:none !important}
+.menu-btn{
+  display:none;
+  width:44px;height:44px;
+  border-radius:50%;
+  background:rgba(22,22,31,.85);border:1px solid var(--border);
+  color:#2fbf6f;font-size:18px;cursor:grab;
+  align-items:center;justify-content:center;
+  backdrop-filter:blur(8px);
+  touch-action:none;user-select:none;
+  flex:0 0 auto;
+}
+.menu-btn.faded{opacity:0.5}
+.menu-btn:active{cursor:grabbing}
+.menu-btn.hidden-btn{display:none !important}
+@media(max-width:800px){.menu-btn{display:flex}}
+
+/* 调试按钮：与菜单按钮同尺寸，中间绿色 DEBUG 文字；默认位于菜单按钮正上方 */
+.debug-fab{
+  display:flex;
+  width:44px;height:44px;
+  border-radius:50%;
+  background:rgba(22,22,31,.85);border:1px solid var(--border);
+  color:#2fbf6f;font-family:monospace;font-size:9px;font-weight:bold;letter-spacing:.5px;
+  align-items:center;justify-content:center;cursor:pointer;
+  backdrop-filter:blur(8px);user-select:none;
+  flex:0 0 auto;
+}
+/* PC 端没有菜单按钮：按钮组固定在右下角 */
+@media(min-width:801px){
+  .fab-group{left:auto;right:8px;top:auto;bottom:8px;transform:none;}
+}
+
+/* 自定义配色弹窗的目标选择按钮 */
+.palette-target{
+  display:flex;align-items:center;justify-content:space-between;gap:6px;
+  padding:6px 8px;border-radius:8px;cursor:pointer;
+  border:1px solid #333;background:rgba(255,255,255,.04);color:#ddd;font-size:12px;
+}
+.palette-target.active{border-color:#8b5cf6;background:rgba(139,92,246,.18);color:#fff}
+.palette-target .sw{width:22px;height:14px;border-radius:3px;border:1px solid #555;flex-shrink:0}
+
+/* 圆形配色按钮（A/B/C 与编辑图标） */
+.pal-btn{
+  width:26px;height:26px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  padding:0;border:none;cursor:pointer;
+  background:rgba(124,58,237,.15);color:#c4b5fd;
+  font-size:11px;font-weight:600;
+}
+.pal-btn.active{background:var(--accent);color:#fff}
+.pal-btn:hover{background:rgba(124,58,237,.3)}
+
+/* 移动端抽屉面板 */
+@media(max-width:800px){
+  .control-panel{
+    position:fixed;top:0;left:0;z-index:1000;
+    width:100vw;max-height:66.67vh;
+    overflow-y:auto;
+    border-radius:0 0 16px 16px;
+    transform:translateX(-105%);
+    transition:transform .25s ease;
+    box-shadow:4px 0 20px rgba(0,0,0,.5);
+  }
+  .control-panel.open{transform:translateX(0)}
+  /* 右侧容器固定全屏 */
+  .layout > div:last-child{
+    position:fixed;inset:0;display:flex;flex-direction:column;
+  }
+  .top-bar{flex-shrink:0}
+  .visual-panel{
+    flex:1;border-radius:0;border:none;padding:0;
+    min-height:0;position:relative;overflow:hidden;
+  }
+  #visualCanvas{height:100% !important;border-radius:0}
+  .overlay-mask{
+    display:none;position:fixed;inset:0;z-index:999;
+    background:rgba(0,0,0,.4);
+  }
+  .overlay-mask.show{display:block}
+}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--text);font-size:13px;cursor:pointer;transition:all .15s;min-height:40px}
+.btn:hover{background:rgba(255,255,255,.08)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.primary:hover{background:#7c3aed}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.speed-btn{border-radius:10px !important;border:none !important;background:rgba(124,58,237,.15) !important;color:#c4b5fd !important}
+.speed-btn.active{background:var(--accent) !important;color:#fff !important;font-weight:600}
+.speed-btn:hover{background:rgba(124,58,237,.3) !important}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+
+/* 顶部控制栏（可视化区上方） */
+.top-bar{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:12px;padding:8px 10px;margin-bottom:8px;
+}
+.top-bar-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.top-bar .btn{padding:4px 6px;min-height:28px;font-size:11px;border-radius:10px;border:none;white-space:nowrap;flex-shrink:0}
+.top-bar .top-bar-row:nth-child(2) .btn:nth-child(1),.top-bar .top-bar-row:nth-child(2) .btn:nth-child(2){width:52px;flex:0 0 52px}
+.top-bar select{padding:4px 8px;font-size:12px;border-radius:10px;width:140px;flex:0 0 auto;flex-shrink:0;min-height:28px}
+.top-bar .song-name{font-size:11px;color:var(--dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.top-bar .progress-wrap{margin:4px 0 0}
+.top-bar .progress-bar{height:8px}
+.top-bar .time-row{font-size:11px;margin-top:2px}
+@media(max-width:800px){
+  .top-bar{border-radius:0;border-left:none;border-right:none;border-top:none;margin-bottom:0}
+}
+.row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.row label{font-size:12px;color:var(--dim);min-width:60px}
+.row input[type=range]{flex:1;accent-color:var(--accent);height:8px;border-radius:4px;cursor:pointer}
+.row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.row input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #fff}
+.row input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:4px;background:rgba(255,255,255,.1)}
+.row input[type=range]::-moz-range-track{height:8px;border-radius:4px;background:rgba(255,255,255,.1)}
+.row .val{font-size:12px;color:var(--text);min-width:40px;text-align:right}
+select{flex:1;background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);border-radius:12px;padding:10px 12px;font-size:13px;outline:none;cursor:pointer}
+select:focus{border-color:var(--accent)}
+.hint{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5}
+.progress-wrap{margin:12px 0}
+.progress-bar{height:6px;background:#e5e5e5;border-radius:3px;overflow:hidden;cursor:pointer}
+.progress-fill{height:100%;background:var(--accent);width:0%;transition:width .1s linear}
+.time-row{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:4px}
+#visualCanvas{width:100%;height:500px;background:#0a0a10;border-radius:8px;display:block}
+.file-info{font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6}
+.file-info b{color:var(--text)}
+.timbre-hint{font-size:11px;color:var(--dim);margin-top:4px;min-height:16px}
+</style>
+</head>
+<body>
+<!-- 菜单按钮 + 调试按钮（同组，debug 在菜单下方，二者可一起拖动） -->
+<div class="fab-group" id="fabGroup">
+  <button class="menu-btn" title="菜单">☰</button>
+  <button id="debugTerminalBtn" class="debug-fab" title="调试终端">DEBUG</button>
+</div>
+<!-- 移动端遮罩 -->
+<div class="overlay-mask" id="overlayMask" onclick="toggleMenu()"></div>
+<div class="container">
+  <h1>MIDI 播放器</h1>
+  <p class="subtitle">88 键钢琴可视化 · 多音色 · 变速播放</p>
+
+  <div class="layout">
+    <!-- 左侧控制面板（仅设置项） -->
+    <div class="panel control-panel" id="controlPanel">
+      <h2>播放设置</h2>
+      <div class="row">
+        <label>音乐倍速</label>
+        <div style="flex:1;display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn speed-btn" data-speed="0.2" onclick="setSpeed(0.2)" style="padding:4px 8px;min-height:28px;font-size:11px">0.2x</button>
+          <button class="btn speed-btn" data-speed="0.5" onclick="setSpeed(0.5)" style="padding:4px 8px;min-height:28px;font-size:11px">0.5x</button>
+          <button class="btn speed-btn active" data-speed="1" onclick="setSpeed(1)" style="padding:4px 8px;min-height:28px;font-size:11px">1x</button>
+          <button class="btn speed-btn" data-speed="1.2" onclick="setSpeed(1.2)" style="padding:4px 8px;min-height:28px;font-size:11px">1.2x</button>
+          <button class="btn speed-btn" data-speed="1.5" onclick="setSpeed(1.5)" style="padding:4px 8px;min-height:28px;font-size:11px">1.5x</button>
+          <button class="btn speed-btn" data-speed="2" onclick="setSpeed(2)" style="padding:4px 8px;min-height:28px;font-size:11px">2x</button>
+        </div>
+      </div>
+      <div class="row">
+        <label>下落流速</label>
+        <input type="range" id="fallSpeedSlider" min="0.2" max="5" step="0.1" value="1" oninput="onFallSpeedChange()">
+        <span class="val" id="fallSpeedVal">1.0x</span>
+      </div>
+      <div class="row">
+        <label>音量</label>
+        <input type="range" id="volSlider" min="0" max="1" step="0.01" value="0.7" oninput="onVolChange()">
+        <span class="val" id="volVal">70%</span>
+      </div>
+
+      <h2 style="margin-top:20px">音色</h2>
+      <div class="row">
+        <select id="timbreSel" onchange="onTimbreChange()">
+          <option value="__synth__">合成钢琴</option>
+          <optgroup label="键盘">
+            <option value="acoustic_grand_piano">三角钢琴</option>
+            <option value="bright_acoustic_piano">亮音钢琴</option>
+            <option value="electric_grand_piano">电三角钢琴</option>
+            <option value="electric_piano_1">电钢琴1</option>
+            <option value="electric_piano_2">电钢琴2</option>
+            <option value="honkytonk_piano">酒吧钢琴</option>
+            <option value="harpsichord">大键琴</option>
+            <option value="clavinet" selected>古钢琴</option>
+          </optgroup>
+          <optgroup label="风琴/打击">
+            <option value="drawbar_organ">拉杆风琴</option>
+            <option value="percussive_organ">打击风琴</option>
+            <option value="rock_organ">摇滚风琴</option>
+            <option value="church_organ">教堂管风琴</option>
+            <option value="celesta">钢片琴</option>
+            <option value="vibraphone">颤音琴</option>
+            <option value="marimba">马林巴</option>
+            <option value="xylophone">木琴</option>
+            <option value="tubular_bells">管钟</option>
+          </optgroup>
+          <optgroup label="吉他/贝斯">
+            <option value="acoustic_guitar_nylon">古典吉他</option>
+            <option value="acoustic_guitar_steel">民谣吉他</option>
+            <option value="electric_guitar_jazz">爵士电吉他</option>
+            <option value="electric_guitar_clean">清音电吉他</option>
+            <option value="overdriven_guitar">过载吉他</option>
+            <option value="distortion_guitar">失真吉他</option>
+            <option value="acoustic_bass">原声贝斯</option>
+            <option value="electric_bass_finger">指弹电贝斯</option>
+            <option value="electric_bass_pick">拨片电贝斯</option>
+            <option value="fretless_bass">无品贝斯</option>
+          </optgroup>
+          <optgroup label="弦乐">
+            <option value="violin">小提琴</option>
+            <option value="viola">中提琴</option>
+            <option value="cello">大提琴</option>
+            <option value="contrabass">低音提琴</option>
+            <option value="pizzicato_strings">拨弦弦乐</option>
+            <option value="orchestral_harp">竖琴</option>
+            <option value="string_ensemble_1">弦乐合奏1</option>
+            <option value="string_ensemble_2">弦乐合奏2</option>
+          </optgroup>
+          <optgroup label="铜管/木管">
+            <option value="trumpet">小号</option>
+            <option value="trombone">长号</option>
+            <option value="french_horn">圆号</option>
+            <option value="tuba">大号</option>
+            <option value="brass_section">铜管合奏</option>
+            <option value="soprano_sax">高音萨克斯</option>
+            <option value="alto_sax">中音萨克斯</option>
+            <option value="tenor_sax">次中音萨克斯</option>
+            <option value="baritone_sax">上低音萨克斯</option>
+            <option value="oboe">双簧管</option>
+            <option value="bassoon">巴松管</option>
+            <option value="clarinet">单簧管</option>
+            <option value="piccolo">短笛</option>
+            <option value="flute">长笛</option>
+            <option value="recorder">竖笛</option>
+            <option value="pan_flute">排箫</option>
+          </optgroup>
+          <optgroup label="合成器">
+            <option value="lead_1_square">方波主音</option>
+            <option value="lead_2_sawtooth">锯齿主音</option>
+            <option value="lead_7_fifths">五度主音</option>
+            <option value="pad_4_choir">合唱垫音</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="timbre-hint" id="timbreHint">正在加载音色…</div>
+    </div>
+
+    <!-- 右侧：顶部控制栏 + 可视化 -->
+    <div>
+      <div class="top-bar">
+        <div class="top-bar-row">
+          <button class="btn primary" onclick="document.getElementById('midiFile').click()" style="white-space:nowrap;flex-shrink:0">📁 上传MIDI</button>
+          <input type="file" id="midiFile" accept=".mid,.midi" style="display:none" onchange="onMidiFile(event)">
+          <select id="songSel" onchange="onSongChange(this.value)" style="flex:1">
+            <option value="">加载谱库…</option>
+          </select>
+        </div>
+        <div class="top-bar-row" style="margin-top:4px">
+          <button class="btn primary" id="playBtn" onclick="togglePlay()" disabled style="flex:1">▶ 播放</button>
+          <button class="btn primary" onclick="replayPlay()" disabled style="flex:1">↻ 重播</button>
+          <button class="btn primary" id="loopBtn" onclick="toggleLoop()" disabled style="flex:1">→ 顺序播放</button>
+          <button class="btn" onclick="openManageModal()" style="flex:1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>管理谱面</button>
+        </div>
+        <div class="progress-wrap">
+          <div class="time-row">
+            <span id="curTime">0:00</span>
+            <span id="totalTime">0:00</span>
+          </div>
+          <div class="progress-bar" id="progressBar" onmousedown="startSeek(event)" ontouchstart="startSeek(event)">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+        </div>
+        <div class="stats-bar" style="font-size:10px;color:var(--dim);margin-top:3px;display:flex;justify-content:space-between">
+          <span><span id="statTracks">轨道：-</span> · <span id="statTotal">音符：-</span></span>
+          <span><span id="statPlayed">已播：-/-</span> · <span id="statPercent">0.00%</span></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+          <span style="font-size:9px;color:var(--dim);flex-shrink:0;height:44px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;line-height:1;"><span>配</span><span>色</span><span>方</span><span>案</span></span>
+          <div style="display:grid;grid-template-columns:auto auto;gap:5px;flex-shrink:0;">
+            <button class="pal-btn palette-btn" data-palette="A" onclick="setPalette('A')" title="纯紫">A</button>
+            <button class="pal-btn palette-btn active" data-palette="B" onclick="setPalette('B')" title="青蓝×琥珀红">B</button>
+            <button class="pal-btn palette-btn" data-palette="C" onclick="setPalette('C')" title="青绿×品红">C</button>
+            <button class="pal-btn" id="paletteEditBtn" onclick="openPaletteModal()" title="自定义配色">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+            </button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;height:44px;font-size:9px;color:var(--dim);flex-shrink:0;">
+            <span style="height:20px;display:flex;align-items:flex-end;line-height:1;">白键</span>
+            <span style="height:20px;display:flex;align-items:flex-end;line-height:1;">黑键</span>
+          </div>
+          <div id="paletteSwatch" style="flex:1;min-width:100px;max-width:340px;height:44px;position:relative;"></div>
+        </div>
+        <div id="fileInfo" style="display:none"></div>
+      </div>
+      <div class="panel visual-panel">
+        <canvas id="visualCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js"></script>
+
+<script>
+// ===== 调试终端：重定向console输出到页面 =====
+const _origLog = console.log.bind(console);
+const _origWarn = console.warn.bind(console);
+const _origError = console.error.bind(console);
+let _debugContentEl = null;
+
+// 将 console 参数安全转为字符串：对象走 JSON，循环引用等异常时回退 String
+function _fmtArgs(args){
+  return args.map(a => {
+    if(typeof a === 'object' && a !== null){
+      try{ return JSON.stringify(a); }catch(e){ return String(a); }
+    }
+    return String(a);
+  }).join(' ');
+}
+
+// 日志颜色：蓝色 info（下载等）、绿色（正常/恢复）、黄色 warn、红色 error
+function _debugColor(type, msg) {
+  if(msg.indexOf('[INFO]') >= 0) return '#4ea1ff';
+  if(msg.indexOf('[OK]') >= 0) return '#2fbf6f';
+  if(type === 'warn') return '#ff0';
+  if(type === 'error') return '#f44';
+  return '#0f0';
+}
+
+function _appendDebug(msg, type) {
+  if(!_debugContentEl) {
+    _debugContentEl = document.getElementById('debugTerminalContent');
+  }
+  const time = new Date().toLocaleTimeString();
+  const color = _debugColor(type, msg);
+  const line = document.createElement('div');
+  line.style.color = color;
+  line.style.wordBreak = 'break-all';
+  line.textContent = '[' + time + '] ' + msg;
+  if(_debugContentEl) {
+    // 仅当用户原本就在底部附近时才自动跟随；否则保持当前位置，不打断查看历史
+    const atBottom = _debugContentEl.scrollHeight - _debugContentEl.scrollTop - _debugContentEl.clientHeight < 40;
+    _debugContentEl.appendChild(line);
+    // 限制DOM行数，防止调试输出本身造成内存/渲染压力
+    while(_debugContentEl.childElementCount > 300){
+      _debugContentEl.removeChild(_debugContentEl.firstChild);
+    }
+    if(atBottom) _debugContentEl.scrollTop = _debugContentEl.scrollHeight;
+  }
+}
+
+console.log = function(...args) {
+  _origLog(...args);
+  const msg = _fmtArgs(args);
+  if(msg.includes('AudioDebug')) _appendDebug(msg, 'log');
+};
+// 高频告警折叠：同一类消息 1.5s 内只记录一次，其余计数汇总，避免刷屏与主线程开销
+const _warnFold = {};
+console.warn = function(...args) {
+  _origWarn(...args);
+  const msg = _fmtArgs(args);
+  if(!msg.includes('AudioDebug')) return;
+  const key = msg.slice(0, 28);
+  const now = performance.now();
+  const rec = _warnFold[key] || (_warnFold[key] = {t: 0, n: 0});
+  if(now - rec.t < 1500){ rec.n++; return; }
+  const folded = rec.n > 0 ? ('（同类告警已折叠 ' + rec.n + ' 次）') : '';
+  rec.t = now; rec.n = 0;
+  _appendDebug(msg + folded, 'warn');
+};
+console.error = function(...args) {
+  _origError(...args);
+  const msg = _fmtArgs(args);
+  if(msg.includes('AudioDebug')) _appendDebug(msg, 'error');
+};
+
+function showDebugTerminal(){
+  const el = document.getElementById('debugTerminal');
+  if(!el) return;
+  if(el.style.display === 'none' || el.style.display === '') {
+    el.style.display = 'flex';
+    applyDebugAppearance();
+  }
+}
+function hideDebugTerminal(){
+  const el = document.getElementById('debugTerminal');
+  if(el) el.style.display = 'none';
+}
+// 性能降级时是否自动弹出调试窗（默认勾选）
+let dbgAutoOpen = true;
+function onDbgAutoOpenChange(){
+  const cb = document.getElementById('dbgAutoOpen');
+  dbgAutoOpen = !!(cb && cb.checked);
+  try{ localStorage.setItem('dbgAutoOpen', dbgAutoOpen ? '1' : '0'); }catch(e){}
+}
+(function(){
+  try{
+    const s = localStorage.getItem('dbgAutoOpen');
+    if(s !== null) dbgAutoOpen = s === '1';
+  }catch(e){}
+  // 面板 DOM 在脚本之后，轮询等待后同步勾选状态
+  const apply = () => {
+    const cb = document.getElementById('dbgAutoOpen');
+    if(cb) cb.checked = dbgAutoOpen;
+    else setTimeout(apply, 200);
+  };
+  apply();
+})();
+function toggleDebugTerminal() {
+  const el = document.getElementById('debugTerminal');
+  if(el.style.display === 'none' || el.style.display === '') {
+    showDebugTerminal();
+  } else {
+    el.style.display = 'none';
+  }
+}
+// 调节调试面板透明度与背景模糊
+function applyDebugAppearance(){
+  const el = document.getElementById('debugTerminal');
+  if(!el) return;
+  const op = document.getElementById('dbgOpacity');
+  const bl = document.getElementById('dbgBlur');
+  const alpha = op ? parseFloat(op.value) : 0.1;
+  const blurPct = bl ? parseFloat(bl.value) : 30; // 0-100%
+  const blurPx = blurPct * 0.2;                   // 100% -> 20px
+  el.style.background = 'rgba(0,0,0,' + alpha + ')';
+  const header = el.firstElementChild;
+  if(header) header.style.background = 'rgba(30,30,30,' + Math.min(1, alpha + 0.08) + ')';
+  const bf = blurPx > 0 ? ('blur(' + blurPx.toFixed(1) + 'px)') : 'none';
+  el.style.backdropFilter = bf;
+  el.style.webkitBackdropFilter = bf;
+}
+// 点击面板外部自动收起（鼠标与触摸）
+function _onDebugOutside(e){
+  const el = document.getElementById('debugTerminal');
+  if(!el || el.style.display === 'none' || el.style.display === '') return;
+  if(el.contains(e.target)) return;
+  const fab = document.getElementById('fabGroup');
+  if(fab && fab.contains(e.target)) return;
+  el.style.display = 'none';
+}
+document.addEventListener('click', _onDebugOutside, true);
+document.addEventListener('touchstart', _onDebugOutside, {passive:true, capture:true});
+function clearDebugTerminal() {
+  const el = document.getElementById('debugTerminalContent');
+  if(el) el.innerHTML = '';
+}
+function scrollDebugTop(){
+  const el = document.getElementById('debugTerminalContent');
+  if(el) el.scrollTop = 0;
+}
+function scrollDebugBottom(){
+  const el = document.getElementById('debugTerminalContent');
+  if(el) el.scrollTop = el.scrollHeight;
+}
+function _copyFeedback(ok){
+  const btn = document.getElementById('debugCopyBtn');
+  if(!btn) return;
+  if(!btn._origText) btn._origText = btn.textContent;
+  btn.textContent = ok ? 'copied✓' : 'failed';
+  clearTimeout(btn._t);
+  btn._t = setTimeout(() => { btn.textContent = btn._origText; }, 1200);
+}
+function _copyFallback(text){
+  try{
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    _copyFeedback(ok);
+  }catch(e){ _copyFeedback(false); }
+}
+function copyDebugTerminal(){
+  const el = document.getElementById('debugTerminalContent');
+  if(!el) return;
+  const text = el.innerText || '';
+  if(!text){ _copyFeedback(false); return; }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(() => _copyFeedback(true), () => _copyFallback(text));
+  } else {
+    _copyFallback(text);
+  }
+}
+</script>
+
+<script>
+/* ============================================================
+ * 1. 音频上下文
+ * ========================================================== */
+let audioCtx = null;
+let masterGain = null;
+let outputAnalyser = null;
+
+function initAudio(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.7;
+  // 在 master 与 destination 之间插一个 Analyser，用于探测"实际输出是否静音"
+  outputAnalyser = audioCtx.createAnalyser();
+  outputAnalyser.fftSize = 2048;
+  masterGain.connect(outputAnalyser);
+  outputAnalyser.connect(audioCtx.destination);
+  // 监听AudioContext状态变化
+  audioCtx.addEventListener('statechange', () => {
+    console.warn('[AudioDebug] AudioContext状态变化:', audioCtx.state, '时间:', audioCtx.currentTime.toFixed(2));
+  });
+  console.log('[AudioDebug][INFO] AudioContext已创建 sampleRate=' + audioCtx.sampleRate +
+    ' baseLatency=' + (audioCtx.baseLatency != null ? (audioCtx.baseLatency * 1000).toFixed(1) + 'ms' : 'N/A') +
+    ' outputLatency=' + (audioCtx.outputLatency != null ? (audioCtx.outputLatency * 1000).toFixed(1) + 'ms' : 'N/A') +
+    ' state=' + audioCtx.state);
+  AudioDebugMonitor.init();
+}
+
+/* ============================================================
+ * 1.5 性能诊断监控（重点排查：音频线程过载 / 节点泄漏 / 主线程长任务）
+ * ========================================================== */
+/* 性能仲裁：2 秒窗口。窗口内累计的性能问题（严重丢帧/音符积压/音频时钟停摆/时间戳异常）
+   达到阈值 -> 同时降级渲染与音频；窗口内问题低于阈值 -> 恢复完整渲染与播放。 */
+const PerfArbiter = {
+  degraded: false,
+  windowSize: 2,       // 仲裁窗口：2 秒
+  DEGRADE_AT: 3,       // 2 秒内累计问题次数达到该值 -> 降级
+  RECOVER_AT: 1,       // 2 秒内累计问题次数低于等于该值 -> 恢复
+  perSecond: [],
+  push(info){
+    this.perSecond.push(info);
+    while(this.perSecond.length > this.windowSize) this.perSecond.shift();
+    const total = this.perSecond.reduce((s, x) => s + x.total, 0);
+    if(!this.degraded && this.perSecond.length >= this.windowSize && total >= this.DEGRADE_AT){
+      this.degraded = true;
+      const parts = [];
+      if(info.drop) parts.push('丢帧');
+      if(info.backlog) parts.push('积压');
+      if(info.stall) parts.push('停摆');
+      if(info.ts) parts.push('时间戳');
+      console.warn('[AudioDebug] 最近 ' + this.windowSize + 's出现' + total +
+        '次性能问题，分别是' + parts.join('、') + '，触发渲染降级');
+      applyDegradation(true);
+      // 按勾选设置自动弹出调试窗，并滚动到最新输出
+      if(typeof dbgAutoOpen === 'undefined' || dbgAutoOpen){
+        if(typeof showDebugTerminal === 'function') showDebugTerminal();
+        setTimeout(() => { if(typeof scrollDebugBottom === 'function') scrollDebugBottom(); }, 0);
+      }
+    } else if(this.degraded && this.perSecond.length >= this.windowSize && total <= this.RECOVER_AT){
+      this.degraded = false;
+      console.log('[AudioDebug][OK] 性能问题已缓解，恢复完整渲染。');
+      applyDegradation(false);
+      // 降级取消时自动收起调试窗
+      if(typeof dbgAutoOpen === 'undefined' || dbgAutoOpen){
+        if(typeof hideDebugTerminal === 'function') hideDebugTerminal();
+      }
+    }
+  }
+};
+
+// 渲染 + 音频同步降级/恢复
+function applyDegradation(on){
+  // 音频：降低复音上限、提高同音重触发下限
+  SoundfontLoader.MAX_VOICES = on ? 64 : 128;
+  const base = SoundfontLoader.baseRetriggerFloor || 0;
+  SoundfontLoader.retriggerFloor = on ? Math.max(base, 0.03) : base;
+}
+
+const AudioDebugMonitor = {
+  inited: false,
+  lastReport: 0,
+  frames: 0,          // 本次统计窗口内 playLoop 帧数
+  frameMsSum: 0,
+  notesTriggered: 0,
+  skippedNotes: 0,
+  drawMsSum: 0,
+  lastFrameAudioTime: 0,
+  audioStalls: 0,
+  severeDrops: 0,     // 本窗口内帧间隔 >100ms 的严重丢帧次数
+  timestampAnomalies: 0, // 音频时钟回退等时间戳异常次数
+  lastAt: 0,
+  lastAudioTime: 0,
+  lastWall: 0,
+  rc: null,
+  rcAvg: 0,
+  rcUnderrun: 0,
+  rmsLast: 0,
+  rmsMinWindow: 1,
+  lastLoudTime: 0,
+  _rmsBuf: null,
+  lastLiveNodes: null,
+  liveGrowthReports: 0,
+
+  init(){
+    if(this.inited) return;
+    this.inited = true;
+    this.lastAudioTime = audioCtx ? audioCtx.currentTime : 0;
+    this.lastWall = performance.now();
+
+    // AudioRenderCapacity：直接反映音频渲染线程负载，是判断"UI不卡但声音卡"的关键指标
+    try{
+      if(audioCtx && audioCtx.renderCapacity){
+        this.rc = audioCtx.renderCapacity;
+        this.rc.onupdate = (e) => {
+          this.rcAvg = e.averageLoad;
+          this.rcUnderrun = Math.max(this.rcUnderrun, e.underrunRatio);
+          if(e.peakLoad > 0.9 || e.underrunRatio > 0.02){
+            console.warn('[AudioDebug] 音频渲染线程过载! avg=' + e.averageLoad.toFixed(3) +
+              ' peak=' + e.peakLoad.toFixed(3) + ' underrunRatio=' + e.underrunRatio.toFixed(4));
+          }
+        };
+        this.rc.start({updateInterval: 1});
+        console.log('[AudioDebug][INFO] renderCapacity 已启用');
+      } else {
+        console.log('[AudioDebug][INFO] 当前浏览器不支持 renderCapacity（建议Chrome 116+）');
+      }
+    }catch(e){ console.warn('[AudioDebug] renderCapacity 启动失败:', e.message || e); }
+
+    // 主线程长任务监控（>50ms），判断GC/解析是否阻塞主线程
+    try{
+      if(window.PerformanceObserver){
+        new PerformanceObserver((list) => {
+          for(const entry of list.getEntries()){
+            if(entry.duration > 100){
+              console.warn('[AudioDebug] 主线程长任务 ' + entry.duration.toFixed(0) + 'ms');
+            }
+          }
+        }).observe({entryTypes: ['longtask']});
+      }
+    }catch(e){}
+  },
+
+  // 每帧调用：记录帧耗时与触发音符数
+  frame(ms, notes){
+    this.frames++;
+    this.frameMsSum += ms;
+    this.notesTriggered += notes;
+  },
+
+  // 每帧调用：记录 drawScene 耗时
+  drawFrame(ms){
+    this.drawMsSum += ms;
+  },
+
+  // 采样实际输出音量（RMS），用于探测"界面在跑但没声音"
+  sampleRms(){
+    if(!outputAnalyser) return;
+    const buf = this._rmsBuf || (this._rmsBuf = new Float32Array(outputAnalyser.fftSize));
+    outputAnalyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for(let i = 0; i < buf.length; i++){ const v = buf[i]; sum += v * v; }
+    const rms = Math.sqrt(sum / buf.length);
+    this.rmsLast = rms;
+    if(rms < this.rmsMinWindow) this.rmsMinWindow = rms;
+    if(rms > 0.001) this.lastLoudTime = performance.now();
+  },
+
+  // 每秒汇总一次
+  report(){
+    if(typeof SoundfontLoader === 'undefined') return;
+    const now = performance.now();
+    if(now - this.lastReport < 1000) return;
+    const winSec = (now - this.lastReport) / 1000;
+    this.lastReport = now;
+
+    const at = audioCtx ? audioCtx.currentTime : 0;
+    const wallDelta = now - this.lastWall;
+    const audioDeltaMs = (at - this.lastAudioTime) * 1000;
+    // 音频时钟停摆检测：真实时间在走，但 audioCtx.currentTime 几乎不前进
+    if(wallDelta > 1200 && audioDeltaMs < wallDelta * 0.3){
+      this.audioStalls++;
+      console.warn('[AudioDebug] 音频时钟疑似停摆! wall+' + wallDelta.toFixed(0) +
+        'ms 但 audioTime+' + audioDeltaMs.toFixed(0) + 'ms state=' + (audioCtx ? audioCtx.state : 'null'));
+    }
+    this.lastWall = now;
+    this.lastAudioTime = at;
+
+    const d = SoundfontLoader.debug;
+    const sampleLive = d.srcCreated - d.onendedFired;
+    const synthLive = SoundfontLoader.synthVoices.length;
+    const liveNodes = sampleLive + synthLive;
+    const activeKeys = SoundfontLoader.activeSources.filter(s => s !== null).length;
+
+    // 输出静音探测：正在播放且本窗口触发过音符，但实际输出持续为0
+    const playing = (typeof isPlaying !== 'undefined') && isPlaying;
+    const silentSec = this.lastLoudTime ? (now - this.lastLoudTime) / 1000 : 0;
+    if(playing && this.notesTriggered > 0 && silentSec > 1.5){
+      console.warn('[AudioDebug] ★输出静音 ' + silentSec.toFixed(1) + 's 但仍在触发音符! rms=' +
+        this.rmsLast.toFixed(6) + ' minRms=' + this.rmsMinWindow.toFixed(6) +
+        ' state=' + (audioCtx ? audioCtx.state : 'null') +
+        ' liveNodes=' + liveNodes + ' activeKeys=' + activeKeys +
+        ' created=' + d.srcCreated + ' ended=' + d.onendedFired);
+    }
+
+    // 本秒性能问题计数：严重丢帧 / 音符积压 / 音频时钟停摆 / 时间戳异常
+    const fps = this.frames / winSec;
+    const stallDelta = this.audioStalls - (this._lastStallCount || 0);
+    this._lastStallCount = this.audioStalls;
+    if(this.lastAt && at < this.lastAt - 0.001) this.timestampAnomalies++;
+    this.lastAt = at;
+    const info = {
+      drop: this.severeDrops,
+      backlog: this.skippedNotes > 0 ? 1 : 0,
+      stall: stallDelta,
+      ts: this.timestampAnomalies
+    };
+    info.total = info.drop + info.backlog + info.stall + info.ts;
+    if(playing && this.frames > 0){
+      PerfArbiter.push(info);
+    }
+    // 具体告警（折叠机制会限频）
+    if(playing && this.skippedNotes > 0){
+      console.warn('[AudioDebug] 音符积压：跳过 ' + this.skippedNotes + ' 个');
+    }
+    if(playing && this.frames > 0 && fps < 30){
+      console.warn('[AudioDebug] 帧率偏低 fps=' + fps.toFixed(0) + ' 预期60fps' +
+        ' drawMs=' + (this.drawMsSum / this.frames).toFixed(1) +
+        ' schedMs=' + (this.frameMsSum / this.frames).toFixed(1));
+    }
+    // 清零本秒问题计数
+    this.severeDrops = 0;
+    this.timestampAnomalies = 0;
+
+    // 不再输出周期性汇总；仅在异常/降级/恢复时输出 warn 或 info
+    // 存活节点持续增长 = 泄漏信号（onended 未触发 / disconnect 未执行）
+    if(this.lastLiveNodes != null && liveNodes > this.lastLiveNodes + 50){
+      this.liveGrowthReports++;
+      if(this.liveGrowthReports >= 3){
+        console.warn('[AudioDebug] 存活节点持续增长! live=' + liveNodes +
+          '（疑似泄漏：onended未触发或disconnect未执行）');
+        this.liveGrowthReports = 0;
+      }
+    } else {
+      this.liveGrowthReports = 0;
+    }
+    this.lastLiveNodes = liveNodes;
+    // 窗口统计清零
+    this.frames = 0; this.frameMsSum = 0;
+    this.notesTriggered = 0; this.skippedNotes = 0;
+    this.drawMsSum = 0;
+    this.rmsMinWindow = 1;
+  }
+};
+// 仅在播放时运行诊断，暂停时不做无谓的采样与汇总
+setInterval(() => {
+  if(typeof isPlaying !== 'undefined' && isPlaying){
+    AudioDebugMonitor.report();
+    SoundfontLoader.debugReport();
+  }
+}, 1000);
+setInterval(() => {
+  if(typeof isPlaying !== 'undefined' && isPlaying) AudioDebugMonitor.sampleRms();
+}, 200);
+
+
+/* ============================================================
+ * 2. 音色加载器（Soundfont + Cache API）
+ * ========================================================== */
+// 静态资源缓存（MIDI谱等），版本化缓存名
+const AssetCache = {
+  cacheName: 'midi-player-assets-v1',
+  // 统一转绝对路径，避免相对路径在不同URL下解析不同导致缓存失效
+  _abs(url){ return new URL(url, window.location.href).href; },
+  async fetch(url) {
+    const absUrl = this._abs(url);
+    try {
+      const cache = await caches.open(this.cacheName);
+      // ignoreSearch忽略查询参数，提高匹配率
+      const cached = await cache.match(absUrl, {ignoreSearch: true});
+      if (cached) return cached.clone();
+      const resp = await fetch(url);
+      if (resp.ok) cache.put(absUrl, resp.clone());
+      return resp;
+    } catch(e) {
+      return fetch(url);
+    }
+  },
+  // 列表等需要"每次最新"的资源：始终走网络，命中后更新缓存，避免旧列表残留
+  async fetchFresh(url) {
+    const absUrl = this._abs(url);
+    const resp = await fetch(url, {cache: 'no-store'});
+    try{
+      const cache = await caches.open(this.cacheName);
+      if(resp.ok) cache.put(absUrl, resp.clone());
+    }catch(e){}
+    return resp;
+  }
+};
+// 清理旧版本资产缓存（例如曾用过的 v2），避免残留占用空间
+try{
+  if(window.caches && caches.keys){
+    caches.keys().then(keys => keys.forEach(k => {
+      if(k.indexOf('midi-player-assets-') === 0 && k !== AssetCache.cacheName) caches.delete(k);
+    })).catch(() => {});
+  }
+}catch(e){}
+
+const SoundfontLoader = {
+  cacheName: 'midi-player-soundfont-cache-v1',
+  cdnBase: './soundfonts/',
+  loaded: {},
+  current: '__synth__',
+  loading: null,
+  noteToMidi: {},
+  activeSources: new Array(109).fill(null),
+  synthVoices: [], // 合成钢琴分支的振荡器，登记以便 stopAll 能停掉
+  activeSynth: {}, // midi -> synth voice，用于同音打断
+  activeVoices: [], // 全局活跃voice（sample+synth），用于复音上限与抢占
+  MAX_VOICES: 128,  // 全局复音上限，防止音频线程过载
+  lastTriggerTime: new Array(109).fill(0), // 每音高上次触发时间（audio time）
+  retriggerFloor: 0, // 自适应同音重触发下限（秒）；高密度谱面下 >0，用于限制节点创建率
+  baseRetriggerFloor: 0, // 未降级时的基准下限，降级/恢复时据此调整
+  // ===== 调试统计 =====
+  debug: {
+    playNoteCalls: 0,
+    srcCreated: 0,
+    onendedFired: 0,
+    errors: 0,
+    lastReportTime: 0,
+    lastState: 'running',
+    lastLeakWarn: 0,         // 上次泄漏告警时的存活节点数
+    bufferNullLogged: false, // 是否已打印过 buffer 为 null 的告警
+    synthWarned: false,      // 是否已打印过回退合成钢琴的告警
+  },
+  timbreGain: { 'acoustic_grand_piano': 10.0, 'clavinet': 5.0 }, // 硬编码音色增益：三角钢琴1000%, 古钢琴500%
+
+  init(){
+    const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    for(let oct = 0; oct <= 8; oct++){
+      for(let i = 0; i < 12; i++){
+        const midi = oct * 12 + i + 12;
+        if(midi >= 21 && midi <= 108) this.noteToMidi[names[i] + oct] = midi;
+      }
+    }
+  },
+
+  async load(name, onProgress){
+    if(name === '__synth__'){ this.current = '__synth__'; return; }
+    if(this.loaded[name] && this.loaded[name].ready){ this.current = name; return; }
+    if(this.loading) await this.loading;
+    this.loading = this._doLoad(name, onProgress);
+    await this.loading;
+    this.loading = null;
+    this.current = name;
+  },
+
+  // 校验内容是否为合法音色 JS：防止把 HTML 错误页或截断文件当 JS 解析
+  _isSoundfontText(text, name){
+    if(!text || text.length < 1024) return false;
+    if(text.indexOf('MIDI.Soundfont') < 0) return false;
+    if(text.indexOf(name) < 0) return false;
+    return /}\s*$/.test(text); // 截断文件停在 base64 中间，结尾无 }
+  },
+
+  // 解析音色文本；失败时抛出带诊断信息的错误（而非笼统的 token 错误）
+  _parseSoundfont(text, name){
+    let raw;
+    try{
+      const MIDI = { Soundfont: {} };
+      const fn = new Function('MIDI', text + '\nreturn MIDI.Soundfont["' + name + '"];');
+      raw = fn(MIDI);
+    }catch(e){
+      throw new Error('音色内容不是合法JS（疑似截断或错误页）: ' +
+        text.slice(0, 80).replace(/\s+/g, ' '));
+    }
+    if(!raw || typeof raw !== 'object') throw new Error('音色数据解析失败');
+    return raw;
+  },
+
+  // 读取音色文本：优先缓存（内容校验通过），否则走网络并回写缓存
+  async _fetchSoundfontText(name, url, absUrl, cache){
+    if(cache){
+      try{
+        const cached = await cache.match(absUrl, {ignoreSearch: true});
+        if(cached){
+          const t = await cached.text();
+          if(this._isSoundfontText(t, name)) return { text: t, fromCache: true };
+          // 坏缓存：删除该条，强制走网络，避免永久命中
+          await cache.delete(absUrl);
+          console.warn('[AudioDebug] 检测到损坏的音色缓存并已清除: ' + name);
+        }
+      }catch(e){}
+    }
+    const resp = await fetch(url, {mode: 'cors'});
+    if(!resp.ok) throw new Error('下载失败 HTTP ' + resp.status);
+    const text = await resp.text();
+    if(!this._isSoundfontText(text, name)){
+      throw new Error('音色文件内容异常（非JS，可能被截断或网络返回错误页）: ' +
+        text.slice(0, 80).replace(/\s+/g, ' '));
+    }
+    if(cache){
+      // 直接用已校验的 text 构造 Response 写缓存：
+      // 旧写法 text=await resp.text() 后再 resp.clone() 会因 body 已消费而抛错，
+      // 导致好响应永远写不进缓存。
+      const mk = () => new Response(text, {headers: {'Content-Type': 'application/javascript; charset=utf-8'}});
+      try{
+        await cache.put(absUrl, mk());
+      }catch(e){
+        // 存储空间不足时，清理一半旧缓存后重试
+        try{
+          const keys = await cache.keys();
+          for(let i = 0; i < Math.floor(keys.length / 2); i++) await cache.delete(keys[i]);
+          await cache.put(absUrl, mk());
+        }catch(e2){}
+      }
+    }
+    return { text: text, fromCache: false };
+  },
+
+  async _doLoad(name, onProgress){
+    const url = this.cdnBase + name + '-ogg.js';
+    // 统一转绝对路径作为缓存key，避免相对路径解析问题
+    const absUrl = new URL(url, window.location.href).href;
+    if(onProgress) onProgress(0, '正在下载音色…');
+    let cache = null;
+    try{ cache = await caches.open(this.cacheName); }catch(e){}
+    let res = await this._fetchSoundfontText(name, url, absUrl, cache);
+    if(onProgress) onProgress(0.5, res.fromCache ? '从缓存读取音色…' : '下载完成，解析中…');
+    let raw;
+    try{
+      raw = this._parseSoundfont(res.text, name);
+    }catch(e){
+      // 缓存内容能过格式校验却解析失败：删除该条并强制走网络重试一次
+      if(!res.fromCache) throw e;
+      if(cache){ try{ await cache.delete(absUrl); }catch(_){} }
+      res = await this._fetchSoundfontText(name, url, absUrl, cache);
+      raw = this._parseSoundfont(res.text, name);
+    }
+    this.loaded[name] = { raw: raw, buffers: {}, ready: true };
+    // 正常播放音色相关每个谱只打一条：缓存命中 vs 网络下载
+    if(onProgress){
+      console.log('[AudioDebug][INFO] 音色 ' + name +
+        (res.fromCache ? ' 从缓存加载并解析成功' : ' 下载并解析成功'));
+    }
+    if(onProgress) onProgress(1, '音色加载完成');
+  },
+
+  async _getBuffer(name, midi){
+    if(!audioCtx) initAudio(); // 确保audioCtx已初始化，避免decodeAudioData失败
+    const entry = this.loaded[name];
+    if(!entry) return null;
+    if(entry.buffers[midi]) return entry.buffers[midi];
+    const noteName = this._midiToNote(midi);
+    let dataUri = entry.raw[noteName];
+    if(!dataUri){
+      let bestDist = 999, bestKey = null;
+      for(const k in entry.raw){
+        const m = this.noteToMidi[k];
+        if(m && Math.abs(m - midi) < bestDist){ bestDist = Math.abs(m - midi); bestKey = k; }
+      }
+      if(bestKey) dataUri = entry.raw[bestKey];
+    }
+    if(!dataUri) return null;
+    const base64 = dataUri.split(',')[1];
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for(let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    let buffer = null;
+    try{
+      buffer = await audioCtx.decodeAudioData(bytes.buffer);
+    }catch(e){
+      console.error('[AudioDebug] decodeAudioData失败! name=', name, 'midi=', midi,
+        'noteName=', noteName, 'dataUri长度=', dataUri ? dataUri.length : 0,
+        'bytes长度=', bytes.length, '错误=', e.message || e);
+      return null;
+    }
+    entry.buffers[midi] = buffer;
+    return buffer;
+  },
+
+  _midiToNote(midi){
+    const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    return names[midi % 12] + Math.floor(midi / 12 - 1);
+  },
+
+  // 预解码当前音色的所有88个音
+  async predecodeAll(){
+    if(this.current === '__synth__') return;
+    // 分批解码，每批8个，避免同时解码88个导致主线程阻塞、音频时间线暂停
+    const batchSize = 8;
+    const midis = [];
+    for(let midi = 21; midi <= 108; midi++) midis.push(midi);
+    for(let i = 0; i < midis.length; i += batchSize){
+      const batch = midis.slice(i, i + batchSize);
+      await Promise.all(batch.map(m => this._getBuffer(this.current, m)));
+    }
+  },
+
+  // ===== 全局复音管理：注册/注销/抢占 =====
+  _registerVoice(v){
+    v._start = audioCtx ? audioCtx.currentTime : 0;
+    this.activeVoices.push(v);
+    // 超过上限则抢占最早开始的voice，保证音频线程活跃voice有界
+    while(this.activeVoices.length > this.MAX_VOICES){
+      this._stealOldest();
+    }
+  },
+  _unregisterVoice(v){
+    const i = this.activeVoices.indexOf(v);
+    if(i >= 0) this.activeVoices.splice(i, 1);
+  },
+  _stealOldest(){
+    if(!this.activeVoices.length) return;
+    let oldest = this.activeVoices[0];
+    for(const v of this.activeVoices){ if(v._start < oldest._start) oldest = v; }
+    const t = audioCtx ? audioCtx.currentTime : 0;
+    try{
+      if(oldest.kind === 'sample'){
+        oldest.gain.gain.cancelScheduledValues(t);
+        oldest.gain.gain.setValueAtTime(oldest.gain.gain.value, t);
+        oldest.gain.gain.linearRampToValueAtTime(0, t + 0.005);
+        oldest.src.stop(t + 0.01);
+      } else if(oldest.kind === 'synth'){
+        oldest.env.gain.cancelScheduledValues(t);
+        oldest.env.gain.setValueAtTime(oldest.env.gain.value, t);
+        oldest.env.gain.linearRampToValueAtTime(0, t + 0.005);
+        oldest.oscs.forEach(o => { try{ o.stop(t + 0.01); }catch(e){} });
+      }
+    }catch(e){}
+    this._unregisterVoice(oldest);
+    if(oldest.kind === 'synth' && this.activeSynth[oldest.midi] === oldest) delete this.activeSynth[oldest.midi];
+    if(oldest.kind === 'sample' && this.activeSources[oldest.midi] && this.activeSources[oldest.midi].src === oldest.src) this.activeSources[oldest.midi] = null;
+  },
+
+  // 停止所有正在播放的音符（切换音色时调用）
+  stopAll(){
+    const t = audioCtx ? audioCtx.currentTime : 0;
+    let stopped = 0;
+    for(let i = 0; i < this.activeSources.length; i++){
+      const s = this.activeSources[i];
+      if(s){
+        try{
+          s.gain.gain.cancelScheduledValues(t);
+          s.gain.gain.setValueAtTime(s.gain.gain.value, t);
+          s.gain.gain.linearRampToValueAtTime(0, t + 0.01);
+          s.src.stop(t + 0.02);
+        }catch(e){}
+        this.activeSources[i] = null;
+        stopped++;
+      }
+    }
+    if(stopped > 0) console.log('[AudioDebug][INFO] stopAll停止了', stopped, '个节点');
+    // 合成钢琴分支的振荡器也必须停掉
+    if(this.synthVoices.length){
+      const n = this.synthVoices.length;
+      for(const v of this.synthVoices){
+        try{ v.oscs.forEach(o => o.stop(t + 0.02)); }catch(e){}
+      }
+      this.synthVoices.length = 0;
+      console.log('[AudioDebug][INFO] stopAll停止了', n, '个合成钢琴voice');
+    }
+    this.activeSynth = {};
+    this.activeVoices.length = 0;
+    this.lastTriggerTime.fill(0);
+  },
+
+  // 定期节点泄漏检测（每5秒一次，仅异常时告警）
+  debugReport(){
+    const now = performance.now();
+    if(now - this.debug.lastReportTime < 5000) return;
+    this.debug.lastReportTime = now;
+    // 节点泄漏检测：阈值500，且只在差值比上次增长超过200时告警，避免频繁输出
+    const leakCount = this.debug.srcCreated - this.debug.onendedFired;
+    if(leakCount > 500 && leakCount - (this.debug.lastLeakWarn || 0) > 200){
+      this.debug.lastLeakWarn = leakCount;
+      console.warn('[AudioDebug] 节点泄漏! created=' + this.debug.srcCreated +
+        ' ended=' + this.debug.onendedFired + ' leak=' + leakCount);
+    }
+  },
+
+  playNote(midi, velocity, duration){
+    if(!audioCtx) return;
+    const t = audioCtx.currentTime;
+    this.debug.playNoteCalls++;
+    // 检测AudioContext状态异常
+    if(audioCtx.state !== 'running'){
+      if(this.debug.lastState !== audioCtx.state){
+        console.warn('[AudioDebug] AudioContext状态异常:', audioCtx.state, '时间:', t.toFixed(2));
+        this.debug.lastState = audioCtx.state;
+      }
+    }
+    // 自适应同音聚合：仅当谱面整体密度极高时才启用，
+    // 限制每个音高的重触发频率，从而限制 BufferSource 创建率（节点 churn）。
+    // 普通密度谱面 floor=0，完全逐音符忠实。
+    if(this.retriggerFloor > 0 && t - this.lastTriggerTime[midi] < this.retriggerFloor){
+      return;
+    }
+    this.lastTriggerTime[midi] = t;
+    // 使用真实时长；仅用 1ms epsilon 防止 0/无效调度（不再强制 30ms）
+    const d = Math.max(duration, 0.001);
+    if(this.current !== '__synth__'){
+      const entry = this.loaded[this.current];
+      // 超出钢琴范围的音符映射到最近有效键，避免永远 miss
+      const keyMidi = midi >= 21 && midi <= 108 ? midi : (midi < 21 ? 21 : 108);
+      const buffer = entry ? entry.buffers[keyMidi] : null;
+      // 调试：首次buffer为null时打印详细信息
+      if(!buffer && !this.debug.bufferNullLogged){
+        this.debug.bufferNullLogged = true;
+        console.warn('[AudioDebug] buffer为null! current=', this.current,
+          'entry存在=', !!entry, 'entry.ready=', entry ? entry.ready : 'N/A',
+          'buffers键数=', entry ? Object.keys(entry.buffers).length : 'N/A',
+          'midi=', midi, '时间=', t.toFixed(2));
+      }
+      if(buffer){
+        // 同音新音符触发：打断上一个，10ms快速淡出
+        const prev = this.activeSources[keyMidi];
+        if(prev){
+          try{
+            prev.gain.gain.cancelScheduledValues(t);
+            prev.gain.gain.setValueAtTime(prev.gain.gain.value, t);
+            prev.gain.gain.linearRampToValueAtTime(0, t + 0.01);
+            prev.src.stop(t + 0.02);
+            // 延迟disconnect，等淡出完成
+            const oldSrc = prev.src, oldGain = prev.gain;
+            setTimeout(() => {
+              try{ oldSrc.disconnect(); oldGain.disconnect(); }catch(e){}
+            }, 50);
+            this._unregisterVoice(prev);
+          }catch(e){}
+        }
+        let src, g;
+        try{
+          src = audioCtx.createBufferSource();
+          src.buffer = buffer;
+          g = audioCtx.createGain();
+          this.debug.srcCreated++;
+        }catch(e){
+          this.debug.errors++;
+          console.error('[AudioDebug] 创建节点失败:', e, '已创建:', this.debug.srcCreated, '时间:', t.toFixed(2));
+          return;
+        }
+        const tg = this.timbreGain[this.current] || 3.0; // 未配置的音色默认300%增益
+        // 时长自适应包络：短音符按比例缩短起音/收尾，避免事件时间倒挂
+        const attack = Math.min(0.005, d * 0.5);
+        const release = Math.min(0.02, d * 0.5);
+        const peak = 0.4 * velocity * tg;
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(peak, t + attack);
+        g.gain.setValueAtTime(peak, t + Math.max(attack, d - release));
+        g.gain.linearRampToValueAtTime(0, t + d);
+        src.connect(g); g.connect(masterGain);
+        src.start();
+        src.stop(t + d + 0.05);
+        const voice = {kind: 'sample', midi: keyMidi, src, gain: g};
+        this.activeSources[keyMidi] = voice;
+        this._registerVoice(voice);
+        src.onended = () => {
+          this.debug.onendedFired++;
+          this._unregisterVoice(voice);
+          // 主动断开连接，帮助GC回收
+          try{ src.disconnect(); g.disconnect(); }catch(e){}
+          if(this.activeSources[keyMidi] && this.activeSources[keyMidi].src === src) this.activeSources[keyMidi] = null;
+          // 解除闭包引用
+          src.onended = null;
+        };
+        return;
+      }
+      // buffer未就绪（预解码未完成），返回不播放，不回退合成钢琴
+      return;
+    }
+    // 只有current为__synth__时才走合成钢琴
+    if(!this.debug.synthWarned){
+      this.debug.synthWarned = true;
+      console.warn('[AudioDebug] 走了合成钢琴分支! current=', this.current,
+        '说明音色加载失败或buffer为null，时间=', t.toFixed(2));
+    }
+    // 同音打断：与 sample 分支一致，避免同音叠加导致 voice 爆炸
+    const prevS = this.activeSynth[midi];
+    if(prevS){
+      try{
+        const st = audioCtx.currentTime;
+        prevS.env.gain.cancelScheduledValues(st);
+        prevS.env.gain.setValueAtTime(prevS.env.gain.value, st);
+        prevS.env.gain.linearRampToValueAtTime(0, st + 0.01);
+        prevS.oscs.forEach(o => { try{ o.stop(st + 0.02); }catch(e){} });
+      }catch(e){}
+      this._unregisterVoice(prevS);
+      delete this.activeSynth[midi];
+    }
+    const f = 440 * Math.pow(2, (midi - 69) / 12);
+    const t0 = audioCtx.currentTime;
+    const synthDur = Math.max(duration, 0.001); // 真实时长，仅 1ms epsilon
+    const env = audioCtx.createGain();
+    env.gain.setValueAtTime(0, t0);
+    env.gain.linearRampToValueAtTime(0.4 * velocity, t0 + Math.min(0.008, synthDur * 0.5));
+    env.gain.exponentialRampToValueAtTime(0.0008, t0 + synthDur);
+    env.connect(masterGain);
+    const specs = [[1, 0.9, "triangle"], [2, 0.35, "sine"], [3, 0.18, "sine"]];
+    const oscs = [];
+    for(const [mult, amp, wf] of specs){
+      const o = audioCtx.createOscillator();
+      o.type = wf; o.frequency.value = f * mult;
+      const g = audioCtx.createGain(); g.gain.value = amp;
+      o.connect(g); g.connect(env);
+      o.start(t0); o.stop(t0 + synthDur + 0.2);
+      oscs.push(o);
+    }
+    // 登记 voice，并在结束时清理，避免振荡器累积
+    const voice = { kind: 'synth', midi, oscs, env };
+    this.synthVoices.push(voice);
+    this.activeSynth[midi] = voice;
+    this._registerVoice(voice);
+    oscs[oscs.length - 1].onended = () => {
+      try{ env.disconnect(); oscs.forEach(o => o.disconnect()); }catch(e){}
+      const idx = this.synthVoices.indexOf(voice);
+      if(idx >= 0) this.synthVoices.splice(idx, 1);
+      this._unregisterVoice(voice);
+      if(this.activeSynth[midi] === voice) delete this.activeSynth[midi];
+    };
+  }
+};
+SoundfontLoader.init();
+
+async function onTimbreChange(){
+  const sel = document.getElementById('timbreSel');
+  const name = sel.value;
+  const hint = document.getElementById('timbreHint');
+  initAudio();
+  // 切换音色前停止所有正在播放的音符，避免新旧音色叠加导致音量暴增
+  SoundfontLoader.stopAll();
+  if(name === '__synth__'){
+    SoundfontLoader.current = '__synth__';
+    hint.textContent = '当前：合成钢琴';
+    return;
+  }
+  hint.textContent = '正在下载音色… 0%';
+  try{
+    await SoundfontLoader.load(name, (p, msg) => { hint.textContent = msg + ' ' + Math.round(p * 100) + '%'; });
+    hint.textContent = '当前音色：' + sel.options[sel.selectedIndex].text + ' ✓ 预解码中…';
+    await SoundfontLoader.predecodeAll();
+    hint.textContent = '当前音色：' + sel.options[sel.selectedIndex].text + ' ✓ 就绪';
+  }catch(e){
+    hint.textContent = '音色加载失败：' + e.message + '，已回退合成钢琴';
+    sel.value = '__synth__';
+    SoundfontLoader.current = '__synth__';
+  }
+}
+
+// 先加载MIDI（立即解析、启用按钮），音色后台并行加载
+(function(){
+  const hint = document.getElementById('timbreHint');
+  let midiBuf = null;
+  let defaultTimbreReady = false; // 谱子对应音色是否加载完成
+  let defaultTimbreFallback = false; // 是否fallback到合成钢琴
+  let autoPlayTriggered = false; // 是否已触发自动播放（避免重复播放）
+  const DEFAULT_SONG = 'Rush E 3.mid';
+
+  // 轻量Toast提示
+  function showToast(msg){
+    let t = document.getElementById('toastMsg');
+    if(!t){
+      t = document.createElement('div');
+      t.id = 'toastMsg';
+      t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:10000;max-width:90%;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.display = 'block';
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.display = 'none'; }, 4000);
+  }
+  window.showToast = showToast;
+
+  // 尝试自动播放：需默认音色就绪或fallback
+  function tryAutoPlay(){
+    if(!midiBuf || autoPlayTriggered) return;
+    if(!defaultTimbreReady && !defaultTimbreFallback) return;
+    autoPlayTriggered = true;
+    initAudio();
+    if(audioCtx.state === 'suspended'){
+      const startOnInteract = () => {
+        audioCtx.resume();
+        startPlay();
+        document.removeEventListener('click', startOnInteract);
+        document.removeEventListener('touchstart', startOnInteract);
+      };
+      document.addEventListener('click', startOnInteract);
+      document.addEventListener('touchstart', startOnInteract);
+    } else {
+      startPlay();
+    }
+  }
+
+  // fallback到合成钢琴
+  function fallbackToSynth(reason){
+    if(defaultTimbreFallback || defaultTimbreReady) return;
+    defaultTimbreFallback = true;
+    SoundfontLoader.current = '__synth__';
+    console.warn('[AudioDebug] 回退合成钢琴，原因：' + reason);
+    if(hint) hint.textContent = '当前：合成钢琴';
+    showToast(reason + '，回退为合成钢琴，现在开始播放');
+    if(midiBuf) tryAutoPlay();
+  }
+
+  // 加载谱子对应的默认音色
+  async function loadDefaultTimbreForSong(filename){
+    const timbreName = songDefaultTimbre[filename];
+    if(!timbreName){
+      fallbackToSynth('该谱子未配置默认音色');
+      return;
+    }
+    // 同步下拉菜单选中状态
+    const timbreSel = document.getElementById('timbreSel');
+    if(timbreSel && timbreSel.value !== timbreName) timbreSel.value = timbreName;
+    try{
+      await SoundfontLoader.load(timbreName, (p, msg) => {
+        if(hint && !defaultTimbreFallback) hint.textContent = msg + ' ' + Math.round(p * 100) + '%';
+      });
+      if(defaultTimbreFallback) return; // 已fallback，不再切换
+      if(hint) hint.textContent = '当前音色：预解码中…';
+      await SoundfontLoader.predecodeAll();
+      if(defaultTimbreFallback) return;
+      defaultTimbreReady = true;
+      if(hint) hint.textContent = '当前音色：' + (timbreSel.options[timbreSel.selectedIndex]?.text || timbreName) + ' ✓ 就绪';
+      if(midiBuf) tryAutoPlay();
+      // 后台预加载其他常用音色（不阻塞播放，用_doLoad避免切换current）
+      const PRELOAD = ['acoustic_grand_piano', 'electric_piano_2'].filter(n => n !== timbreName);
+      for(const name of PRELOAD){
+        try{ await SoundfontLoader._doLoad(name, null); }catch(e){}
+      }
+    }catch(e){
+      console.warn('[AudioDebug] 默认音色加载失败 name=' + timbreName + ' 错误=' + (e && e.message ? e.message : e));
+      fallbackToSynth('音色加载失败');
+    }
+  }
+
+  // 1. 先加载默认MIDI，解析后加载对应音色
+  console.log('[AudioDebug][INFO] 加载默认谱面 midi/' + DEFAULT_SONG);
+  AssetCache.fetch('midi/' + DEFAULT_SONG).then(r => {
+    if(!r.ok) throw new Error('MIDI加载失败');
+    return r.arrayBuffer();
+  }).then(buf => {
+    console.log('[AudioDebug][INFO] 默认谱面已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
+    midiBuf = buf;
+    parseAndPlayMidi(buf, DEFAULT_SONG);
+    // 加载谱子对应的默认音色
+    loadDefaultTimbreForSong(DEFAULT_SONG);
+  }).catch(e => {
+    if(hint) hint.textContent = 'MIDI加载失败：' + e.message;
+  });
+})();
+
+// 加载谱子列表
+// IndexedDB：存储用户上传的 MIDI
+const DB_NAME = 'midi-player-db';
+const STORE = 'user-songs';
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if(!req.result.objectStoreNames.contains(STORE)){
+        req.result.createObjectStore(STORE, {keyPath: 'name'});
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function saveUserSong(name, buf){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put({name, data: buf});
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function getUserSongs(){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function deleteUserSong(name){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(name);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function getUserSong(name){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(name);
+    req.onsuccess = () => resolve(req.result ? req.result.data : null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// 内置谱默认音色配置：谱子文件名 -> 音色id
+const songDefaultTimbre = {
+  'Rush E 3.mid': 'clavinet', // 古钢琴
+  'The Sound of Silence.mid': '__synth__', // 合成钢琴
+};
+
+async function loadSongList(){
+  const sel = document.getElementById('songSel');
+  sel.innerHTML = '';
+  // 内置谱
+  try{
+    const resp = await AssetCache.fetchFresh('midi/list.json');
+    if(resp.ok){
+      const list = await resp.json();
+      list.forEach(song => {
+        const opt = document.createElement('option');
+        opt.value = 'builtin:' + song.file;
+        opt.textContent = song.name;
+        sel.appendChild(opt);
+      });
+    }
+  }catch(e){}
+  // 用户上传谱
+  try{
+    const userSongs = await getUserSongs();
+    userSongs.forEach(song => {
+      const opt = document.createElement('option');
+      opt.value = 'user:' + song.name;
+      opt.textContent = song.name;
+      sel.appendChild(opt);
+    });
+  }catch(e){}
+}
+loadSongList();
+
+async function openManageModal(){
+  const modal = document.getElementById('manageModal');
+  const list = document.getElementById('manageList');
+  list.textContent = '';
+  const loading = document.createElement('div');
+  loading.style.cssText = 'color:#888;text-align:center;padding:20px';
+  loading.textContent = '加载中…';
+  list.appendChild(loading);
+  modal.style.display = 'flex';
+
+  const frag = document.createDocumentFragment();
+  // 用户上传谱（置上方，可删除）
+  try{
+    const userSongs = await getUserSongs();
+    const header = document.createElement('div');
+    header.style.cssText = 'color:#888;font-size:12px;margin:8px 0';
+    header.textContent = '我的上传';
+    frag.appendChild(header);
+    if(userSongs.length === 0){
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:#666;text-align:center;padding:16px';
+      empty.textContent = '暂无上传谱面';
+      frag.appendChild(empty);
+    }
+    userSongs.forEach(s => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#252540;border-radius:6px;margin-bottom:4px';
+      const name = document.createElement('span');
+      name.style.cssText = 'color:#ddd;font-size:14px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      name.textContent = s.name;
+      const del = document.createElement('button');
+      del.className = 'del-song-btn';
+      del.style.cssText = 'background:none;border:none;color:#ff6b6b;font-size:16px;cursor:pointer;padding:4px 8px';
+      del.title = '删除';
+      del.textContent = '🗑';
+      del.addEventListener('click', () => deleteSong(s.name));
+      row.appendChild(name);
+      row.appendChild(del);
+      frag.appendChild(row);
+    });
+  }catch(e){}
+  // 内置谱（置下方，不可删除）
+  try{
+    const resp = await AssetCache.fetchFresh('midi/list.json');
+    if(resp.ok){
+      const builtin = await resp.json();
+      const header = document.createElement('div');
+      header.style.cssText = 'color:#888;font-size:12px;margin:16px 0 8px';
+      header.textContent = '内置谱面';
+      frag.appendChild(header);
+      builtin.forEach(s => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#1e1e30;border-radius:6px;margin-bottom:4px';
+        const name = document.createElement('span');
+        name.style.cssText = 'color:#aaa;font-size:14px';
+        name.textContent = s.name;
+        const tag = document.createElement('span');
+        tag.style.cssText = 'color:#555;font-size:12px';
+        tag.textContent = '内置';
+        row.appendChild(name);
+        row.appendChild(tag);
+        frag.appendChild(row);
+      });
+    }
+  }catch(e){}
+  list.textContent = '';
+  list.appendChild(frag);
+}
+function closeManageModal(){
+  document.getElementById('manageModal').style.display = 'none';
+}
+async function deleteSong(name){
+  await deleteUserSong(name);
+  await loadSongList();
+  openManageModal(); // 刷新列表
+}
+
+async function onSongChange(val){
+  if(!val) return;
+  stopPlay();
+  console.log('[AudioDebug][INFO] 切换谱面 ' + val);
+  try{
+    let buf, name;
+    if(val.startsWith('builtin:')){
+      const file = val.substring(8);
+      const resp = await AssetCache.fetch(file);
+      if(!resp.ok) throw new Error('加载失败 HTTP ' + resp.status);
+      buf = await resp.arrayBuffer();
+      name = file.split('/').pop();
+      console.log('[AudioDebug][INFO] 谱面 ' + name + ' 已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
+    } else if(val.startsWith('user:')){
+      name = val.substring(5);
+      buf = await getUserSong(name);
+      if(!buf) throw new Error('本地缓存中未找到');
+      console.log('[AudioDebug][INFO] 本地谱面 ' + name + ' 已读取 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
+    }
+    parseAndPlayMidi(buf, name);
+    // 内置谱自动切换默认音色
+    if(val.startsWith('builtin:')){
+      const file = val.substring(8);
+      const fname = file.split('/').pop();
+      const defaultTimbre = songDefaultTimbre[fname];
+      if(defaultTimbre){
+        const timbreSel = document.getElementById('timbreSel');
+        if(timbreSel.value !== defaultTimbre){
+          timbreSel.value = defaultTimbre;
+          await onTimbreChange();
+        }
+      }
+    }
+    // 切换后自动播放
+    initAudio();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    startPlay();
+  }catch(e){
+    showToast('谱子加载失败：' + e.message);
+  }
+}
+
+// 通用：解析MIDI并准备播放
+function parseAndPlayMidi(buf, filename){
+  const midi = new Midi(buf);
+  allNotes = [];
+  let maxTime = 0;
+  midi.tracks.forEach(track => {
+    track.notes.forEach(note => {
+      allNotes.push({midi: note.midi, time: note.time, duration: note.duration, velocity: note.velocity});
+      if(note.time + note.duration > maxTime) maxTime = note.time + note.duration;
+    });
+  });
+  allNotes.sort((a, b) => a.time - b.time);
+  totalDuration = maxTime;
+  // 根据整首谱面平均密度设置自适应同音重触发下限（仅高密度 black-MIDI 生效）
+  const density = totalDuration > 0 ? allNotes.length / totalDuration : 0;
+  SoundfontLoader.baseRetriggerFloor =
+    density <= 1000 ? 0 :
+    density <= 3000 ? 0.008 :
+    density <= 6000 ? 0.02 :
+    density <= 12000 ? 0.035 : 0.05;
+  SoundfontLoader.retriggerFloor = SoundfontLoader.baseRetriggerFloor;
+  SoundfontLoader.lastTriggerTime.fill(0);
+  console.log('[AudioDebug][INFO] 谱面密度=' + density.toFixed(0) + ' 音符/s，自适应同音重触发下限=' +
+    SoundfontLoader.retriggerFloor + 's');
+  document.getElementById('statTracks').textContent = '轨道：' + midi.tracks.length;
+  document.getElementById('statTotal').textContent = '音符：' + allNotes.length;
+  document.getElementById('statPlayed').textContent = '已播：0/' + allNotes.length;
+  document.getElementById('statPercent').textContent = '0.00%';
+  document.getElementById('playBtn').disabled = false;
+  document.querySelector('button[onclick="replayPlay()"]').disabled = false;
+  document.getElementById('loopBtn').disabled = false;
+  document.getElementById('totalTime').textContent = formatTime(totalDuration);
+  currentTime = 0;
+  nextNoteIndex = 0;
+  updateProgress();
+  drawScene([], 0, 0, 0);
+}
+
+/* ============================================================
+ * 3. MIDI 解析
+ * ========================================================== */
+let allNotes = []; // {midi, time, duration, velocity}
+let totalDuration = 0;
+
+function onMidiFile(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async function(e){
+    try{
+      stopPlay();
+      const buf = e.target.result;
+      parseAndPlayMidi(buf, file.name);
+      // 上传后自动播放
+      initAudio();
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      startPlay();
+      // 保存到 IndexedDB 并刷新播放列表
+      try{
+        await saveUserSong(file.name, buf);
+        await loadSongList();
+
+        // 选中刚上传的
+        const sel = document.getElementById('songSel');
+        for(let i=0;i<sel.options.length;i++){
+          if(sel.options[i].value === 'user:' + file.name){
+            sel.selectedIndex = i; break;
+          }
+        }
+      }catch(err){
+        console.warn('保存到本地缓存失败:', err);
+      }
+    }catch(err){
+      showToast('解析失败：' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
+}
+
+function formatTime(sec){
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+/* ============================================================
+ * 4. 播放控制
+ * ========================================================== */
+let isPlaying = false;
+let lastStatUpdate = 0;
+let currentTime = 0;
+let playStartTime = 0;
+let playSpeed = 1;
+let nextNoteIndex = 0;
+let rafId = null;
+const activeKeySet = new Set();
+let loopEnabled = false;
+
+function togglePlay(){
+  initAudio();
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  if(isPlaying){
+    pausePlay();
+  } else {
+    startPlay();
+  }
+}
+
+function startPlay(){
+  if(!allNotes.length) return;
+  // 防止重复启动导致多个 rAF 循环同时推进 nextNoteIndex
+  if(rafId) cancelAnimationFrame(rafId);
+  isPlaying = true;
+  playStartTime = audioCtx.currentTime - currentTime / playSpeed;
+  nextNoteIndex = lowerBound(allNotes, currentTime);
+  document.getElementById('playBtn').textContent = '⏸ 暂停';
+  rafId = requestAnimationFrame(playLoop);
+}
+
+function pausePlay(){
+  isPlaying = false;
+  if(rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  // 已经排程到音频线程的音符不会自己停，必须显式停止
+  SoundfontLoader.stopAll();
+  currentTime = (audioCtx.currentTime - playStartTime) * playSpeed;
+  document.getElementById('playBtn').textContent = '▶ 播放';
+}
+
+function stopPlay(){
+  isPlaying = false;
+  if(rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  // 停止所有已排程/正在播放的音符
+  SoundfontLoader.stopAll();
+  currentTime = 0;
+  nextNoteIndex = 0;
+  document.getElementById('playBtn').textContent = '▶ 播放';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('curTime').textContent = '0:00';
+  if(allNotes.length > 0){
+    document.getElementById('statPlayed').textContent = '已播：0/' + allNotes.length;
+    document.getElementById('statPercent').textContent = '0.00%';
+  }
+  drawScene([], 0, 0, 0);
+}
+
+function replayPlay(){
+  stopPlay();
+  setTimeout(() => { initAudio(); startPlay(); }, 50);
+}
+
+function toggleLoop(){
+  loopEnabled = !loopEnabled;
+  const btn = document.getElementById('loopBtn');
+  btn.textContent = loopEnabled ? '🔁 单曲循环' : '→ 顺序播放';
+}
+
+function toggleMenu(){
+  const panel = document.getElementById('controlPanel');
+  const mask = document.getElementById('overlayMask');
+  const group = document.getElementById('fabGroup');
+  const isOpen = panel.classList.toggle('open');
+  mask.classList.toggle('show', isOpen);
+  if(group){
+    if(isOpen){
+      group.classList.add('hidden-btn');
+    } else {
+      group.classList.remove('hidden-btn');
+      showMenuBtn();
+    }
+  }
+}
+
+// 菜单/调试按钮组：二者都可拖动，捆绑一起移动；轻点各自触发对应功能
+(function(){
+  const group = document.getElementById('fabGroup');
+  const menuBtn = document.querySelector('.menu-btn');
+  const dbgBtn = document.getElementById('debugTerminalBtn');
+  if(!group || !menuBtn) return;
+  let fadeTimer = null;
+  function showMenuBtn(){
+    group.classList.remove('faded');
+    if(fadeTimer) clearTimeout(fadeTimer);
+    fadeTimer = setTimeout(() => group.classList.add('faded'), 2000);
+  }
+  window.showMenuBtn = showMenuBtn;
+  // 初始显示，2秒后淡出
+  showMenuBtn();
+  // 页面任意交互时显现
+  document.addEventListener('touchstart', () => { if(!group.classList.contains('hidden-btn')) showMenuBtn(); }, {passive:true});
+  document.addEventListener('mousemove', () => { if(!group.classList.contains('hidden-btn')) showMenuBtn(); });
+
+  // 位置边界：高度限制在 10%~90%，且不超出屏幕
+  function fabBounds(){
+    const H = window.innerHeight, W = window.innerWidth;
+    const gh = group.offsetHeight || 57;
+    const gw = group.offsetWidth || 26;
+    const minTop = Math.round(H * 0.1);
+    return {
+      minTop,
+      maxTop: Math.max(minTop, Math.round(H * 0.9) - gh),
+      minLeft: 4,
+      maxLeft: Math.max(4, W - gw - 4)
+    };
+  }
+  function clampFabGroup(){
+    if(window.innerWidth > 800) return; // PC 由 CSS 固定在右下角
+    const b = fabBounds();
+    const r = group.getBoundingClientRect();
+    let top = r.top, left = r.left, changed = false;
+    if(top < b.minTop){ top = b.minTop; changed = true; }
+    if(top > b.maxTop){ top = b.maxTop; changed = true; }
+    if(left < b.minLeft){ left = b.minLeft; changed = true; }
+    if(left > b.maxLeft){ left = b.maxLeft; changed = true; }
+    if(changed){
+      group.style.left = Math.round(left) + 'px';
+      group.style.top = Math.round(top) + 'px';
+      group.style.right = 'auto'; group.style.bottom = 'auto';
+      group.style.transform = 'none';
+      try{ localStorage.setItem('menuBtnPos', JSON.stringify({x: Math.round(left), y: Math.round(top)})); }catch(e){}
+    }
+  }
+  window.clampFabGroup = clampFabGroup;
+
+  // 仅移动端恢复拖拽位置；PC 端由 CSS 固定在右下角
+  const isMobile = window.innerWidth <= 800;
+  const saved = localStorage.getItem('menuBtnPos');
+  if(saved && isMobile){
+    try{
+      const pos = JSON.parse(saved);
+      group.style.left = pos.x + 'px';
+      group.style.top = pos.y + 'px';
+      group.style.right = 'auto';
+      group.style.bottom = 'auto';
+      group.style.transform = 'none';
+    }catch(e){}
+  }
+  // 恢复/布局后校正位置，防止保存的坐标落在屏幕外
+  setTimeout(clampFabGroup, 50);
+  window.addEventListener('resize', clampFabGroup);
+  window.addEventListener('orientationchange', () => setTimeout(clampFabGroup, 300));
+  if(window.visualViewport) window.visualViewport.addEventListener('resize', () => clampFabGroup());
+
+  let isDragging = false, moved = false, tapAction = null;
+  let startX, startY, startLeft, startTop;
+  function onDown(action){
+    return function(e){
+      tapAction = action;
+      isDragging = true; moved = false;
+      const p = e.touches ? e.touches[0] : e;
+      startX = p.clientX; startY = p.clientY;
+      const r = group.getBoundingClientRect();
+      startLeft = r.left; startTop = r.top;
+      group.style.transition = 'none'; // 拖动时禁用过渡，确保跟手
+      group.classList.remove('faded'); // 拖动时保持不透明
+      if(fadeTimer) clearTimeout(fadeTimer);
+      e.preventDefault();
+    };
+  }
+  function onMove(e){
+    if(!isDragging) return;
+    const p = e.touches ? e.touches[0] : e;
+    const dx = p.clientX - startX, dy = p.clientY - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+    const b = fabBounds();
+    const nl = Math.max(b.minLeft, Math.min(b.maxLeft, startLeft + dx));
+    const nt = Math.max(b.minTop, Math.min(b.maxTop, startTop + dy));
+    group.style.left = Math.round(nl) + 'px'; group.style.top = Math.round(nt) + 'px';
+    group.style.right = 'auto'; group.style.bottom = 'auto';
+    group.style.transform = 'none';
+    e.preventDefault();
+  }
+  function onUp(){
+    if(!isDragging) return;
+    isDragging = false;
+    if(moved){
+      // 恢复transition用于吸附动画
+      group.style.transition = '';
+      // 自动吸附左右侧：以屏幕中轴线为分界
+      const centerX = group.offsetLeft + group.offsetWidth / 2;
+      const screenCenter = window.innerWidth / 2;
+      let snapX;
+      if(centerX < screenCenter){
+        snapX = 4;
+      } else {
+        snapX = window.innerWidth - group.offsetWidth - 4;
+      }
+      group.style.left = snapX + 'px';
+      clampFabGroup();
+      localStorage.setItem('menuBtnPos', JSON.stringify({x: group.offsetLeft, y: group.offsetTop}));
+      showMenuBtn();
+    } else {
+      group.style.transition = '';
+      if(tapAction) tapAction();
+    }
+    tapAction = null;
+  }
+  menuBtn.addEventListener('mousedown', onDown(toggleMenu));
+  menuBtn.addEventListener('touchstart', onDown(toggleMenu), {passive:false});
+  if(dbgBtn){
+    dbgBtn.addEventListener('mousedown', onDown(toggleDebugTerminal));
+    dbgBtn.addEventListener('touchstart', onDown(toggleDebugTerminal), {passive:false});
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('touchmove', onMove, {passive:false});
+  document.addEventListener('mouseup', onUp);
+  document.addEventListener('touchend', onUp);
+})();
+
+// 回到前台自动续播（不因失焦暂停）
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden) return;
+  if(!isPlaying || !totalDuration) return;
+  // 浏览器可能在后台挂起音频上下文，回到前台时恢复
+  initAudio();
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  // 安全兜底：若渲染循环已停止则重新拉起
+  if(!rafId) rafId = requestAnimationFrame(playLoop);
+});
+
+// 进度条拖拽
+let isSeeking = false;
+function startSeek(event){
+  if(!totalDuration) return;
+  isSeeking = true;
+  event.preventDefault();
+  doSeek(event);
+  document.addEventListener('mousemove', doSeek);
+  document.addEventListener('mouseup', endSeek);
+  document.addEventListener('touchmove', doSeek, {passive:false});
+  document.addEventListener('touchend', endSeek);
+}
+function doSeek(event){
+  if(!totalDuration) return;
+  event.preventDefault();
+  const bar = document.getElementById('progressBar');
+  const rect = bar.getBoundingClientRect();
+  const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+  const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  currentTime = pct * totalDuration;
+  if(isPlaying){
+    playStartTime = audioCtx.currentTime - currentTime / playSpeed;
+    nextNoteIndex = lowerBound(allNotes, currentTime);
+  }
+  updateProgress();
+  // 拖拽时也更新可视化
+  const fallDur = 2.0 / fallSpeedMultiplier;
+  const leftIdx = lowerBound(allNotes, currentTime - fallDur);
+  const rightIdx = lowerBound(allNotes, currentTime + fallDur);
+  drawScene(allNotes, leftIdx, rightIdx, currentTime);
+}
+function endSeek(){
+  isSeeking = false;
+  document.removeEventListener('mousemove', doSeek);
+  document.removeEventListener('mouseup', endSeek);
+  document.removeEventListener('touchmove', doSeek);
+  document.removeEventListener('touchend', endSeek);
+}
+
+function setSpeed(speed){
+  playSpeed = speed;
+  document.querySelectorAll('.speed-btn').forEach(b => {
+    b.classList.toggle('active', parseFloat(b.dataset.speed) === speed);
+  });
+  if(isPlaying){
+    playStartTime = audioCtx.currentTime - currentTime / playSpeed;
+  }
+}
+
+let fallSpeedMultiplier = 1.0;
+function onFallSpeedChange(){
+  fallSpeedMultiplier = parseFloat(document.getElementById('fallSpeedSlider').value);
+  document.getElementById('fallSpeedVal').textContent = fallSpeedMultiplier.toFixed(1) + 'x';
+}
+
+function onVolChange(){
+  const v = parseFloat(document.getElementById('volSlider').value);
+  document.getElementById('volVal').textContent = Math.round(v * 100) + '%';
+  if(masterGain) masterGain.gain.value = v;
+}
+
+// 二分查找：第一个 time >= target 的索引
+function lowerBound(arr, target){
+  let lo = 0, hi = arr.length;
+  while(lo < hi){
+    const mid = (lo + hi) >> 1;
+    if(arr[mid].time < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function playLoop(){
+  if(!isPlaying) return;
+  const _frameT0 = performance.now();
+  const now = audioCtx.currentTime;
+
+  // 帧间隔跳变检测：主线程被阻塞（GC/长任务）会导致rAF延迟，
+  // 随后一帧内堆积触发大量音符，瞬间灌爆音频线程
+  if(AudioDebugMonitor.lastFrameAudioTime){
+    const jump = now - AudioDebugMonitor.lastFrameAudioTime;
+    if(jump > 0.1) AudioDebugMonitor.severeDrops++; // 严重丢帧（帧间隔 >100ms）
+    if(jump > 0.08){
+      console.warn('[AudioDebug] 帧间隔跳变 ' + (jump * 1000).toFixed(0) +
+        'ms 本帧将追赶音符');
+    }
+  }
+  AudioDebugMonitor.lastFrameAudioTime = now;
+
+  currentTime = (now - playStartTime) * playSpeed;
+
+  // 触发到时间的音符（不做同音合并，每个音符事件都触发）
+  // 追赶洪峰抑制：若一帧待触发音符过多（音频时钟曾停摆导致积压），
+  // 只触发上限内的音符并快进跳过剩余积压，避免瞬间创建海量节点灌爆音频线程
+  const MAX_TRIGGER_PER_FRAME = 256;
+  let _trigCount = 0;
+  let _skipped = 0;
+  while(nextNoteIndex < allNotes.length && allNotes[nextNoteIndex].time <= currentTime){
+    if(_trigCount >= MAX_TRIGGER_PER_FRAME){
+      while(nextNoteIndex < allNotes.length && allNotes[nextNoteIndex].time <= currentTime){
+        nextNoteIndex++; _skipped++;
+      }
+      break;
+    }
+    const note = allNotes[nextNoteIndex];
+    _trigCount++;
+    SoundfontLoader.playNote(note.midi, note.velocity, note.duration / playSpeed);
+    nextNoteIndex++;
+  }
+  if(_skipped > 0){
+    AudioDebugMonitor.skippedNotes += _skipped;
+  }
+  AudioDebugMonitor.frame(performance.now() - _frameT0, _trigCount);
+
+  // 计算可见音符范围：二分查找定位区间，不slice（避免大数组分配）
+  const fallDuration = 2.0 / fallSpeedMultiplier;
+  const leftIdx = lowerBound(allNotes, currentTime - fallDuration);
+  const rightIdx = lowerBound(allNotes, currentTime + fallDuration);
+
+  // 进度与统计每100ms更新一次，不每帧写DOM
+  if(!lastStatUpdate || now - lastStatUpdate > 0.1){
+    lastStatUpdate = now;
+    updateProgress();
+    const played = nextNoteIndex;
+    const total = allNotes.length;
+    document.getElementById('statPlayed').textContent = '已播：' + played + '/' + total;
+    document.getElementById('statPercent').textContent = (total > 0 ? (played / total * 100).toFixed(2) : '0.00') + '%';
+  }
+  const _drawT0 = performance.now();
+  drawScene(allNotes, leftIdx, rightIdx, currentTime);
+  AudioDebugMonitor.drawFrame(performance.now() - _drawT0);
+
+  if(currentTime >= totalDuration){
+    if(loopEnabled){
+      currentTime = 0;
+      nextNoteIndex = 0;
+      playStartTime = audioCtx.currentTime;
+    } else {
+      // 顺序播放：自动播下一首
+      const sel = document.getElementById('songSel');
+      const nextIdx = sel.selectedIndex + 1;
+      if(nextIdx < sel.options.length){
+        sel.selectedIndex = nextIdx;
+        onSongChange(sel.value);
+        return;
+      } else {
+        stopPlay();
+        return;
+      }
+    }
+  }
+  rafId = requestAnimationFrame(playLoop);
+}
+
+function updateProgress(){
+  const pct = totalDuration ? (currentTime / totalDuration) * 100 : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('curTime').textContent = formatTime(currentTime);
+}
+
+/* ============================================================
+ * 5. Canvas 可视化：88键钢琴 + 下落音符
+ * ========================================================== */
+const canvas = document.getElementById('visualCanvas');
+const ctx = canvas.getContext('2d');
+let C = { w: 800, h: 500 };
+let cachedLayout = null;
+let keyByMidi = null;       // midi -> key，O(1)查找
+let staticCanvas = null;    // 离屏canvas：预渲染静态元素
+// 每帧复用的矩形桶：buckets[黑白][力度] -> [x,y,w,h, ...]，避免每帧新建 Path2D
+const _drawBuckets = [0, 1].map(() => [0, 1, 2, 3, 4].map(() => []));
+
+// 配色：色相区分黑白键，明度区分力度（各 5 级，轻→重）
+const PALETTES = {
+  A: { // 纯紫，无力度变化
+    white: ['#8b5cf6', '#8b5cf6', '#8b5cf6', '#8b5cf6', '#8b5cf6'],
+    black: ['#8b5cf6', '#8b5cf6', '#8b5cf6', '#8b5cf6', '#8b5cf6']
+  },
+  B: { // 青蓝 × 琥珀红
+    white: ['#22d3ee', '#38bdf8', '#3b82f6', '#6366f1', '#8b5cf6'],
+    black: ['#fde68a', '#fbbf24', '#fb923c', '#f97316', '#ef4444']
+  },
+  C: { // 青绿 × 品红
+    white: ['#5eead4', '#2dd4bf', '#22d3ee', '#38bdf8', '#3b82f6'],
+    black: ['#f9a8d4', '#f472b6', '#ec4899', '#db2777', '#be185d']
+  }
+};
+// ===== 自定义配色（四端颜色插值出 5 级）=====
+const paletteEditColors = { wl: '#5eead4', wh: '#3b82f6', bl: '#f9a8d4', bh: '#be185d' };
+const PALETTE_TARGET_LABELS = { wl: '白键最轻', wh: '白键最重', bl: '黑键最轻', bh: '黑键最重' };
+let paletteEditTarget = 'wl';
+let _colorPicking = false;
+let _colorBoardBound = false;
+
+function buildCustomPalette(wl, wh, bl, bh){
+  const lerp = (a, b, t) => {
+    const pa = [parseInt(a.slice(1,3),16), parseInt(a.slice(3,5),16), parseInt(a.slice(5,7),16)];
+    const pb = [parseInt(b.slice(1,3),16), parseInt(b.slice(3,5),16), parseInt(b.slice(5,7),16)];
+    const c = pa.map((v, i) => Math.round(v + (pb[i]-v)*t));
+    return '#' + c.map(v => v.toString(16).padStart(2,'0')).join('');
+  };
+  const ramp = (lo, hi) => [0,1,2,3,4].map(i => lerp(lo, hi, i/4));
+  return { white: ramp(wl, wh), black: ramp(bl, bh) };
+}
+// HSL -> RGB/HEX（用于全彩取色板）
+function hslToRgb(h, s, l){
+  h = (((h % 360) + 360) % 360) / 360;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => {
+    const k = (n + h * 12) % 12;
+    return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+  };
+  return [f(0), f(8), f(4)];
+}
+function hslToHex(h, s, l){
+  const c = hslToRgb(h, s, l);
+  return '#' + c.map(v => v.toString(16).padStart(2,'0')).join('');
+}
+function loadCustomPalette(){
+  try{
+    const s = localStorage.getItem('paletteCustom');
+    if(!s) return false;
+    const o = JSON.parse(s);
+    if(!o.wl || !o.wh || !o.bl || !o.bh) return false;
+    paletteEditColors.wl = o.wl; paletteEditColors.wh = o.wh;
+    paletteEditColors.bl = o.bl; paletteEditColors.bh = o.bh;
+    PALETTES.custom = buildCustomPalette(o.wl, o.wh, o.bl, o.bh);
+    return true;
+  }catch(e){ return false; }
+}
+let currentPalette = 'B';
+function setPalette(name){
+  if(!PALETTES[name]) return;
+  currentPalette = name;
+  try{ localStorage.setItem('paletteV2', name); }catch(e){}
+  document.querySelectorAll('.palette-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.palette === name);
+  });
+  const editBtn = document.getElementById('paletteEditBtn');
+  if(editBtn) editBtn.classList.toggle('active', name === 'custom');
+  updatePaletteSwatch();
+  if(typeof allNotes !== 'undefined'){
+    const fallDur = 2.0 / fallSpeedMultiplier;
+    const leftIdx = lowerBound(allNotes, currentTime - fallDur);
+    const rightIdx = lowerBound(allNotes, currentTime + fallDur);
+    drawScene(allNotes, leftIdx, rightIdx, currentTime);
+  }
+}
+// 两个横向直角梯形渐变块：短底=长底一半，左轻右重；上白键、下黑键；中间写"力度"
+function updatePaletteSwatch(){
+  const host = document.getElementById('paletteSwatch');
+  if(!host) return;
+  const pal = PALETTES[currentPalette] || PALETTES.C;
+  const W = 300, H = 44, gap = 4;
+  const bh = (H - gap) / 2; // 每块高度（长底）
+  const stops = (colors) => colors.map((c, i) =>
+    '<stop offset="' + (i / (colors.length - 1) * 100).toFixed(1) + '%" stop-color="' + c + '"/>').join('');
+  // 直角梯形：右竖直边为长底(bh)，左竖直边为短底(bh/2)，下底水平
+  const trap = (yTop, fillId) =>
+    '<polygon points="0,' + (yTop + bh/2) + ' ' + W + ',' + yTop + ' ' + W + ',' + (yTop + bh) +
+    ' 0,' + (yTop + bh) + '" fill="url(#' + fillId + ')"/>';
+  host.innerHTML =
+    '<svg width="100%" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="display:block">' +
+      '<defs>' +
+        '<linearGradient id="pgW" x1="0" y1="0" x2="1" y2="0">' + stops(pal.white) + '</linearGradient>' +
+        '<linearGradient id="pgB" x1="0" y1="0" x2="1" y2="0">' + stops(pal.black) + '</linearGradient>' +
+      '</defs>' +
+      trap(0, 'pgW') +
+      trap(bh + gap, 'pgB') +
+    '</svg>' +
+    '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);' +
+      'font-size:11px;color:#fff;text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none;">力度</span>';
+}
+
+// ===== 全彩取色板 =====
+function drawColorBoard(){
+  const cv = document.getElementById('colorBoard');
+  if(!cv) return;
+  const c2 = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  const img = c2.createImageData(w, h);
+  for(let y = 0; y < h; y++){
+    const l = 1 - y / (h - 1);
+    for(let x = 0; x < w; x++){
+      const rgb = hslToRgb(x / (w - 1) * 360, 1, l);
+      const i = (y * w + x) * 4;
+      img.data[i] = rgb[0]; img.data[i+1] = rgb[1]; img.data[i+2] = rgb[2]; img.data[i+3] = 255;
+    }
+  }
+  c2.putImageData(img, 0, 0);
+}
+function _bindColorBoard(){
+  if(_colorBoardBound) return;
+  const cv = document.getElementById('colorBoard');
+  if(!cv) return;
+  _colorBoardBound = true;
+  cv.addEventListener('pointerdown', (e) => {
+    _colorPicking = true;
+    try{ cv.setPointerCapture(e.pointerId); }catch(_){}
+    _pickColorAt(e);
+    e.preventDefault();
+  });
+  cv.addEventListener('pointermove', (e) => { if(_colorPicking) _pickColorAt(e); });
+  cv.addEventListener('pointerup', () => { _colorPicking = false; });
+  cv.addEventListener('pointercancel', () => { _colorPicking = false; });
+}
+function _pickColorAt(e){
+  const cv = document.getElementById('colorBoard');
+  const rect = cv.getBoundingClientRect();
+  const p = e.touches ? e.touches[0] : e;
+  let x = (p.clientX - rect.left) / rect.width * cv.width;
+  let y = (p.clientY - rect.top) / rect.height * cv.height;
+  x = Math.max(0, Math.min(cv.width - 1, x));
+  y = Math.max(0, Math.min(cv.height - 1, y));
+  paletteEditColors[paletteEditTarget] = hslToHex(x / (cv.width - 1) * 360, 1, 1 - y / (cv.height - 1));
+  updatePalettePickUI();
+}
+function renderPaletteTargets(){
+  const host = document.getElementById('paletteTargets');
+  if(!host) return;
+  host.innerHTML = Object.keys(PALETTE_TARGET_LABELS).map(k =>
+    '<button type="button" class="palette-target' + (k === paletteEditTarget ? ' active' : '') +
+    '" onclick="selectPaletteTarget(\'' + k + '\')">' +
+    '<span>' + PALETTE_TARGET_LABELS[k] + '</span>' +
+    '<span class="sw" style="background:' + paletteEditColors[k] + '"></span></button>').join('');
+}
+function selectPaletteTarget(k){
+  if(!PALETTE_TARGET_LABELS[k]) return;
+  paletteEditTarget = k;
+  renderPaletteTargets();
+  updatePalettePickUI();
+}
+function updatePalettePickUI(){
+  const label = document.getElementById('palettePickLabel');
+  const prev = document.getElementById('palettePickPreview');
+  if(label) label.textContent = PALETTE_TARGET_LABELS[paletteEditTarget];
+  if(prev) prev.style.background = paletteEditColors[paletteEditTarget];
+  renderPaletteTargets();
+}
+function openPaletteModal(){
+  const m = document.getElementById('paletteModal');
+  if(!m) return;
+  if(PALETTES.custom){
+    paletteEditColors.wl = PALETTES.custom.white[0];
+    paletteEditColors.wh = PALETTES.custom.white[4];
+    paletteEditColors.bl = PALETTES.custom.black[0];
+    paletteEditColors.bh = PALETTES.custom.black[4];
+  }
+  paletteEditTarget = 'wl';
+  _bindColorBoard();
+  drawColorBoard();
+  updatePalettePickUI();
+  m.style.display = 'flex';
+}
+function closePaletteModal(){
+  const m = document.getElementById('paletteModal');
+  if(m) m.style.display = 'none';
+}
+function savePaletteCustom(){
+  const c = paletteEditColors;
+  PALETTES.custom = buildCustomPalette(c.wl, c.wh, c.bl, c.bh);
+  try{ localStorage.setItem('paletteCustom', JSON.stringify(c)); }catch(e){}
+  closePaletteModal();
+  setPalette('custom');
+}
+// 恢复上次选择与自定义配色
+(function(){
+  try{
+    loadCustomPalette();
+    const saved = localStorage.getItem('paletteV2');
+    if(saved && PALETTES[saved]) currentPalette = saved;
+  }catch(e){}
+})();
+
+function resizeCanvas(){
+  const r = canvas.getBoundingClientRect();
+  canvas.width = Math.max(320, Math.floor(r.width * devicePixelRatio));
+  canvas.height = Math.max(320, Math.floor(r.height * devicePixelRatio));
+  C.w = canvas.width; C.h = canvas.height;
+  // 重新计算布局和映射
+  cachedLayout = getKeyLayout();
+  keyByMidi = new Array(109).fill(null);
+  cachedLayout.keys.forEach(k => { keyByMidi[k.midi] = k; });
+  // 预渲染静态元素到离屏canvas
+  renderStatic();
+  const fallDur = 2.0 / fallSpeedMultiplier;
+  const leftIdx = lowerBound(allNotes, currentTime - fallDur);
+  const rightIdx = lowerBound(allNotes, currentTime + fallDur);
+  drawScene(allNotes, leftIdx, rightIdx, currentTime);
+}
+// rAF 合并：移动端地址栏收放会连续触发 resize，避免重复重排重绘
+let _resizePending = false;
+function scheduleResizeCanvas(){
+  if(_resizePending) return;
+  _resizePending = true;
+  requestAnimationFrame(() => { _resizePending = false; resizeCanvas(); });
+}
+window.addEventListener('resize', scheduleResizeCanvas);
+// 全屏切换、屏幕方向变化、移动端地址栏显示/隐藏时重新计算布局，确保钢琴键盘始终可见
+document.addEventListener('fullscreenchange', () => {
+  [50, 150, 300, 500].forEach(t => setTimeout(scheduleResizeCanvas, t));
+});
+window.addEventListener('orientationchange', () => {
+  [100, 250, 500].forEach(t => setTimeout(scheduleResizeCanvas, t));
+});
+if(window.visualViewport) window.visualViewport.addEventListener('resize', scheduleResizeCanvas);
+
+// 预渲染静态元素（背景、轨道线、琴键、音名）
+function renderStatic(){
+  if(!staticCanvas) staticCanvas = document.createElement('canvas');
+  staticCanvas.width = C.w; staticCanvas.height = C.h;
+  const sctx = staticCanvas.getContext('2d');
+  const layout = cachedLayout;
+  const keyAreaH = 80 * devicePixelRatio;
+  const keyTop = C.h - keyAreaH;
+  const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  // 背景
+  sctx.fillStyle = '#0a0a10';
+  sctx.fillRect(0, 0, C.w, C.h);
+  // 轨道线
+  sctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  sctx.lineWidth = 1;
+  layout.keys.forEach(k => {
+    if(!k.isBlack){
+      sctx.beginPath();
+      sctx.moveTo(k.x, 0);
+      sctx.lineTo(k.x, keyTop);
+      sctx.stroke();
+    }
+  });
+  // 白键
+  layout.keys.forEach(k => {
+    if(k.isBlack) return;
+    sctx.fillStyle = '#f0f0f0';
+    sctx.fillRect(k.x, keyTop, k.w - 1, keyAreaH);
+    sctx.strokeStyle = '#ccc';
+    sctx.strokeRect(k.x, keyTop, k.w - 1, keyAreaH);
+  });
+  // 黑键
+  layout.keys.forEach(k => {
+    if(!k.isBlack) return;
+    sctx.fillStyle = '#1a1a1a';
+    sctx.fillRect(k.x, keyTop, k.w, keyAreaH * 0.62);
+  });
+  // 音名：字母大、数字下标小，同一水平线
+  const whiteW = layout.whiteW;
+  const fontSize = Math.max(5 * devicePixelRatio, Math.min(8 * devicePixelRatio, whiteW * 0.55));
+  const smallFont = fontSize * 0.7;
+  sctx.fillStyle = 'rgba(0,0,0,0.45)';
+  sctx.textAlign = 'left';
+  layout.keys.forEach(k => {
+    if(k.isBlack) return;
+    const name = noteNames[k.midi % 12];
+    const oct = Math.floor(k.midi / 12) - 1;
+    const baseY = C.h - 3 * devicePixelRatio;
+    // 字母
+    sctx.font = `${fontSize}px sans-serif`;
+    const letterW = fontSize * 0.55;
+    const startX = k.x + k.w / 2 - letterW * 0.8;
+    sctx.fillText(name, startX, baseY);
+    // 数字（下标，更小更靠下）
+    sctx.font = `${smallFont}px sans-serif`;
+    sctx.fillText(String(oct), startX + letterW * 0.9, baseY + smallFont * 0.3);
+  });
+}
+
+// 88键布局
+const BLACK_KEYS = [1,3,6,8,10];
+const BLACK_KEY_TABLE = new Uint8Array(12);
+BLACK_KEYS.forEach(k => { BLACK_KEY_TABLE[k] = 1; });
+function isBlackKey(midi){ return BLACK_KEY_TABLE[midi % 12] === 1; }
+function getKeyLayout(){
+  const keys = [];
+  let whiteIdx = 0;
+  for(let midi = 21; midi <= 108; midi++){
+    if(!isBlackKey(midi)){
+      keys.push({midi, x: whiteIdx, isBlack: false});
+      whiteIdx++;
+    }
+  }
+  const totalWhite = whiteIdx;
+  const whiteW = C.w / totalWhite;
+  const blackW = whiteW * 0.6;
+  const result = [];
+  whiteIdx = 0;
+  for(let midi = 21; midi <= 108; midi++){
+    if(!isBlackKey(midi)){
+      result.push({midi, x: whiteIdx * whiteW, w: whiteW, isBlack: false});
+      whiteIdx++;
+    } else {
+      result.push({midi, x: whiteIdx * whiteW - blackW / 2, w: blackW, isBlack: true});
+    }
+  }
+  return {keys: result, whiteW, blackW, totalWhite};
+}
+
+function drawScene(notes, startIdx, endIdx, curTime){
+  curTime = curTime || 0;
+  // 直接贴预渲染的静态层
+  ctx.drawImage(staticCanvas, 0, 0);
+  const keyAreaH = 80 * devicePixelRatio;
+  const keyTop = C.h - keyAreaH;
+  const fallDuration = 2.0 / fallSpeedMultiplier;
+  const invFallDur = 1 / fallDuration;
+  const minH = 6 * devicePixelRatio;
+  const radius = 3 * devicePixelRatio;
+  // 复用Set，不每帧新建
+  activeKeySet.clear();
+
+  // 颜色双维度：色相区分黑白键，明度区分力度（各 5 级，轻→重）
+  const _pal = PALETTES[currentPalette] || PALETTES.C;
+  const palettes = [_pal.white, _pal.black];
+  // 复用矩形桶，避免每帧新建 Path2D 造成 GC 压力
+  const buckets = _drawBuckets;
+  for(let p = 0; p < 2; p++){
+    for(let c = 0; c < 5; c++) buckets[p][c].length = 0;
+  }
+  let hasAny = false;
+
+  // ===== 渲染 LOD：默认完整绘制；仅当 PerfArbiter 判定需要降级时才抽样 =====
+  // 抽样基于"绝对音符索引取模"，保证同一音符在滚动中始终被画/不画，避免逐帧闪烁
+  const visibleCount = endIdx - startIdx;
+  const DRAW_BUDGET = 4000;
+  let stride = 1;
+  if(PerfArbiter.degraded && visibleCount > DRAW_BUDGET * 1.3){
+    // 量化到 2 的幂 + 1.3x 进入阈值，避免 stride 在边界反复跳变
+    stride = 1 << Math.ceil(Math.log2(visibleCount / DRAW_BUDGET));
+  }
+  const useRound = stride === 1;
+  let i = startIdx;
+  if(stride > 1) i = startIdx + ((stride - (startIdx % stride)) % stride);
+
+  for(; i < endIdx; i += stride){
+    const n = notes[i];
+    const key = keyByMidi[n.midi];
+    if(!key) continue;
+    const timeUntilStart = n.time - curTime;
+    const noteH = n.duration * invFallDur * keyTop;
+    const h = noteH < minH ? minH : noteH;
+    const bottomY = keyTop - timeUntilStart * invFallDur * keyTop;
+    const y = bottomY - h;
+    // 整个音符沉入琴键后才消失
+    if(y > keyTop || bottomY <= 0) continue;
+    const pi = isBlackKey(n.midi) ? 1 : 0;
+    const ci = Math.min(4, Math.floor(n.velocity * 5));
+    buckets[pi][ci].push(key.x + 1, y, key.w - 2, h);
+    hasAny = true;
+  }
+
+  // 裁剪到琴键以上区域，音符沉入琴键时不遮盖
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, C.w, keyTop);
+  ctx.clip();
+  if(hasAny){
+    for(let p = 0; p < 2; p++){
+      for(let c = 0; c < 5; c++){
+        const arr = buckets[p][c];
+        if(!arr.length) continue;
+        ctx.beginPath();
+        for(let j = 0; j < arr.length; j += 4){
+          if(useRound) ctx.roundRect(arr[j], arr[j + 1], arr[j + 2], arr[j + 3], radius);
+          else ctx.rect(arr[j], arr[j + 1], arr[j + 2], arr[j + 3]);
+        }
+        ctx.fillStyle = palettes[p][c];
+        ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
+
+  // 高亮当前正在发声的键：直接读 voice 注册表（O(88)），与绘制抽样无关
+  for(let m = 0; m < SoundfontLoader.activeSources.length; m++){
+    if(SoundfontLoader.activeSources[m]) activeKeySet.add(m);
+  }
+  for(const k in SoundfontLoader.activeSynth){
+    activeKeySet.add(parseInt(k, 10));
+  }
+
+  // 按键高亮
+  if(activeKeySet.size > 0){
+    ctx.fillStyle = 'rgba(139,92,246,0.7)';
+    activeKeySet.forEach(midi => {
+      const key = keyByMidi[midi];
+      if(!key) return;
+      if(key.isBlack){
+        ctx.fillRect(key.x, keyTop, key.w, keyAreaH * 0.62);
+      } else {
+        ctx.fillRect(key.x, keyTop, key.w - 1, keyAreaH);
+      }
+    });
+  }
+}
+
+// 初始化
+resizeCanvas();
+setPalette(currentPalette); // 同步按钮选中态并按恢复的配色重绘
+</script>
+<!-- 自定义配色弹窗 -->
+<div id="paletteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:3000;align-items:center;justify-content:center">
+  <div style="background:#1a1a2e;border-radius:12px;padding:18px;width:92%;max-width:440px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0;color:#fff;font-size:16px">自定义配色</h3>
+      <button onclick="closePaletteModal()" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div id="paletteTargets" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"></div>
+    <canvas id="colorBoard" width="420" height="150" style="width:100%;height:150px;border-radius:8px;cursor:crosshair;touch-action:none;display:block"></canvas>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:#ccc">
+      <span>正在设置：<b id="palettePickLabel" style="color:#fff">白键最轻</b></span>
+      <span style="display:flex;align-items:center;gap:6px;">当前
+        <span id="palettePickPreview" style="display:inline-block;width:30px;height:16px;border-radius:3px;border:1px solid #555"></span>
+      </span>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="btn" onclick="closePaletteModal()">取消</button>
+      <button class="btn primary" onclick="savePaletteCustom()">保存并应用</button>
+    </div>
+  </div>
+</div>
+
+<!-- 谱面管理弹窗 -->
+<div id="manageModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:3000;align-items:center;justify-content:center">
+  <div style="background:#1a1a2e;border-radius:12px;padding:20px;width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;color:#fff">谱面管理</h3>
+      <button onclick="closeManageModal()" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div id="manageList" style="overflow-y:auto;flex:1"></div>
+  </div>
+</div>
+
+<!-- ===== 调试终端面板 ===== -->
+<div id="debugTerminal" style="position:fixed;left:0;right:0;bottom:0;height:40%;background:rgba(0,0,0,0.1);z-index:9999;display:none;flex-direction:column;font-family:monospace;font-size:11px;border-top:1px solid #444;">
+  <div style="display:flex;align-items:center;gap:10px;padding:4px 8px;background:rgba(30,30,30,.18);border-bottom:1px solid #444;flex-wrap:wrap;">
+    <span style="color:#0f0;font-weight:bold;">DEBUG</span>
+    <label style="color:#aaa;font-size:10px;display:flex;align-items:center;gap:4px;">透明
+      <input id="dbgOpacity" type="range" min="0.1" max="1" step="0.05" value="0.1" oninput="applyDebugAppearance()" style="width:64px;">
+    </label>
+    <label style="color:#aaa;font-size:10px;display:flex;align-items:center;gap:4px;">模糊
+      <input id="dbgBlur" type="range" min="0" max="100" step="5" value="30" oninput="applyDebugAppearance()" style="width:64px;">
+    </label>
+    <label style="color:#aaa;font-size:10px;display:flex;align-items:center;gap:4px;cursor:pointer;">
+      <input id="dbgAutoOpen" type="checkbox" checked onchange="onDbgAutoOpenChange()" style="accent-color:var(--accent);cursor:pointer;">渲染降级自动弹窗
+    </label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;">
+      <button id="debugCopyBtn" onclick="copyDebugTerminal()" style="background:#2a4;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">copy</button>
+      <button onclick="scrollDebugTop()" title="顶部" style="background:#333;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">↑</button>
+      <button onclick="scrollDebugBottom()" title="底部" style="background:#333;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">↓</button>
+      <button onclick="clearDebugTerminal()" style="background:#333;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">clear</button>
+      <button onclick="toggleDebugTerminal()" title="关闭" style="background:#c22;color:#fff;border:none;padding:2px 8px;cursor:pointer;font-size:10px;border-radius:3px;">✕</button>
+    </div>
+  </div>
+  <div id="debugTerminalContent" style="flex:1;overflow-y:auto;padding:4px 8px;line-height:1.4;"></div>
+</div>
+
+</body>
+</html>
