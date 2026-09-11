@@ -1644,6 +1644,17 @@ const songDefaultTimbre = {
   'The Sound of Silence.mid': '__synth__', // 合成钢琴
 };
 
+// 记录用户是否已与页面交互（绕过自动播放限制；避免"加载完成前点击过"导致后续不再起播）
+let userGestureSeen = false;
+(function(){
+  const mark = () => {
+    userGestureSeen = true;
+    try{ if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); }catch(e){}
+  };
+  ['pointerdown', 'touchstart', 'keydown', 'click'].forEach(ev =>
+    document.addEventListener(ev, mark, {capture: true, passive: true}));
+})();
+
 // 并行加载默认谱面与默认音色：谱面就绪即可播放；音色未就绪先用合成钢琴抢跑，
 // 音色下载并预解码完成后无缝切回（不打断正在发声的音符）
 (function(){
@@ -1677,15 +1688,21 @@ const songDefaultTimbre = {
     autoPlayTriggered = true;
     initAudio();
     if(audioCtx.state === 'suspended'){
-      const startOnInteract = () => {
-        audioCtx.resume();
+      audioCtx.resume().catch(() => {});
+      if(userGestureSeen){
+        // 用户此前已交互过（例如点过菜单），直接起播
         startPlay();
-        document.removeEventListener('click', startOnInteract);
-        document.removeEventListener('touchstart', startOnInteract);
-      };
-      document.addEventListener('click', startOnInteract);
-      document.addEventListener('touchstart', startOnInteract);
-      if(hint) hint.textContent = '点击页面即可开始播放（浏览器自动播放限制）';
+      } else {
+        const startOnInteract = () => {
+          audioCtx.resume();
+          startPlay();
+          document.removeEventListener('click', startOnInteract);
+          document.removeEventListener('touchstart', startOnInteract);
+        };
+        document.addEventListener('click', startOnInteract);
+        document.addEventListener('touchstart', startOnInteract);
+        if(hint) hint.textContent = '点击页面即可开始播放（浏览器自动播放限制）';
+      }
     } else {
       startPlay();
     }
