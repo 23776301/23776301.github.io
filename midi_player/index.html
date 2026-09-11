@@ -2070,21 +2070,17 @@ function toggleMenu(){
   document.addEventListener('touchstart', () => { if(!group.classList.contains('hidden-btn')) showMenuBtn(); }, {passive:true});
   document.addEventListener('mousemove', () => { if(!group.classList.contains('hidden-btn')) showMenuBtn(); });
 
-  // 位置边界：高度限制在 10%~90%，且不超出屏幕
+  // 位置边界：移动端限制在 10%~90% 高度；PC 允许整屏自由摆放
   function fabBounds(){
     const H = window.innerHeight, W = window.innerWidth;
     const gh = group.offsetHeight || 57;
     const gw = group.offsetWidth || 26;
-    const minTop = Math.round(H * 0.1);
-    return {
-      minTop,
-      maxTop: Math.max(minTop, Math.round(H * 0.9) - gh),
-      minLeft: 4,
-      maxLeft: Math.max(4, W - gw - 4)
-    };
+    const isMobile = W <= 800;
+    const minTop = isMobile ? Math.round(H * 0.1) : 4;
+    const maxTop = isMobile ? Math.max(minTop, Math.round(H * 0.9) - gh) : Math.max(minTop, H - gh - 4);
+    return { minTop, maxTop, minLeft: 4, maxLeft: Math.max(4, W - gw - 4) };
   }
   function clampFabGroup(){
-    if(window.innerWidth > 800) return; // PC 由 CSS 固定在右下角
     const b = fabBounds();
     const r = group.getBoundingClientRect();
     let top = r.top, left = r.left, changed = false;
@@ -2102,10 +2098,9 @@ function toggleMenu(){
   }
   window.clampFabGroup = clampFabGroup;
 
-  // 仅移动端恢复拖拽位置；PC 端由 CSS 固定在右下角
-  const isMobile = window.innerWidth <= 800;
+  // 恢复拖拽位置（移动端与 PC 均恢复；PC 不再吸附左右侧）
   const saved = localStorage.getItem('menuBtnPos');
-  if(saved && isMobile){
+  if(saved){
     try{
       const pos = JSON.parse(saved);
       group.style.left = pos.x + 'px';
@@ -2154,18 +2149,14 @@ function toggleMenu(){
     if(!isDragging) return;
     isDragging = false;
     if(moved){
-      // 恢复transition用于吸附动画
       group.style.transition = '';
-      // 自动吸附左右侧：以屏幕中轴线为分界
-      const centerX = group.offsetLeft + group.offsetWidth / 2;
-      const screenCenter = window.innerWidth / 2;
-      let snapX;
-      if(centerX < screenCenter){
-        snapX = 4;
-      } else {
-        snapX = window.innerWidth - group.offsetWidth - 4;
+      // 仅移动端吸附左右侧（以屏幕中轴线为分界）；PC 鼠标交互不吸附，停留在落点
+      if(window.innerWidth <= 800){
+        const centerX = group.offsetLeft + group.offsetWidth / 2;
+        const screenCenter = window.innerWidth / 2;
+        const snapX = centerX < screenCenter ? 4 : (window.innerWidth - group.offsetWidth - 4);
+        group.style.left = snapX + 'px';
       }
-      group.style.left = snapX + 'px';
       clampFabGroup();
       localStorage.setItem('menuBtnPos', JSON.stringify({x: group.offsetLeft, y: group.offsetTop}));
       showMenuBtn();

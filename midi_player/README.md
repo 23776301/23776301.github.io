@@ -323,10 +323,10 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 
 ## 9.1 可拖拽 FAB 按钮组
 
-- 组内包含**菜单按钮**（仅移动端显示）与 **DEBUG 按钮**，纵向排列、尺寸一致（44px 圆形）。
-- 整组可拖动：拖动阈值 3px 用于区分「点击」与「拖动」；拖动时禁用过渡保持跟手，松手后自动吸附到屏幕左/右侧。
-- 位置持久化到 `localStorage.menuBtnPos`；`clampFabGroup` 把纵向限制在视口 **10%–90%**，并在 `resize`/`orientationchange`/`visualViewport` 变化时校正。
-- 空闲 2s 淡出（透明度 0.5），任意交互时恢复；PC 端由 CSS 固定在右下角。
+- 组内包含**菜单按钮**（移动端与 PC 均显示）与 **DEBUG 按钮**，纵向排列、尺寸一致（44px 圆形）。
+- 整组可拖动：拖动阈值 3px 用于区分「点击」与「拖动」；拖动时禁用过渡保持跟手。移动端松手后自动吸附到屏幕左/右侧；**PC 端不吸附**，鼠标拖动后停留在落点（更符合大屏鼠标交互）。
+- 位置持久化到 `localStorage.menuBtnPos`；`clampFabGroup` 在移动端把纵向限制在视口 **10%–90%**，在 PC 端允许整屏自由摆放，并在 `resize`/`orientationchange`/`visualViewport` 变化时校正。
+- 空闲 2s 淡出（透明度 0.5），任意交互时恢复；PC 端初始位于右下角。
 
 ## 9.2 移动端抽屉与遮罩
 
@@ -342,7 +342,7 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 ## 9.4 响应式与视口
 
 - `@media(max-width:800px)`：单列布局、隐藏标题、`height:100dvh`、Canvas 全屏、控制面板抽屉化。
-- PC 端：FAB 固定右下角，控制面板常驻左侧。
+- PC 端：整页锁定视口高度（`100dvh` + `overflow:hidden`），左侧控制面板内部滚动，绘制区 `flex:1` 占满剩余高度，钢琴键始终位于屏幕底部、无需滚动页面（见 9.6）。
 - 高分屏：所有绘制尺寸乘以 `devicePixelRatio`。
 - 视口变化：`resize`（rAF 合并）、`orientationchange`、`fullscreenchange`、`visualViewport` 均触发重算布局，确保钢琴键盘始终可见。
 - **安全区**：目前仅使用 `100dvh` 处理移动端视口，尚未适配 `env(safe-area-inset-*)`（见路线图）。
@@ -355,6 +355,13 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 - **双向同步**：覆写实例上的 `value` / `selectedIndex` setter，并监听子节点变化（`MutationObserver`），程序化改值或动态重建选项时自动刷新触发按钮文案；用户在下拉中选择时回写原生 select 并派发 `change`。
 - **弹层 portal 到 `document.body`**：使用 `position:fixed`，避免移动端抽屉的 `transform` 使 fixed 相对面板定位，以及面板 `overflow` 裁剪。
 - **交互**：分组标题、选中高亮、**搜索过滤**（55 种音色快速定位）、方向键 / 回车 / Esc 键盘操作、点击外部或滚动时自动关闭 / 重新定位。
+
+## 9.6 PC 布局、菜单折叠与全屏
+
+- **视口自适应**：PC 端整页锁定视口高度（`height:100dvh` + `overflow:hidden`），`.layout` 用 `flex:1` 撑满，左侧面板 `overflow-y:auto` 内部滚动，`.visual-panel` 与 Canvas 以 `flex:1` 占满剩余高度——**钢琴键始终贴在屏幕底部，无需滚动页面**。
+- **菜单折叠**：PC 端同样显示菜单按钮（☰），点击在「展开 / 折叠」左侧控制面板间切换；折叠时 `.layout.menu-collapsed` 把网格列改为 `0 1fr` 并隐藏面板，绘制区占满整行。
+- **全屏绘制区**：配色栏最右侧的「全屏」按钮对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时 `fullscreenchange` 触发画布重新布局与静态层预渲染，按钮图标随之切换。
+- **配色栏布局**：A/B/C/自定义四个色板按钮排成单行，与「配色方案」竖排标签、「白键 / 黑键」标签及色带（`paletteSwatch`）底边对齐，降低控制栏高度。
 
 # 十、部署、流量与缓存策略（GitHub Pages）
 
@@ -640,6 +647,14 @@ midi_player/
 
 | 主题 | 摘要 | 代表 commit |
 | --- | --- | --- |
-| 加载体验 | 默认谱面与音色改为**并行**下载；谱面就绪即用合成钢琴抢跑，音色下载并预解码完成后**无缝切回**（只切 `current`，不打断发声 voice） | `本提交` |
-| UI | 音色 / 谱面下拉改为**自定义深色弹层**（分组、搜索、键盘操作、portal 定位），修复桌面端原生 `option` 白底白字不可读 | `本提交` |
+| 加载体验 | 默认谱面与音色改为**并行**下载；谱面就绪即用合成钢琴抢跑，音色下载并预解码完成后**无缝切回**（只切 `current`，不打断发声 voice） | `4892340` |
+| UI | 音色 / 谱面下拉改为**自定义深色弹层**（分组、搜索、键盘操作、portal 定位），修复桌面端原生 `option` 白底白字不可读 | `4892340` |
 | 文档 | 性能复盘与优化笔记；部署/流量/缓存章节；主题拆分 | `476b6812`、`a9429e31` |
+
+## 2026-09 PC 布局与全屏
+
+| 主题 | 摘要 | 代表 commit |
+| --- | --- | --- |
+| PC 布局 | 整页锁定视口高度，绘制区自适应剩余高度，钢琴键始终贴底、无需滚动；配色栏压缩为单行 | `本提交` |
+| 菜单 | PC 端显示菜单按钮，点击折叠 / 展开左侧控制面板；FAB 在 PC 端取消左右吸附 | `本提交` |
+| 全屏 | 配色栏右侧新增全屏按钮，仅放大绘制区 | `本提交` |
