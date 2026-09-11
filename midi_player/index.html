@@ -3148,9 +3148,17 @@ function _userPlayKey(midi){
   if(audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
   SoundfontLoader.playNote(midi, 0.9, 0.7); // 用户敲击：固定力度与时长
 }
+let _lastCanvasTap = 0;
 canvas.addEventListener('pointerdown', (e) => {
   const midi = _canvasPointToKey(e);
-  if(midi == null) return;
+  if(midi == null){
+    // 非钢琴键的渲染区：双击（含双触）等价于播放/暂停
+    const now = Date.now();
+    if(now - _lastCanvasTap < 300){ _lastCanvasTap = 0; togglePlay(); }
+    else { _lastCanvasTap = now; }
+    e.preventDefault();
+    return;
+  }
   _keyPointers.set(e.pointerId, midi);
   try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
   _userPlayKey(midi);
