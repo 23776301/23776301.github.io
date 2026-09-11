@@ -1892,6 +1892,9 @@ document.addEventListener('visibilitychange', () => {
       pausePlay();
       document.getElementById('pauseOverlay').classList.add('show');
     }
+  } else if(!document.hidden && wasPlayingBeforeBlur){
+    // 回到前台自动续播：仅当此前是"因失焦而暂停"时
+    resumeFromPause();
   }
 });
 
@@ -1917,7 +1920,8 @@ function resumeFromPause(){
   document.getElementById('pauseOverlay').classList.remove('show');
   if(wasPlayingBeforeBlur && totalDuration > 0){
     initAudio();
-    if(audioCtx.state === 'suspended') audioCtx.resume();
+    // 浏览器可能要求用户手势才能恢复；失败时静默，等用户手动点播放
+    if(audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
     startPlay();
   }
   wasPlayingBeforeBlur = false;
