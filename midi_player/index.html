@@ -93,16 +93,19 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 /* 键盘焦点轮廓跟随圆角（仅键盘触发，触屏不显示） */
 .pal-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-/* 统一下拉面板：从触发按钮下方展开，浮在渲染区之上，最大高度约渲染区 2/3 */
+/* 统一下拉面板：从控制行下方展开，浮在渲染区之上，最大高度约渲染区 2/3 */
 .drop-panel{
-  position:fixed;z-index:10050;display:none;
+  position:absolute;top:100%;right:0;z-index:10050;display:none;
   width:min(92vw,460px);max-height:66.67vh;overflow-y:auto;
+  margin-top:6px;
   border:1px solid var(--border);border-radius:12px;padding:12px;
   box-shadow:0 14px 44px rgba(0,0,0,.55);
   background:rgba(0,0,0,0);
   backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
 }
 .drop-panel.open{display:block}
+/* 全屏时设置面板改挂到渲染区左上角（由 _syncFsLayout 移动并加 .in-fs） */
+.control-panel.in-fs{position:fixed;top:64px;left:14px;right:auto;margin-top:0;max-height:66.67vh}
 .control-panel > .dbg-section:first-of-type{margin-top:0;padding-top:0;border-top:none}
 .overlay-mask{display:none}
 @media(max-width:800px){
@@ -131,7 +134,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .ctl-btn.primary:hover{background:#7c3aed}
 .ctl-btn svg{width:16px;height:16px}
 /* 配色面板：从控制行下方展开（absolute，不遮挡按钮） */
-.palette-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:230px;position:absolute;top:100%;right:0;margin-top:6px}
+.palette-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:230px}
 #paletteToggleIcon{transition:transform .2s}
 
 /* 谱面管理面板：统一下拉浮层 */
@@ -303,7 +306,7 @@ select:focus{border-color:var(--accent)}
 /* 2s 未点击悬浮按钮：淡到 10% */
 .fs-overlay.faded .fs-float-btn{opacity:.1}
 /* 调试面板：从控制行下方展开（absolute，不遮挡按钮） */
-.debug-panel{display:none;position:absolute;top:100%;right:0;margin-top:6px}
+.debug-panel{display:none}
 .debug-panel.open{display:block}
 .file-info{font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6}
 .file-info b{color:var(--text)}
@@ -316,148 +319,6 @@ select:focus{border-color:var(--accent)}
   <p class="subtitle">88 键钢琴可视化 · 多音色 · 变速播放</p>
 
   <div class="layout">
-    <!-- 左侧控制面板（仅设置项） -->
-    <div class="panel control-panel drop-panel" id="controlPanel">
-      <h2 style="margin-top:0">设置</h2>
-      <div class="dbg-section" id="appearanceSection">
-        <div class="dbg-toolbar">
-          <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="100" oninput="applyPanelAppearance()"></label>
-          <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="25" oninput="applyPanelAppearance()"></label>
-        </div>
-      </div>
-      <div class="row">
-        <label>音乐倍速</label>
-        <div style="flex:1;display:flex;gap:4px;flex-wrap:wrap">
-          <button class="btn speed-btn" data-speed="0.2" onclick="setSpeed(0.2)" style="padding:4px 8px;min-height:28px;font-size:11px">0.2x</button>
-          <button class="btn speed-btn" data-speed="0.5" onclick="setSpeed(0.5)" style="padding:4px 8px;min-height:28px;font-size:11px">0.5x</button>
-          <button class="btn speed-btn active" data-speed="1" onclick="setSpeed(1)" style="padding:4px 8px;min-height:28px;font-size:11px">1x</button>
-          <button class="btn speed-btn" data-speed="1.2" onclick="setSpeed(1.2)" style="padding:4px 8px;min-height:28px;font-size:11px">1.2x</button>
-          <button class="btn speed-btn" data-speed="1.5" onclick="setSpeed(1.5)" style="padding:4px 8px;min-height:28px;font-size:11px">1.5x</button>
-          <button class="btn speed-btn" data-speed="2" onclick="setSpeed(2)" style="padding:4px 8px;min-height:28px;font-size:11px">2x</button>
-        </div>
-      </div>
-      <div class="row">
-        <label>下落流速</label>
-        <input type="range" id="fallSpeedSlider" min="0.2" max="5" step="0.1" value="1" oninput="onFallSpeedChange()">
-        <span class="val" id="fallSpeedVal">1.0x</span>
-      </div>
-      <div class="row">
-        <label>音量</label>
-        <input type="range" id="volSlider" min="0" max="1" step="0.01" value="0.7" oninput="onVolChange()">
-        <span class="val" id="volVal">70%</span>
-      </div>
-      <div class="row">
-        <label>钢琴高度</label>
-        <input type="range" id="pianoHeightSlider" min="5" max="50" step="1" value="16" oninput="onPianoHeightChange()">
-        <span class="val" id="pianoHeightVal">16%</span>
-      </div>
-      <div class="row">
-        <label>宽度缩放</label>
-        <input type="range" id="pianoWidthSlider" min="1" max="4" step="0.1" value="1" oninput="onPianoWidthChange()">
-        <span class="val" id="pianoWidthVal">1.0×</span>
-      </div>
-      <div class="row">
-        <label>水平偏移</label>
-        <input type="range" id="pianoOffsetSlider" min="0" max="100" step="1" value="0" oninput="onPianoOffsetChange()">
-        <span class="val" id="pianoOffsetVal">0%</span>
-      </div>
-      <div class="row">
-        <label>键数版型</label>
-        <div class="kb-presets">
-          <button type="button" class="kb-preset active" data-keys="88" onclick="setKeyboardPreset(88)">88键</button>
-          <button type="button" class="kb-preset" data-keys="76" onclick="setKeyboardPreset(76)">76键</button>
-          <button type="button" class="kb-preset" data-keys="61" onclick="setKeyboardPreset(61)">61键</button>
-          <button type="button" class="kb-preset" data-keys="49" onclick="setKeyboardPreset(49)">49键</button>
-          <button type="button" class="kb-preset" data-keys="37" onclick="setKeyboardPreset(37)">37键</button>
-          <button type="button" class="kb-preset" data-keys="25" onclick="setKeyboardPreset(25)">25键</button>
-        </div>
-      </div>
-      <div class="row">
-        <label>模式</label>
-        <label class="switch" title="欣赏模式：音符自动发声；演奏模式：需点击琴键发声">
-          <input id="playModeSw" type="checkbox" checked onchange="onPlayModeChange()">
-          <span class="track"><span class="knob"></span></span>
-          <span id="playModeLabel">欣赏模式</span>
-        </label>
-      </div>
-
-      <h2 style="margin-top:20px">音色</h2>
-      <div class="row">
-        <select id="timbreSel" onchange="onTimbreChange()">
-          <option value="__synth__">合成钢琴</option>
-          <optgroup label="键盘">
-            <option value="acoustic_grand_piano">三角钢琴</option>
-            <option value="bright_acoustic_piano">亮音钢琴</option>
-            <option value="electric_grand_piano">电三角钢琴</option>
-            <option value="electric_piano_1">电钢琴1</option>
-            <option value="electric_piano_2">电钢琴2</option>
-            <option value="honkytonk_piano">酒吧钢琴</option>
-            <option value="harpsichord">大键琴</option>
-            <option value="clavinet" selected>古钢琴</option>
-          </optgroup>
-          <optgroup label="风琴/打击">
-            <option value="drawbar_organ">拉杆风琴</option>
-            <option value="percussive_organ">打击风琴</option>
-            <option value="rock_organ">摇滚风琴</option>
-            <option value="church_organ">教堂管风琴</option>
-            <option value="celesta">钢片琴</option>
-            <option value="vibraphone">颤音琴</option>
-            <option value="marimba">马林巴</option>
-            <option value="xylophone">木琴</option>
-            <option value="tubular_bells">管钟</option>
-          </optgroup>
-          <optgroup label="吉他/贝斯">
-            <option value="acoustic_guitar_nylon">古典吉他</option>
-            <option value="acoustic_guitar_steel">民谣吉他</option>
-            <option value="electric_guitar_jazz">爵士电吉他</option>
-            <option value="electric_guitar_clean">清音电吉他</option>
-            <option value="overdriven_guitar">过载吉他</option>
-            <option value="distortion_guitar">失真吉他</option>
-            <option value="acoustic_bass">原声贝斯</option>
-            <option value="electric_bass_finger">指弹电贝斯</option>
-            <option value="electric_bass_pick">拨片电贝斯</option>
-            <option value="fretless_bass">无品贝斯</option>
-          </optgroup>
-          <optgroup label="弦乐">
-            <option value="violin">小提琴</option>
-            <option value="viola">中提琴</option>
-            <option value="cello">大提琴</option>
-            <option value="contrabass">低音提琴</option>
-            <option value="pizzicato_strings">拨弦弦乐</option>
-            <option value="orchestral_harp">竖琴</option>
-            <option value="string_ensemble_1">弦乐合奏1</option>
-            <option value="string_ensemble_2">弦乐合奏2</option>
-          </optgroup>
-          <optgroup label="铜管/木管">
-            <option value="trumpet">小号</option>
-            <option value="trombone">长号</option>
-            <option value="french_horn">圆号</option>
-            <option value="tuba">大号</option>
-            <option value="brass_section">铜管合奏</option>
-            <option value="soprano_sax">高音萨克斯</option>
-            <option value="alto_sax">中音萨克斯</option>
-            <option value="tenor_sax">次中音萨克斯</option>
-            <option value="baritone_sax">上低音萨克斯</option>
-            <option value="oboe">双簧管</option>
-            <option value="bassoon">巴松管</option>
-            <option value="clarinet">单簧管</option>
-            <option value="piccolo">短笛</option>
-            <option value="flute">长笛</option>
-            <option value="recorder">竖笛</option>
-            <option value="pan_flute">排箫</option>
-          </optgroup>
-          <optgroup label="合成器">
-            <option value="lead_1_square">方波主音</option>
-            <option value="lead_2_sawtooth">锯齿主音</option>
-            <option value="lead_7_fifths">五度主音</option>
-            <option value="pad_4_choir">合唱垫音</option>
-          </optgroup>
-        </select>
-      </div>
-      <div class="timbre-hint" id="timbreHint">正在加载音色…</div>
-
-    </div>
-
     <!-- 右侧：顶部控制栏 + 可视化 -->
     <div>
       <div class="top-bar">
@@ -515,6 +376,154 @@ select:focus{border-color:var(--accent)}
               <div id="debugTerminalContent" class="dbg-log"></div>
             </div>
           </div>
+          <!-- 左侧控制面板（仅设置项） -->
+          <div class="panel control-panel drop-panel" id="controlPanel">
+            <h2 style="margin-top:0">设置</h2>
+            <div class="dbg-section" id="appearanceSection">
+              <div class="dbg-toolbar">
+                <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="100" oninput="applyPanelAppearance()"></label>
+                <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="25" oninput="applyPanelAppearance()"></label>
+              </div>
+            </div>
+            <div class="row">
+              <label>音乐倍速</label>
+              <div style="flex:1;display:flex;gap:4px;flex-wrap:wrap">
+                <button class="btn speed-btn" data-speed="0.2" onclick="setSpeed(0.2)" style="padding:4px 8px;min-height:28px;font-size:11px">0.2x</button>
+                <button class="btn speed-btn" data-speed="0.5" onclick="setSpeed(0.5)" style="padding:4px 8px;min-height:28px;font-size:11px">0.5x</button>
+                <button class="btn speed-btn active" data-speed="1" onclick="setSpeed(1)" style="padding:4px 8px;min-height:28px;font-size:11px">1x</button>
+                <button class="btn speed-btn" data-speed="1.2" onclick="setSpeed(1.2)" style="padding:4px 8px;min-height:28px;font-size:11px">1.2x</button>
+                <button class="btn speed-btn" data-speed="1.5" onclick="setSpeed(1.5)" style="padding:4px 8px;min-height:28px;font-size:11px">1.5x</button>
+                <button class="btn speed-btn" data-speed="2" onclick="setSpeed(2)" style="padding:4px 8px;min-height:28px;font-size:11px">2x</button>
+              </div>
+            </div>
+            <div class="row">
+              <label>下落流速</label>
+              <input type="range" id="fallSpeedSlider" min="0.2" max="5" step="0.1" value="1" oninput="onFallSpeedChange()">
+              <span class="val" id="fallSpeedVal">1.0x</span>
+            </div>
+            <div class="row">
+              <label>音量</label>
+              <input type="range" id="volSlider" min="0" max="1" step="0.01" value="0.7" oninput="onVolChange()">
+              <span class="val" id="volVal">70%</span>
+            </div>
+            <div class="row">
+              <label>钢琴高度</label>
+              <input type="range" id="pianoHeightSlider" min="5" max="50" step="1" value="16" oninput="onPianoHeightChange()">
+              <span class="val" id="pianoHeightVal">16%</span>
+            </div>
+            <div class="row">
+              <label>宽度缩放</label>
+              <input type="range" id="pianoWidthSlider" min="1" max="4" step="0.1" value="1" oninput="onPianoWidthChange()">
+              <span class="val" id="pianoWidthVal">1.0×</span>
+            </div>
+            <div class="row">
+              <label>水平偏移</label>
+              <input type="range" id="pianoOffsetSlider" min="0" max="100" step="1" value="0" oninput="onPianoOffsetChange()">
+              <span class="val" id="pianoOffsetVal">0%</span>
+            </div>
+            <div class="row">
+              <label>键数版型</label>
+              <div class="kb-presets">
+                <button type="button" class="kb-preset active" data-keys="88" onclick="setKeyboardPreset(88)">88键</button>
+                <button type="button" class="kb-preset" data-keys="76" onclick="setKeyboardPreset(76)">76键</button>
+                <button type="button" class="kb-preset" data-keys="61" onclick="setKeyboardPreset(61)">61键</button>
+                <button type="button" class="kb-preset" data-keys="49" onclick="setKeyboardPreset(49)">49键</button>
+                <button type="button" class="kb-preset" data-keys="37" onclick="setKeyboardPreset(37)">37键</button>
+                <button type="button" class="kb-preset" data-keys="25" onclick="setKeyboardPreset(25)">25键</button>
+              </div>
+            </div>
+            <div class="row">
+              <label>模式</label>
+              <label class="switch" title="欣赏模式：音符自动发声；演奏模式：需点击琴键发声">
+                <input id="playModeSw" type="checkbox" checked onchange="onPlayModeChange()">
+                <span class="track"><span class="knob"></span></span>
+                <span id="playModeLabel">欣赏模式</span>
+              </label>
+            </div>
+
+            <h2 style="margin-top:20px">音色</h2>
+            <div class="row">
+              <select id="timbreSel" onchange="onTimbreChange()">
+                <option value="__synth__">合成钢琴</option>
+                <optgroup label="键盘">
+                  <option value="acoustic_grand_piano">三角钢琴</option>
+                  <option value="bright_acoustic_piano">亮音钢琴</option>
+                  <option value="electric_grand_piano">电三角钢琴</option>
+                  <option value="electric_piano_1">电钢琴1</option>
+                  <option value="electric_piano_2">电钢琴2</option>
+                  <option value="honkytonk_piano">酒吧钢琴</option>
+                  <option value="harpsichord">大键琴</option>
+                  <option value="clavinet" selected>古钢琴</option>
+                </optgroup>
+                <optgroup label="风琴/打击">
+                  <option value="drawbar_organ">拉杆风琴</option>
+                  <option value="percussive_organ">打击风琴</option>
+                  <option value="rock_organ">摇滚风琴</option>
+                  <option value="church_organ">教堂管风琴</option>
+                  <option value="celesta">钢片琴</option>
+                  <option value="vibraphone">颤音琴</option>
+                  <option value="marimba">马林巴</option>
+                  <option value="xylophone">木琴</option>
+                  <option value="tubular_bells">管钟</option>
+                </optgroup>
+                <optgroup label="吉他/贝斯">
+                  <option value="acoustic_guitar_nylon">古典吉他</option>
+                  <option value="acoustic_guitar_steel">民谣吉他</option>
+                  <option value="electric_guitar_jazz">爵士电吉他</option>
+                  <option value="electric_guitar_clean">清音电吉他</option>
+                  <option value="overdriven_guitar">过载吉他</option>
+                  <option value="distortion_guitar">失真吉他</option>
+                  <option value="acoustic_bass">原声贝斯</option>
+                  <option value="electric_bass_finger">指弹电贝斯</option>
+                  <option value="electric_bass_pick">拨片电贝斯</option>
+                  <option value="fretless_bass">无品贝斯</option>
+                </optgroup>
+                <optgroup label="弦乐">
+                  <option value="violin">小提琴</option>
+                  <option value="viola">中提琴</option>
+                  <option value="cello">大提琴</option>
+                  <option value="contrabass">低音提琴</option>
+                  <option value="pizzicato_strings">拨弦弦乐</option>
+                  <option value="orchestral_harp">竖琴</option>
+                  <option value="string_ensemble_1">弦乐合奏1</option>
+                  <option value="string_ensemble_2">弦乐合奏2</option>
+                </optgroup>
+                <optgroup label="铜管/木管">
+                  <option value="trumpet">小号</option>
+                  <option value="trombone">长号</option>
+                  <option value="french_horn">圆号</option>
+                  <option value="tuba">大号</option>
+                  <option value="brass_section">铜管合奏</option>
+                  <option value="soprano_sax">高音萨克斯</option>
+                  <option value="alto_sax">中音萨克斯</option>
+                  <option value="tenor_sax">次中音萨克斯</option>
+                  <option value="baritone_sax">上低音萨克斯</option>
+                  <option value="oboe">双簧管</option>
+                  <option value="bassoon">巴松管</option>
+                  <option value="clarinet">单簧管</option>
+                  <option value="piccolo">短笛</option>
+                  <option value="flute">长笛</option>
+                  <option value="recorder">竖笛</option>
+                  <option value="pan_flute">排箫</option>
+                </optgroup>
+                <optgroup label="合成器">
+                  <option value="lead_1_square">方波主音</option>
+                  <option value="lead_2_sawtooth">锯齿主音</option>
+                  <option value="lead_7_fifths">五度主音</option>
+                  <option value="pad_4_choir">合唱垫音</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="timbre-hint" id="timbreHint">正在加载音色…</div>
+
+          </div>
+      <div id="manageModal" class="drop-panel manage-panel">
+        <div class="manage-head">
+          <h3>谱面管理</h3>
+          <button class="manage-close" onclick="closeManageModal()" title="关闭">✕</button>
+        </div>
+        <div id="manageList"></div>
+      </div>
         </div>
         <div class="stats-bar" style="font-size:10px;color:var(--dim);margin-top:3px;display:flex;justify-content:space-between">
           <span><span id="statTracks">轨道：-</span> · <span id="statTotal">音符：-</span></span>
@@ -670,30 +679,9 @@ function applyPanelAppearance(){
   const bl = document.getElementById('panelBlur');
   _applyAllAppearance(tp ? parseFloat(tp.value) : 100, bl ? parseFloat(bl.value) : 25);
 }
-// ===== 统一下拉面板：从触发按钮下方展开，最大高度约渲染区 2/3 =====
+// ===== 统一下拉面板：从控制行下方展开，最大高度约渲染区 2/3 =====
 function closeAllDropPanels(except){
   document.querySelectorAll('.drop-panel.open').forEach(p => { if(p !== except) p.classList.remove('open'); });
-}
-function positionDropPanel(panel, trigger){
-  if(!panel) return;
-  panel.classList.add('open');
-  const r = trigger ? trigger.getBoundingClientRect() : null;
-  const vw = window.innerWidth, vh = window.innerHeight;
-  const w = panel.offsetWidth || Math.min(vw * 0.92, 460);
-  let left = r ? (r.right - w) : 8;
-  if(left < 8) left = 8;
-  if(left + w > vw - 8) left = vw - 8 - w;
-  panel.style.maxHeight = (vh * 2 / 3) + 'px';
-  panel.style.top = (r ? (r.bottom + 6) : 8) + 'px';
-  panel.style.left = left + 'px';
-  panel.style.right = 'auto';
-}
-function openDropPanel(panel, trigger){
-  if(!panel) return;
-  const wasOpen = panel.classList.contains('open');
-  closeAllDropPanels(panel);
-  if(wasOpen){ panel.classList.remove('open'); return; }
-  positionDropPanel(panel, trigger);
 }
 // 点击面板 / 触发按钮以外区域：关闭所有下拉面板
 document.addEventListener('pointerdown', (e) => {
@@ -2046,7 +2034,8 @@ async function openManageModal(){
   loading.className = 'manage-empty';
   loading.textContent = '加载中…';
   list.appendChild(loading);
-  positionDropPanel(modal, document.getElementById('manageBtn'));
+  closeAllDropPanels(modal);
+  modal.classList.add('open');
   applyPanelAppearance();
 
   const frag = document.createDocumentFragment();
@@ -2384,9 +2373,9 @@ function toggleLoop(){
 
 function toggleMenu(){
   const panel = document.getElementById('controlPanel');
-  // 全屏时从悬浮设置按钮展开，否则从控制行设置按钮展开
-  const trigger = _isFullscreenNow() ? document.getElementById('fsSettingsBtn') : document.getElementById('settingsBtn');
-  openDropPanel(panel, trigger);
+  if(!panel) return;
+  closeAllDropPanels(panel);
+  panel.classList.toggle('open');
 }
 
 // 菜单/调试按钮组：二者都可拖动，捆绑一起移动；轻点各自触发对应功能
@@ -3015,13 +3004,16 @@ function _syncFsLayout(){
   const vp = document.querySelector('.visual-panel');
   if(!vp) return;
   if(_isFullscreenNow()){
-    if(_panelEl) vp.appendChild(_panelEl);
+    if(_panelEl){ vp.appendChild(_panelEl); _panelEl.classList.add('in-fs'); }
     _fsShowControls();
   } else {
     _fsHideControls();
     const fo = document.getElementById('fsOverlay'); if(fo) fo.classList.remove('faded');
     closeAllDropPanels();
-    if(_panelEl && _panelHome) _panelHome.parent.insertBefore(_panelEl, _panelHome.next);
+    if(_panelEl){
+      _panelEl.classList.remove('in-fs');
+      if(_panelHome) _panelHome.parent.insertBefore(_panelEl, _panelHome.next);
+    }
   }
 }
 document.addEventListener('fullscreenchange', _syncFsLayout);
@@ -3403,13 +3395,6 @@ applyPanelAppearance();     // 统一菜单/调试/选谱/管理面板的透明�
 </div>
 
 <!-- 谱面管理弹窗 -->
-<div id="manageModal" class="drop-panel manage-panel">
-  <div class="manage-head">
-    <h3>谱面管理</h3>
-    <button class="manage-close" onclick="closeManageModal()" title="关闭">✕</button>
-  </div>
-  <div id="manageList"></div>
-</div>
 
 </body>
 </html>
