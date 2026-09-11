@@ -170,8 +170,9 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .dbg-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:10px;color:var(--dim);margin-bottom:6px}
 .dbg-toolbar label{display:flex;align-items:center;gap:4px;cursor:pointer}
 .dbg-toolbar input[type=range]{width:64px}
-.dbg-actions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
-.dbg-actions button{background:#333;color:#fff;border:none;padding:3px 8px;cursor:pointer;font-size:10px;border-radius:3px}
+.dbg-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+.dbg-actions button{background:#333;color:#fff;border:none;width:26px;height:26px;padding:0;cursor:pointer;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+.dbg-actions button svg{width:14px;height:14px}
 .dbg-actions button:hover{background:#444}
 .dbg-log{
   height:200px;overflow-y:auto;padding:4px 8px;line-height:1.4;
@@ -279,7 +280,8 @@ select:focus{border-color:var(--accent)}
 .progress-wrap{margin:12px 0}
 .progress-bar{height:6px;background:#e5e5e5;border-radius:3px;overflow:hidden;cursor:pointer}
 .progress-fill{height:100%;background:var(--accent);width:0%;transition:width .1s linear}
-.time-row{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:4px}
+.time-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--dim);margin-top:4px}
+#statusText{flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 #visualCanvas{width:100%;height:500px;background:#0a0a10;border-radius:8px;display:block}
 /* PC：整页锁定视口高度，绘制区自适应剩余高度，钢琴始终在屏幕底部、无需滚动 */
 @media(min-width:801px){
@@ -329,7 +331,7 @@ select:focus{border-color:var(--accent)}
     <div>
       <div class="top-bar">
         <div class="top-bar-row">
-          <button class="ctl-btn primary" id="replayBtn" onclick="replayPlay()" disabled title="重播"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+          <button class="ctl-btn primary" id="replayBtn" onclick="replayPlay()" disabled title="重播"><svg viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0"><path d="M4.255 6a7 7 0 1 1-1.242 3.568A.53.53 0 0 0 2.5 9a.474.474 0 0 0-.48.435q-.018.28-.02.565a8 8 0 1 0 1.5-4.665V3.5a.5.5 0 0 0-1 0v3A.5.5 0 0 0 3 7h3a.5.5 0 0 0 0-1zM8 7.751a1 1 0 0 1 1.49-.87l3.998 2.25a1 1 0 0 1 0 1.742l-3.997 2.25A1 1 0 0 1 8 12.254zm4.997 2.251L9 7.752v4.5z"/></svg></button>
           <select id="songSel" onchange="onSongChange(this.value)" style="flex:1">
             <option value="">加载谱库…</option>
           </select>
@@ -341,9 +343,10 @@ select:focus{border-color:var(--accent)}
           <button class="ctl-btn primary" id="playBtn" onclick="togglePlay()" disabled title="播放"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
           <button class="ctl-btn primary" id="nextBtn" onclick="nextSong()" disabled title="下一首"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></button>
           <button class="ctl-btn primary" id="loopBtn" onclick="toggleLoop()" disabled title="列表循环"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0"><path d="M11 5.466V4H5a4 4 0 0 0-3.584 5.777a.5.5 0 1 1-.896.446A5 5 0 0 1 5 3h6V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192m3.81.086a.5.5 0 0 1 .67.225A5 5 0 0 1 11 13H5v1.466a.25.25 0 0 1-.41.192l-2.36-1.966a.25.25 0 0 1 0-.384l2.36-1.966a.25.25 0 0 1 .41.192V12h6a4 4 0 0 0 3.585-5.777a.5.5 0 0 1 .225-.67Z"/></svg></button>
-          <button class="ctl-btn primary drop-trigger" id="manageBtn" onclick="openManageModal()" title="管理谱面" aria-label="管理谱面"><svg viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0"><path d="M16.81 10.548a1.87 1.87 0 1 1 2.644 2.644l-4.829 4.83a2.2 2.2 0 0 1-1.021.578l-1.498.375a.89.89 0 0 1-1.079-1.08l.374-1.497c.097-.387.297-.74.579-1.021zM3.25 13.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m8.023 1.17a3.2 3.2 0 0 0-.597.83H7.75a.75.75 0 0 1 0-1.5h4.192zM3.25 8.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5q.159 0 .297.06c-.53.11-1.034.37-1.445.78l-.659.66H7.75a.75.75 0 0 1 0-1.5zm-14-5.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5a.75.75 0 0 1 0 1.5h-9.5a.75.75 0 0 1 0-1.5z"/></svg></button>
+          
           <button class="ctl-btn primary" id="uploadBtn" onclick="document.getElementById('midiFile').click()" title="上传MIDI" aria-label="上传MIDI"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" style="flex-shrink:0"><path d="M4.5 11.5a3 3 0 0 1 3-3h8.718a4 4 0 0 1 2.325.745l4.914 3.51a4 4 0 0 0 2.325.745H40.5a3 3 0 0 1 3 3v20a3 3 0 0 1-3 3h-33a3 3 0 0 1-3-3z"/><path d="M24 33.5v-14m6.167 6.167L24 19.5l-6.167 6.167"/></svg></button>
-          <button class="ctl-btn primary drop-trigger" id="settingsBtn" onclick="toggleMenu()" title="设置" aria-label="设置" style="margin-left:auto"><svg viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M12.4277 2C11.3139 2 10.2995 2.6007 8.27081 3.80211L7.58466 4.20846C5.55594 5.40987 4.54158 6.01057 3.98466 7C3.42773 7.98943 3.42773 9.19084 3.42773 11.5937V12.4063C3.42773 14.8092 3.42773 16.0106 3.98466 17C4.54158 17.9894 5.55594 18.5901 7.58466 19.7915L8.27081 20.1979C10.2995 21.3993 11.3139 22 12.4277 22C13.5416 22 14.5559 21.3993 16.5847 20.1979L17.2708 19.7915C19.2995 18.5901 20.3139 17.9894 20.8708 17C21.4277 16.0106 21.4277 14.8092 21.4277 12.4063V11.5937C21.4277 9.19084 21.4277 7.98943 20.8708 7C20.3139 6.01057 19.2995 5.40987 17.2708 4.20846L16.5847 3.80211C14.5559 2.6007 13.5416 2 12.4277 2ZM8.67773 12C8.67773 9.92893 10.3567 8.25 12.4277 8.25C14.4988 8.25 16.1777 9.92893 16.1777 12C16.1777 14.0711 14.4988 15.75 12.4277 15.75C10.3567 15.75 8.67773 14.0711 8.67773 12Z" clip-rule="evenodd"/></svg></button>
+          <button class="ctl-btn primary drop-trigger" id="manageBtn" style="margin-left:auto" onclick="openManageModal()" title="管理谱面" aria-label="管理谱面"><svg viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0"><path d="M16.81 10.548a1.87 1.87 0 1 1 2.644 2.644l-4.829 4.83a2.2 2.2 0 0 1-1.021.578l-1.498.375a.89.89 0 0 1-1.079-1.08l.374-1.497c.097-.387.297-.74.579-1.021zM3.25 13.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m8.023 1.17a3.2 3.2 0 0 0-.597.83H7.75a.75.75 0 0 1 0-1.5h4.192zM3.25 8.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5q.159 0 .297.06c-.53.11-1.034.37-1.445.78l-.659.66H7.75a.75.75 0 0 1 0-1.5zm-14-5.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5a.75.75 0 0 1 0 1.5h-9.5a.75.75 0 0 1 0-1.5z"/></svg></button>
+          <button class="ctl-btn primary drop-trigger" id="settingsBtn" onclick="toggleMenu()" title="设置" aria-label="设置"><svg viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M12.4277 2C11.3139 2 10.2995 2.6007 8.27081 3.80211L7.58466 4.20846C5.55594 5.40987 4.54158 6.01057 3.98466 7C3.42773 7.98943 3.42773 9.19084 3.42773 11.5937V12.4063C3.42773 14.8092 3.42773 16.0106 3.98466 17C4.54158 17.9894 5.55594 18.5901 7.58466 19.7915L8.27081 20.1979C10.2995 21.3993 11.3139 22 12.4277 22C13.5416 22 14.5559 21.3993 16.5847 20.1979L17.2708 19.7915C19.2995 18.5901 20.3139 17.9894 20.8708 17C21.4277 16.0106 21.4277 14.8092 21.4277 12.4063V11.5937C21.4277 9.19084 21.4277 7.98943 20.8708 7C20.3139 6.01057 19.2995 5.40987 17.2708 4.20846L16.5847 3.80211C14.5559 2.6007 13.5416 2 12.4277 2ZM8.67773 12C8.67773 9.92893 10.3567 8.25 12.4277 8.25C14.4988 8.25 16.1777 9.92893 16.1777 12C16.1777 14.0711 14.4988 15.75 12.4277 15.75C10.3567 15.75 8.67773 14.0711 8.67773 12Z" clip-rule="evenodd"/></svg></button>
           <button class="ctl-btn primary drop-trigger" id="paletteToggleBtn" onclick="togglePaletteRow()" title="配色面板" aria-label="配色面板"><svg id="paletteToggleIcon" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10a2.5 2.5 0 0 0 2.5-2.5c0-.61-.23-1.2-.64-1.67a.53.53 0 0 1-.13-.33c0-.28.22-.5.5-.5H16c3.31 0 6-2.69 6-6c0-4.96-4.49-9-10-9m5.5 11c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5s1.5.67 1.5 1.5s-.67 1.5-1.5 1.5m-3-4c-.83 0-1.5-.67-1.5-1.5S13.67 6 14.5 6s1.5.67 1.5 1.5S15.33 9 14.5 9M5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S7.33 13 6.5 13S5 12.33 5 11.5m6-4c0 .83-.67 1.5-1.5 1.5S8 8.33 8 7.5S8.67 6 9.5 6s1.5.67 1.5 1.5"/></svg></button>
           <button class="ctl-btn primary drop-trigger" id="debugToggleBtn" onclick="toggleDebugPanel()" title="调试面板" aria-label="调试面板"><svg viewBox="0 0 32 32" fill="currentColor" style="flex-shrink:0"><path d="m29.83 20l.34-2l-5.17-.85v-4.38l5.06-1.36l-.51-1.93l-4.83 1.29A9 9 0 0 0 20 5V2h-2v2.23a8.8 8.8 0 0 0-4 0V2h-2v3a9 9 0 0 0-4.71 5.82L2.46 9.48L2 11.41l5 1.36v4.38L1.84 18l.32 2L7 19.18a8.9 8.9 0 0 0 .82 3.57l-4.53 4.54l1.42 1.42l4.19-4.2a9 9 0 0 0 14.2 0l4.19 4.2l1.42-1.42l-4.54-4.54a8.9 8.9 0 0 0 .83-3.57ZM15 25.92A7 7 0 0 1 9 19v-6h6ZM9.29 11a7 7 0 0 1 13.42 0ZM23 19a7 7 0 0 1-6 6.92V13h6Z"/></svg></button>
           <input type="file" id="midiFile" accept=".mid,.midi" style="display:none" onchange="onMidiFile(event)">
@@ -369,12 +372,12 @@ select:focus{border-color:var(--accent)}
             <div class="dbg-off-hint">调试已关闭，无日志采集与监控。</div>
             <div class="dbg-body">
               <div class="dbg-actions">
-                <button id="debugCopyBtn" onclick="copyDebugTerminal()">copy</button>
-                <button onclick="downloadDebugLog()">下载日志</button>
-                <button onclick="clearDebugTerminal()">clear</button>
-                <button onclick="scrollDebugTop()" title="顶部">↑</button>
-                <button onclick="scrollDebugBottom()" title="底部">↓</button>
-                <label class="switch" style="margin-left:auto">
+                <button class="dbg-icon-btn" id="debugCopyBtn" onclick="copyDebugTerminal()" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                <button class="dbg-icon-btn" onclick="downloadDebugLog()" title="下载日志"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m4-5l5 5l5-5m-5 5V3"/></svg></button>
+                <button class="dbg-icon-btn" onclick="clearDebugTerminal()" title="清空"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg></button>
+                <button class="dbg-icon-btn" onclick="scrollDebugTop()" title="顶部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15l-6-6l-6 6"/></svg></button>
+                <button class="dbg-icon-btn" onclick="scrollDebugBottom()" title="底部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9l6 6l6-6"/></svg></button>
+                <label class="switch">
                   <input id="dbgAutoOpen" type="checkbox" checked onchange="onDbgAutoOpenChange()">
                   <span class="track"><span class="knob"></span></span>降级自动展开
                 </label>
@@ -389,28 +392,22 @@ select:focus{border-color:var(--accent)}
               <div class="dbg-toolbar">
                 <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="100" oninput="applyPanelAppearance()"></label>
                 <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="25" oninput="applyPanelAppearance()"></label>
+                <label class="switch" title="欣赏模式：音符自动发声；音游模式：需点击琴键发声" style="margin-left:auto">
+                  <input id="playModeSw" type="checkbox" checked onchange="onPlayModeChange()">
+                  <span class="track"><span class="knob"></span></span>
+                  <span id="playModeLabel">欣赏模式</span>
+                </label>
               </div>
             </div>
             <div class="row">
               <label>音乐倍速</label>
-              <div style="flex:1;display:flex;gap:4px;flex-wrap:wrap">
-                <button class="btn speed-btn" data-speed="0.2" onclick="setSpeed(0.2)" style="padding:4px 8px;min-height:28px;font-size:11px">0.2x</button>
-                <button class="btn speed-btn" data-speed="0.5" onclick="setSpeed(0.5)" style="padding:4px 8px;min-height:28px;font-size:11px">0.5x</button>
-                <button class="btn speed-btn active" data-speed="1" onclick="setSpeed(1)" style="padding:4px 8px;min-height:28px;font-size:11px">1x</button>
-                <button class="btn speed-btn" data-speed="1.2" onclick="setSpeed(1.2)" style="padding:4px 8px;min-height:28px;font-size:11px">1.2x</button>
-                <button class="btn speed-btn" data-speed="1.5" onclick="setSpeed(1.5)" style="padding:4px 8px;min-height:28px;font-size:11px">1.5x</button>
-                <button class="btn speed-btn" data-speed="2" onclick="setSpeed(2)" style="padding:4px 8px;min-height:28px;font-size:11px">2x</button>
-              </div>
+              <input type="range" id="speedSlider" min="0.1" max="3" step="0.1" value="1" oninput="onSpeedChange()">
+              <span class="val" id="speedVal">1.0x</span>
             </div>
             <div class="row">
               <label>下落流速</label>
               <input type="range" id="fallSpeedSlider" min="0.2" max="5" step="0.1" value="1" oninput="onFallSpeedChange()">
               <span class="val" id="fallSpeedVal">1.0x</span>
-            </div>
-            <div class="row">
-              <label>音量</label>
-              <input type="range" id="volSlider" min="0" max="1" step="0.01" value="0.7" oninput="onVolChange()">
-              <span class="val" id="volVal">70%</span>
             </div>
             <div class="row">
               <label>钢琴高度</label>
@@ -437,14 +434,6 @@ select:focus{border-color:var(--accent)}
                 <button type="button" class="kb-preset" data-keys="37" onclick="setKeyboardPreset(37)">37键</button>
                 <button type="button" class="kb-preset" data-keys="25" onclick="setKeyboardPreset(25)">25键</button>
               </div>
-            </div>
-            <div class="row">
-              <label>模式</label>
-              <label class="switch" title="欣赏模式：音符自动发声；演奏模式：需点击琴键发声">
-                <input id="playModeSw" type="checkbox" checked onchange="onPlayModeChange()">
-                <span class="track"><span class="knob"></span></span>
-                <span id="playModeLabel">欣赏模式</span>
-              </label>
             </div>
 
             <h2 style="margin-top:20px">音色</h2>
@@ -538,6 +527,7 @@ select:focus{border-color:var(--accent)}
         <div class="progress-wrap">
           <div class="time-row">
             <span id="curTime">0:00</span>
+            <span id="statusText"></span>
             <span id="totalTime">0:00</span>
           </div>
           <div class="progress-bar" id="progressBar" onmousedown="startSeek(event)" ontouchstart="startSeek(event)">
@@ -586,7 +576,19 @@ function _debugColor(type, msg) {
   return '#0f0';
 }
 
+// 进度条上方的实时状态区（乐谱/音色下载进度、完成提示、调试日志）
+let _statusTimer = null;
+function setStatus(text, sticky){
+  const el = document.getElementById('statusText');
+  if(!el) return;
+  el.textContent = text || '';
+  if(_statusTimer){ clearTimeout(_statusTimer); _statusTimer = null; }
+  if(text && !sticky){ _statusTimer = setTimeout(() => { el.textContent = ''; }, 3500); }
+}
 function _appendDebug(msg, type) {
+  // 调试面板未展开时，把最新日志显示到状态区
+  const _dp = document.getElementById('debugPanel');
+  if(!_dp || !_dp.classList.contains('open')) setStatus(msg);
   if(!_debugContentEl) {
     _debugContentEl = document.getElementById('debugTerminalContent');
   }
@@ -647,7 +649,19 @@ function setDebugEnabled(on){
 function onDebugEnabledChange(){
   const cb = document.getElementById('dbgEnabled');
   setDebugEnabled(cb ? cb.checked : true);
-  if(debugEnabled) console.log('[AudioDebug][INFO] 调试已开启');
+  if(debugEnabled){
+    console.log('[AudioDebug][INFO] 调试已开启');
+    // 为减少性能影响：透明度 20%（较暗）、模糊 0%
+    const tp = document.getElementById('panelTransparency');
+    const bl = document.getElementById('panelBlur');
+    if(tp) tp.value = '20';
+    if(bl) bl.value = '0';
+    applyPanelAppearance();
+    // 降级自动展开默认打开
+    const auto = document.getElementById('dbgAutoOpen');
+    if(auto && !auto.checked){ auto.checked = true; onDbgAutoOpenChange(); }
+    setStatus('为减少性能影响，已设透明度 20%、模糊 0%');
+  }
 }
 
 // 面板透明度 / 背景模糊：透明滑块 100 = 全透明（alpha 0），0 = 全黑
@@ -816,7 +830,7 @@ function initAudio(){
   if(audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0.7;
+  masterGain.gain.value = 1.0;
   // 在 master 与 destination 之间插一个 Analyser，用于探测"实际输出是否静音"
   outputAnalyser = audioCtx.createAnalyser();
   outputAnalyser.fftSize = 2048;
@@ -1183,13 +1197,13 @@ const SoundfontLoader = {
   },
 
   // 读取音色文本：优先缓存（内容校验通过），否则走网络并回写缓存
-  async _fetchSoundfontText(name, url, absUrl, cache){
+  async _fetchSoundfontText(name, url, absUrl, cache, onProgress){
     if(cache){
       try{
         const cached = await cache.match(absUrl, {ignoreSearch: true});
         if(cached){
           const t = await cached.text();
-          if(this._isSoundfontText(t, name)) return { text: t, fromCache: true };
+          if(this._isSoundfontText(t, name)){ if(onProgress) onProgress(1); return { text: t, fromCache: true }; }
           // 坏缓存：删除该条，强制走网络，避免永久命中
           await cache.delete(absUrl);
           console.warn('[AudioDebug] 检测到损坏的音色缓存并已清除: ' + name);
@@ -1198,7 +1212,22 @@ const SoundfontLoader = {
     }
     const resp = await fetch(url, {mode: 'cors'});
     if(!resp.ok) throw new Error('下载失败 HTTP ' + resp.status);
-    const text = await resp.text();
+    const _total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
+    let text;
+    if(resp.body && resp.body.getReader && _total){
+      const reader = resp.body.getReader();
+      const chunks = []; let received = 0;
+      while(true){
+        const {done, value} = await reader.read();
+        if(done) break;
+        chunks.push(value); received += value.length;
+        if(onProgress) onProgress(received / _total);
+      }
+      text = await new Blob(chunks).text();
+    } else {
+      text = await resp.text();
+      if(onProgress) onProgress(1);
+    }
     if(!this._isSoundfontText(text, name)){
       throw new Error('音色文件内容异常（非JS，可能被截断或网络返回错误页）: ' +
         text.slice(0, 80).replace(/\s+/g, ' '));
@@ -1229,7 +1258,7 @@ const SoundfontLoader = {
     if(onProgress) onProgress(0, '正在下载音色…');
     let cache = null;
     try{ cache = await caches.open(this.cacheName); }catch(e){}
-    let res = await this._fetchSoundfontText(name, url, absUrl, cache);
+    let res = await this._fetchSoundfontText(name, url, absUrl, cache, (frac) => { if(onProgress) onProgress(frac * 0.9, '正在下载音色…'); });
     if(onProgress) onProgress(0.5, res.fromCache ? '从缓存读取音色…' : '下载完成，解析中…');
     let raw;
     try{
@@ -1238,7 +1267,7 @@ const SoundfontLoader = {
       // 缓存内容能过格式校验却解析失败：删除该条并强制走网络重试一次
       if(!res.fromCache) throw e;
       if(cache){ try{ await cache.delete(absUrl); }catch(_){} }
-      res = await this._fetchSoundfontText(name, url, absUrl, cache);
+      res = await this._fetchSoundfontText(name, url, absUrl, cache, (frac) => { if(onProgress) onProgress(frac * 0.9, '正在下载音色…'); });
       raw = this._parseSoundfont(res.text, name);
     }
     this.loaded[name] = { raw: raw, buffers: {}, ready: true };
@@ -1670,7 +1699,7 @@ function initCustomSelect(select, opts){
   function onDocDown(e){ if(!wrap.contains(e.target) && !pop.contains(e.target)) close(); }
   function open(){
     closeAllCustomSelects();
-    if(typeof _closeDropPanelsOnly === 'function') _closeDropPanelsOnly(); // 与设置/调试/配色/管理面板互斥
+    if(typeof _closeDropPanelsOnly === 'function') _closeDropPanelsOnly(wrap.closest ? wrap.closest('.drop-panel') : null); // 与其它面板互斥，但保留本下拉所在的面板
     if(search) search.value = '';
     buildList();
     wrap.classList.add('open');
@@ -1803,20 +1832,8 @@ let userGestureSeen = false;
   let startedWithFallback = false;  // 是否已用合成钢琴抢跑
   const DEFAULT_SONG = 'Rush E 3.mid';
 
-  // 轻量Toast提示
-  function showToast(msg){
-    let t = document.getElementById('toastMsg');
-    if(!t){
-      t = document.createElement('div');
-      t.id = 'toastMsg';
-      t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:10000;max-width:90%;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
-      document.body.appendChild(t);
-    }
-    t.textContent = msg;
-    t.style.display = 'block';
-    clearTimeout(t._timer);
-    t._timer = setTimeout(() => { t.style.display = 'none'; }, 4000);
-  }
+  // 轻量提示：显示在进度条上方的状态区（不再用遮挡点击的浮层）
+  function showToast(msg){ setStatus(msg); }
   window.showToast = showToast;
 
   // 开始播放（只在首次调用时真正触发）
@@ -1870,7 +1887,9 @@ let userGestureSeen = false;
       // switchCurrent:false —— 先保持合成钢琴，等预解码完成再切，避免解码期间丢音
       await SoundfontLoader.load(timbreName, (p, msg) => {
         if(hint && !startedWithFallback) hint.textContent = msg + ' ' + Math.round(p * 100) + '%';
+        if(p < 1) setStatus('音色下载 ' + Math.round(p * 100) + '%');
       }, {switchCurrent: false});
+      setStatus('音色下载完成，解析中…');
       if(hint && !startedWithFallback) hint.textContent = '音色预解码中…';
       await SoundfontLoader.predecodeAll(timbreName);
       timbreReady = true;
@@ -1878,6 +1897,7 @@ let userGestureSeen = false;
       SoundfontLoader.current = timbreName;
       const label = (timbreSel && timbreSel.options[timbreSel.selectedIndex]) ? timbreSel.options[timbreSel.selectedIndex].text : timbreName;
       if(hint) hint.textContent = '当前音色：' + label + ' ✓ 就绪';
+      setStatus('音色完成！');
       if(startedWithFallback) showToast('古钢琴已就绪，已切换');
       startPlaybackOnce();
       // 后台预加载其他常用音色（不阻塞播放，用_doLoad避免切换current）
@@ -1897,10 +1917,9 @@ let userGestureSeen = false;
 
   // 并行启动：谱面与音色同时开始下载
   console.log('[AudioDebug][INFO] 并行加载默认谱面与音色 midi/' + DEFAULT_SONG);
-  AssetCache.fetch('midi/' + DEFAULT_SONG).then(r => {
-    if(!r.ok) throw new Error('MIDI加载失败');
-    return r.arrayBuffer();
-  }).then(buf => {
+  _fetchWithProgress('midi/' + DEFAULT_SONG, (p) => setStatus('乐谱下载 ' + Math.round(p) + '%'))
+  .then(blob => blob.arrayBuffer()).then(buf => {
+    setStatus('乐谱下载完成！');
     console.log('[AudioDebug][INFO] 默认谱面已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
     midiBuf = buf;
     parseAndPlayMidi(buf, DEFAULT_SONG);
@@ -2014,6 +2033,7 @@ async function _fetchWithProgress(url, onProgress){
     const cache = await caches.open(AssetCache.cacheName);
     await cache.put(absUrl, new Response(blob, {headers: resp.headers}));
   }catch(e){}
+  return blob;
 }
 
 async function loadSongList(){
@@ -2312,7 +2332,7 @@ function onPlayModeChange(){
   const sw = document.getElementById('playModeSw');
   playMode = (sw && sw.checked) ? 'appreciate' : 'perform';
   const label = document.getElementById('playModeLabel');
-  if(label) label.textContent = (playMode === 'appreciate') ? '欣赏模式' : '演奏模式';
+  if(label) label.textContent = (playMode === 'appreciate') ? '欣赏模式' : '音游模式';
   if(playMode === 'perform') SoundfontLoader.stopAll(); // 演奏模式：停止自动排程的音符
 }
 // 钢琴高度（键盘区占绘制区比例）调节
@@ -2613,25 +2633,24 @@ function endSeek(){
 }
 
 function setSpeed(speed){
-  playSpeed = speed;
-  document.querySelectorAll('.speed-btn').forEach(b => {
-    b.classList.toggle('active', parseFloat(b.dataset.speed) === speed);
-  });
+  playSpeed = Math.max(0.1, Math.min(3, parseFloat(speed) || 1));
+  const sl = document.getElementById('speedSlider');
+  if(sl) sl.value = playSpeed;
+  const v = document.getElementById('speedVal');
+  if(v) v.textContent = playSpeed.toFixed(1) + 'x';
   if(isPlaying){
     playStartTime = audioCtx.currentTime - currentTime / playSpeed;
   }
+}
+function onSpeedChange(){
+  const sl = document.getElementById('speedSlider');
+  if(sl) setSpeed(sl.value);
 }
 
 let fallSpeedMultiplier = 1.0;
 function onFallSpeedChange(){
   fallSpeedMultiplier = parseFloat(document.getElementById('fallSpeedSlider').value);
   document.getElementById('fallSpeedVal').textContent = fallSpeedMultiplier.toFixed(1) + 'x';
-}
-
-function onVolChange(){
-  const v = parseFloat(document.getElementById('volSlider').value);
-  document.getElementById('volVal').textContent = Math.round(v * 100) + '%';
-  if(masterGain) masterGain.gain.value = v;
 }
 
 // 二分查找：第一个 time >= target 的索引
