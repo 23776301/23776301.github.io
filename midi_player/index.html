@@ -1142,11 +1142,8 @@ const SoundfontLoader = {
             prev.gain.gain.setValueAtTime(prev.gain.gain.value, t);
             prev.gain.gain.linearRampToValueAtTime(0, t + 0.01);
             prev.src.stop(t + 0.02);
-            // 延迟disconnect，等淡出完成
-            const oldSrc = prev.src, oldGain = prev.gain;
-            setTimeout(() => {
-              try{ oldSrc.disconnect(); oldGain.disconnect(); }catch(e){}
-            }, 50);
+            // 断开由该 voice 自己的 onended 处理；不能用 setTimeout 墙钟计时，
+            // 因为前瞻排程下 t 可能在未来，50ms 后断开会在发声前把节点摘掉。
             this._unregisterVoice(prev);
           }catch(e){}
         }
