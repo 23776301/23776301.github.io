@@ -389,7 +389,10 @@ select:focus{border-color:var(--accent)}
             <span style="height:20px;display:flex;align-items:flex-end;line-height:1;">白键</span>
             <span style="height:20px;display:flex;align-items:flex-end;line-height:1;">黑键</span>
           </div>
-          <div id="paletteSwatch" style="flex:1;min-width:100px;max-width:340px;height:44px;position:relative;"></div>
+          <div id="paletteSwatch" style="flex:1;min-width:90px;max-width:340px;height:44px;position:relative;"></div>
+          <button class="pal-btn" id="fsBtn" onclick="toggleFullscreen()" title="全屏绘制区" aria-label="全屏绘制区" style="flex-shrink:0">
+            <svg id="fsIcon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
         </div>
         <div id="fileInfo" style="display:none"></div>
       </div>
@@ -2591,6 +2594,32 @@ function savePaletteCustom(){
     if(saved && PALETTES[saved]) currentPalette = saved;
   }catch(e){}
 })();
+
+// 全屏绘制区
+const FS_ICON_MAX = '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>';
+const FS_ICON_MIN = '<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>';
+function toggleFullscreen(){
+  const el = document.querySelector('.visual-panel');
+  if(!el) return;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if(!fsEl){
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if(req){ const p = req.call(el); if(p && p.catch) p.catch(() => {}); }
+  } else {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if(exit){ const p = exit.call(document); if(p && p.catch) p.catch(() => {}); }
+  }
+}
+function _syncFsIcon(){
+  const icon = document.getElementById('fsIcon');
+  if(!icon) return;
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  icon.innerHTML = on ? FS_ICON_MIN : FS_ICON_MAX;
+  const btn = document.getElementById('fsBtn');
+  if(btn) btn.title = on ? '退出全屏' : '全屏绘制区';
+}
+document.addEventListener('fullscreenchange', _syncFsIcon);
+document.addEventListener('webkitfullscreenchange', _syncFsIcon);
 
 function resizeCanvas(){
   const r = canvas.getBoundingClientRect();
