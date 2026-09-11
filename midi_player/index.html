@@ -93,30 +93,24 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 /* 键盘焦点轮廓跟随圆角（仅键盘触发，触屏不显示） */
 .pal-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-/* 菜单面板：PC 与移动端统一为居中浮层，渐隐渐显，半透明 + 背景模糊 */
-.control-panel{
-  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;
-  height:66.67vh;overflow-y:auto;
-  border-radius:16px;
-  opacity:0;visibility:hidden;pointer-events:none;
-  transition:opacity .22s ease, visibility .22s;
+/* 统一下拉面板：从触发按钮下方展开，浮在渲染区之上，最大高度约渲染区 2/3 */
+.drop-panel{
+  position:fixed;z-index:10050;display:none;
+  width:min(92vw,460px);max-height:66.67vh;overflow-y:auto;
+  border:1px solid var(--border);border-radius:12px;padding:12px;
   box-shadow:0 14px 44px rgba(0,0,0,.55);
   background:rgba(0,0,0,0);
   backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
 }
-.control-panel.open{opacity:1;visibility:visible;pointer-events:auto}
-.overlay-mask{display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.4)}
-.overlay-mask.show{display:block}
+.drop-panel.open{display:block}
+.control-panel > .dbg-section:first-of-type{margin-top:0;padding-top:0;border-top:none}
+.overlay-mask{display:none}
 @media(max-width:800px){
-  .control-panel{width:100vw}
   /* 右侧容器固定全屏 */
   .layout > div:last-child{position:fixed;inset:0;display:flex;flex-direction:column}
   .top-bar{flex-shrink:0}
   .visual-panel{flex:1;border-radius:0;border:none;padding:0;min-height:0;position:relative;overflow:hidden}
   #visualCanvas{height:100% !important;border-radius:0}
-}
-@media(min-width:801px){
-  .control-panel{width:50vw;max-width:560px}
 }
 
 /* 配色方案按钮：与播放控制同尺寸（32px）、单行对齐 */
@@ -136,34 +130,13 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .ctl-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .ctl-btn.primary:hover{background:#7c3aed}
 .ctl-btn svg{width:16px;height:16px}
-/* 配色面板：独立浮层，展开不改变渲染区高度，也不影响进度条/统计位置；与调试面板共享透明度 */
-.palette-row{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  position:absolute;top:100%;right:0;z-index:35;
-  margin-top:6px;padding:10px;min-width:230px;
-  border:1px solid var(--border);border-radius:12px;
-  box-shadow:0 14px 44px rgba(0,0,0,.55);
-  background:rgba(0,0,0,0);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
-}
-.palette-row.collapsed{display:none}
-
-/* 展开/收起按钮：靠右推齐 */
-.pal-toggle-btn{margin-left:auto}
+/* 配色面板：下拉浮层，内部布局 */
+.palette-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:230px}
 #paletteToggleIcon{transition:transform .2s}
 
-@media(min-width:801px){
-  #fsBtn{margin-left:auto}
-}
-
-/* 谱面管理弹窗：与菜单面板一致的半透明 + 模糊风格 */
-.manage-overlay{display:none;position:fixed;inset:0;z-index:3000;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}
-.manage-overlay.show{display:flex}
-.manage-card{
-  width:90%;max-width:520px;max-height:80vh;display:flex;flex-direction:column;
-  border:1px solid var(--border);border-radius:16px;padding:16px;
-  background:rgba(0,0,0,0);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
-  box-shadow:0 14px 44px rgba(0,0,0,.55);
-}
+/* 谱面管理面板：统一下拉浮层 */
+.manage-panel{display:none}
+.manage-panel.open{display:block}
 .manage-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .manage-head h3{margin:0;font-size:15px;color:var(--text);flex:1}
 .manage-appearance{display:flex;gap:10px;font-size:10px;color:var(--dim)}
@@ -329,14 +302,8 @@ select:focus{border-color:var(--accent)}
 .fs-exit{top:14px;right:14px}
 /* 2s 未点击悬浮按钮：淡到 10% */
 .fs-overlay.faded .fs-float-btn{opacity:.1}
-/* 调试面板：从控制行的调试按钮向下展开，浮在渲染区之上，不改变其高度 */
-.debug-panel{
-  position:absolute;top:100%;right:0;z-index:40;display:none;
-  width:min(92vw,440px);max-height:50vh;overflow-y:auto;
-  margin-top:6px;border:1px solid var(--border);border-radius:12px;padding:12px;
-  box-shadow:0 14px 44px rgba(0,0,0,.55);
-  background:rgba(0,0,0,0);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
-}
+/* 调试面板：统一下拉浮层 */
+.debug-panel{display:none}
 .debug-panel.open{display:block}
 .file-info{font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6}
 .file-info b{color:var(--text)}
@@ -344,16 +311,20 @@ select:focus{border-color:var(--accent)}
 </style>
 </head>
 <body>
-<!-- 遮罩：点击关闭菜单面板 -->
-<div class="overlay-mask" id="overlayMask" onclick="toggleMenu()"></div>
 <div class="container">
   <h1>MIDI 播放器</h1>
   <p class="subtitle">88 键钢琴可视化 · 多音色 · 变速播放</p>
 
   <div class="layout">
     <!-- 左侧控制面板（仅设置项） -->
-    <div class="panel control-panel" id="controlPanel">
-      <h2>播放设置</h2>
+    <div class="panel control-panel drop-panel" id="controlPanel">
+      <h2 style="margin-top:0">设置</h2>
+      <div class="dbg-section" id="appearanceSection">
+        <div class="dbg-toolbar">
+          <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="100" oninput="applyPanelAppearance()"></label>
+          <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="25" oninput="applyPanelAppearance()"></label>
+        </div>
+      </div>
       <div class="row">
         <label>音乐倍速</label>
         <div style="flex:1;display:flex;gap:4px;flex-wrap:wrap">
@@ -485,32 +456,31 @@ select:focus{border-color:var(--accent)}
       </div>
       <div class="timbre-hint" id="timbreHint">正在加载音色…</div>
 
-      <div class="dbg-section" id="appearanceSection">
-        <h2 style="margin-top:0">外观</h2>
-        <div class="dbg-toolbar">
-          <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="100" oninput="applyPanelAppearance()"></label>
-          <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="25" oninput="applyPanelAppearance()"></label>
-        </div>
-      </div>
     </div>
 
     <!-- 右侧：顶部控制栏 + 可视化 -->
     <div>
       <div class="top-bar">
         <div class="top-bar-row">
-          <button class="ctl-btn primary" onclick="document.getElementById('midiFile').click()" title="上传MIDI" aria-label="上传MIDI"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" style="flex-shrink:0"><path d="M4.5 11.5a3 3 0 0 1 3-3h8.718a4 4 0 0 1 2.325.745l4.914 3.51a4 4 0 0 0 2.325.745H40.5a3 3 0 0 1 3 3v20a3 3 0 0 1-3 3h-33a3 3 0 0 1-3-3z"/><path d="M24 33.5v-14m6.167 6.167L24 19.5l-6.167 6.167"/></svg></button>
-          <button class="ctl-btn primary" onclick="openManageModal()" title="管理谱面" aria-label="管理谱面"><svg viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0"><path d="M16.81 10.548a1.87 1.87 0 1 1 2.644 2.644l-4.829 4.83a2.2 2.2 0 0 1-1.021.578l-1.498.375a.89.89 0 0 1-1.079-1.08l.374-1.497c.097-.387.297-.74.579-1.021zM3.25 13.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m8.023 1.17a3.2 3.2 0 0 0-.597.83H7.75a.75.75 0 0 1 0-1.5h4.192zM3.25 8.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5q.159 0 .297.06c-.53.11-1.034.37-1.445.78l-.659.66H7.75a.75.75 0 0 1 0-1.5zm-14-5.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5a.75.75 0 0 1 0 1.5h-9.5a.75.75 0 0 1 0-1.5z"/></svg></button>
-          <input type="file" id="midiFile" accept=".mid,.midi" style="display:none" onchange="onMidiFile(event)">
+          <button class="ctl-btn primary" id="replayBtn" onclick="replayPlay()" disabled title="重播"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
           <select id="songSel" onchange="onSongChange(this.value)" style="flex:1">
             <option value="">加载谱库…</option>
           </select>
+          <button class="ctl-btn primary" id="fsBtn" onclick="toggleFullscreen()" title="全屏绘制区" aria-label="全屏绘制区">
+            <svg id="fsIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M9 15L2 22M2 16.1429V22H7.85714"/><path d="M15 9L22 2M22 7.85714V2H16.1429"/></g></svg>
+          </button>
         </div>
         <div class="control-row">
           <button class="ctl-btn primary" id="playBtn" onclick="togglePlay()" disabled title="播放"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
-          <button class="ctl-btn primary" onclick="replayPlay()" disabled title="重播"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+          <button class="ctl-btn primary" id="nextBtn" onclick="nextSong()" disabled title="下一首"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></button>
           <button class="ctl-btn primary" id="loopBtn" onclick="toggleLoop()" disabled title="列表循环"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0"><path d="M11 5.466V4H5a4 4 0 0 0-3.584 5.777a.5.5 0 1 1-.896.446A5 5 0 0 1 5 3h6V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192m3.81.086a.5.5 0 0 1 .67.225A5 5 0 0 1 11 13H5v1.466a.25.25 0 0 1-.41.192l-2.36-1.966a.25.25 0 0 1 0-.384l2.36-1.966a.25.25 0 0 1 .41.192V12h6a4 4 0 0 0 3.585-5.777a.5.5 0 0 1 .225-.67Z"/></svg></button>
-          <button class="ctl-btn primary" onclick="toggleMenu()" title="设置" aria-label="设置"><svg viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M12.4277 2C11.3139 2 10.2995 2.6007 8.27081 3.80211L7.58466 4.20846C5.55594 5.40987 4.54158 6.01057 3.98466 7C3.42773 7.98943 3.42773 9.19084 3.42773 11.5937V12.4063C3.42773 14.8092 3.42773 16.0106 3.98466 17C4.54158 17.9894 5.55594 18.5901 7.58466 19.7915L8.27081 20.1979C10.2995 21.3993 11.3139 22 12.4277 22C13.5416 22 14.5559 21.3993 16.5847 20.1979L17.2708 19.7915C19.2995 18.5901 20.3139 17.9894 20.8708 17C21.4277 16.0106 21.4277 14.8092 21.4277 12.4063V11.5937C21.4277 9.19084 21.4277 7.98943 20.8708 7C20.3139 6.01057 19.2995 5.40987 17.2708 4.20846L16.5847 3.80211C14.5559 2.6007 13.5416 2 12.4277 2ZM8.67773 12C8.67773 9.92893 10.3567 8.25 12.4277 8.25C14.4988 8.25 16.1777 9.92893 16.1777 12C16.1777 14.0711 14.4988 15.75 12.4277 15.75C10.3567 15.75 8.67773 14.0711 8.67773 12Z" clip-rule="evenodd"/></svg></button>
-          <div id="paletteRow" class="palette-row collapsed">
+          <button class="ctl-btn primary drop-trigger" id="manageBtn" onclick="openManageModal()" title="管理谱面" aria-label="管理谱面"><svg viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0"><path d="M16.81 10.548a1.87 1.87 0 1 1 2.644 2.644l-4.829 4.83a2.2 2.2 0 0 1-1.021.578l-1.498.375a.89.89 0 0 1-1.079-1.08l.374-1.497c.097-.387.297-.74.579-1.021zM3.25 13.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m8.023 1.17a3.2 3.2 0 0 0-.597.83H7.75a.75.75 0 0 1 0-1.5h4.192zM3.25 8.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5q.159 0 .297.06c-.53.11-1.034.37-1.445.78l-.659.66H7.75a.75.75 0 0 1 0-1.5zm-14-5.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5a.75.75 0 0 1 0 1.5h-9.5a.75.75 0 0 1 0-1.5z"/></svg></button>
+          <button class="ctl-btn primary" id="uploadBtn" onclick="document.getElementById('midiFile').click()" title="上传MIDI" aria-label="上传MIDI"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" style="flex-shrink:0"><path d="M4.5 11.5a3 3 0 0 1 3-3h8.718a4 4 0 0 1 2.325.745l4.914 3.51a4 4 0 0 0 2.325.745H40.5a3 3 0 0 1 3 3v20a3 3 0 0 1-3 3h-33a3 3 0 0 1-3-3z"/><path d="M24 33.5v-14m6.167 6.167L24 19.5l-6.167 6.167"/></svg></button>
+          <button class="ctl-btn primary drop-trigger" id="settingsBtn" onclick="toggleMenu()" title="设置" aria-label="设置"><svg viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M12.4277 2C11.3139 2 10.2995 2.6007 8.27081 3.80211L7.58466 4.20846C5.55594 5.40987 4.54158 6.01057 3.98466 7C3.42773 7.98943 3.42773 9.19084 3.42773 11.5937V12.4063C3.42773 14.8092 3.42773 16.0106 3.98466 17C4.54158 17.9894 5.55594 18.5901 7.58466 19.7915L8.27081 20.1979C10.2995 21.3993 11.3139 22 12.4277 22C13.5416 22 14.5559 21.3993 16.5847 20.1979L17.2708 19.7915C19.2995 18.5901 20.3139 17.9894 20.8708 17C21.4277 16.0106 21.4277 14.8092 21.4277 12.4063V11.5937C21.4277 9.19084 21.4277 7.98943 20.8708 7C20.3139 6.01057 19.2995 5.40987 17.2708 4.20846L16.5847 3.80211C14.5559 2.6007 13.5416 2 12.4277 2ZM8.67773 12C8.67773 9.92893 10.3567 8.25 12.4277 8.25C14.4988 8.25 16.1777 9.92893 16.1777 12C16.1777 14.0711 14.4988 15.75 12.4277 15.75C10.3567 15.75 8.67773 14.0711 8.67773 12Z" clip-rule="evenodd"/></svg></button>
+          <button class="ctl-btn primary drop-trigger" id="paletteToggleBtn" onclick="togglePaletteRow()" title="配色面板" aria-label="配色面板"><svg id="paletteToggleIcon" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10a2.5 2.5 0 0 0 2.5-2.5c0-.61-.23-1.2-.64-1.67a.53.53 0 0 1-.13-.33c0-.28.22-.5.5-.5H16c3.31 0 6-2.69 6-6c0-4.96-4.49-9-10-9m5.5 11c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5s1.5.67 1.5 1.5s-.67 1.5-1.5 1.5m-3-4c-.83 0-1.5-.67-1.5-1.5S13.67 6 14.5 6s1.5.67 1.5 1.5S15.33 9 14.5 9M5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S7.33 13 6.5 13S5 12.33 5 11.5m6-4c0 .83-.67 1.5-1.5 1.5S8 8.33 8 7.5S8.67 6 9.5 6s1.5.67 1.5 1.5"/></svg></button>
+          <button class="ctl-btn primary drop-trigger" id="debugToggleBtn" onclick="toggleDebugPanel()" title="调试面板" aria-label="调试面板"><svg viewBox="0 0 32 32" fill="currentColor" style="flex-shrink:0"><path d="m29.83 20l.34-2l-5.17-.85v-4.38l5.06-1.36l-.51-1.93l-4.83 1.29A9 9 0 0 0 20 5V2h-2v2.23a8.8 8.8 0 0 0-4 0V2h-2v3a9 9 0 0 0-4.71 5.82L2.46 9.48L2 11.41l5 1.36v4.38L1.84 18l.32 2L7 19.18a8.9 8.9 0 0 0 .82 3.57l-4.53 4.54l1.42 1.42l4.19-4.2a9 9 0 0 0 14.2 0l4.19 4.2l1.42-1.42l-4.54-4.54a8.9 8.9 0 0 0 .83-3.57ZM15 25.92A7 7 0 0 1 9 19v-6h6ZM9.29 11a7 7 0 0 1 13.42 0ZM23 19a7 7 0 0 1-6 6.92V13h6Z"/></svg></button>
+          <input type="file" id="midiFile" accept=".mid,.midi" style="display:none" onchange="onMidiFile(event)">
+          <div id="paletteRow" class="palette-row drop-panel">
             <div class="pal-grid">
               <button class="pal-btn palette-btn" data-palette="A" onclick="setPalette('A')" title="纯紫">A</button>
               <button class="pal-btn palette-btn active" data-palette="B" onclick="setPalette('B')" title="青蓝×琥珀红">B</button>
@@ -525,16 +495,9 @@ select:focus{border-color:var(--accent)}
             </div>
             <div id="paletteSwatch" style="flex:1;min-width:90px;max-width:340px;height:44px;position:relative;"></div>
           </div>
-          <button class="ctl-btn primary" id="debugToggleBtn" onclick="toggleDebugPanel()" title="调试面板" aria-label="调试面板"><svg viewBox="0 0 32 32" fill="currentColor" style="flex-shrink:0"><path d="m29.83 20l.34-2l-5.17-.85v-4.38l5.06-1.36l-.51-1.93l-4.83 1.29A9 9 0 0 0 20 5V2h-2v2.23a8.8 8.8 0 0 0-4 0V2h-2v3a9 9 0 0 0-4.71 5.82L2.46 9.48L2 11.41l5 1.36v4.38L1.84 18l.32 2L7 19.18a8.9 8.9 0 0 0 .82 3.57l-4.53 4.54l1.42 1.42l4.19-4.2a9 9 0 0 0 14.2 0l4.19 4.2l1.42-1.42l-4.54-4.54a8.9 8.9 0 0 0 .83-3.57ZM15 25.92A7 7 0 0 1 9 19v-6h6ZM9.29 11a7 7 0 0 1 13.42 0ZM23 19a7 7 0 0 1-6 6.92V13h6Z"/></svg></button>
-          <button class="ctl-btn primary pal-toggle-btn" id="paletteToggleBtn" onclick="togglePaletteRow()" title="收起/展开配色栏" aria-label="收起或展开配色栏"><svg id="paletteToggleIcon" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10a2.5 2.5 0 0 0 2.5-2.5c0-.61-.23-1.2-.64-1.67a.53.53 0 0 1-.13-.33c0-.28.22-.5.5-.5H16c3.31 0 6-2.69 6-6c0-4.96-4.49-9-10-9m5.5 11c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5s1.5.67 1.5 1.5s-.67 1.5-1.5 1.5m-3-4c-.83 0-1.5-.67-1.5-1.5S13.67 6 14.5 6s1.5.67 1.5 1.5S15.33 9 14.5 9M5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S7.33 13 6.5 13S5 12.33 5 11.5m6-4c0 .83-.67 1.5-1.5 1.5S8 8.33 8 7.5S8.67 6 9.5 6s1.5.67 1.5 1.5"/></svg></button>
-          <button class="ctl-btn primary" id="fsBtn" onclick="toggleFullscreen()" title="全屏绘制区" aria-label="全屏绘制区">
-            <svg id="fsIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M9 15L2 22M2 16.1429V22H7.85714"/><path d="M15 9L22 2M22 7.85714V2H16.1429"/></g></svg>
-          </button>
-          <div class="debug-panel" id="debugPanel">
+          <div class="debug-panel drop-panel" id="debugPanel">
             <div class="dbg-toolbar">
               <label class="switch"><input id="dbgEnabled" type="checkbox" checked onchange="onDebugEnabledChange()"><span class="track"><span class="knob"></span></span>启用调试</label>
-              <label title="面板透明度">透明 <input id="debugTransparency" type="range" min="0" max="100" step="5" value="100" oninput="applyDebugAppearance()"></label>
-              <label title="面板背景模糊">模糊 <input id="debugBlur" type="range" min="0" max="100" step="5" value="25" oninput="applyDebugAppearance()"></label>
             </div>
             <div class="dbg-off-hint">调试已关闭，无日志采集与监控。</div>
             <div class="dbg-body">
@@ -679,7 +642,7 @@ function _panelTargets(){
     document.getElementById('controlPanel'),
     document.getElementById('debugPanel'),
     document.getElementById('paletteRow'),
-    document.querySelector('.manage-card')
+    document.getElementById('manageModal')
   ];
   document.querySelectorAll('.csel-pop').forEach(el => list.push(el));
   return list;
@@ -695,8 +658,8 @@ function _applyAllAppearance(transparency, blurPct){
     el.style.webkitBackdropFilter = bf;
   });
   const setV = (id, v) => { const e = document.getElementById(id); if(e) e.value = v; };
-  ['panelTransparency', 'debugTransparency', 'manageTransparency'].forEach(id => setV(id, transparency));
-  ['panelBlur', 'debugBlur', 'manageBlur'].forEach(id => setV(id, blurPct));
+  setV('panelTransparency', transparency);
+  setV('panelBlur', blurPct);
   try{
     localStorage.setItem('panelTransparency', String(transparency));
     localStorage.setItem('panelBlur', String(blurPct));
@@ -707,16 +670,40 @@ function applyPanelAppearance(){
   const bl = document.getElementById('panelBlur');
   _applyAllAppearance(tp ? parseFloat(tp.value) : 100, bl ? parseFloat(bl.value) : 25);
 }
-function applyDebugAppearance(){
-  const tp = document.getElementById('debugTransparency');
-  const bl = document.getElementById('debugBlur');
-  _applyAllAppearance(tp ? parseFloat(tp.value) : 100, bl ? parseFloat(bl.value) : 25);
+// ===== 统一下拉面板：从触发按钮下方展开，最大高度约渲染区 2/3 =====
+function closeAllDropPanels(except){
+  document.querySelectorAll('.drop-panel.open').forEach(p => { if(p !== except) p.classList.remove('open'); });
 }
-// 调试面板：从调试按钮向下展开，浮层不改变渲染区高度
+function positionDropPanel(panel, trigger){
+  if(!panel) return;
+  panel.classList.add('open');
+  const r = trigger ? trigger.getBoundingClientRect() : null;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const w = panel.offsetWidth || Math.min(vw * 0.92, 460);
+  let left = r ? (r.right - w) : 8;
+  if(left < 8) left = 8;
+  if(left + w > vw - 8) left = vw - 8 - w;
+  panel.style.maxHeight = (vh * 2 / 3) + 'px';
+  panel.style.top = (r ? (r.bottom + 6) : 8) + 'px';
+  panel.style.left = left + 'px';
+  panel.style.right = 'auto';
+}
+function openDropPanel(panel, trigger){
+  if(!panel) return;
+  const wasOpen = panel.classList.contains('open');
+  closeAllDropPanels(panel);
+  if(wasOpen){ panel.classList.remove('open'); return; }
+  positionDropPanel(panel, trigger);
+}
+// 点击面板 / 触发按钮以外区域：关闭所有下拉面板
+document.addEventListener('pointerdown', (e) => {
+  const t = e.target;
+  if(t && t.closest && (t.closest('.drop-panel') || t.closest('.drop-trigger'))) return;
+  closeAllDropPanels();
+}, true);
+// 调试面板：从调试按钮向下展开
 function toggleDebugPanel(){
-  const p = document.getElementById('debugPanel');
-  if(!p) return;
-  p.classList.toggle('open');
+  openDropPanel(document.getElementById('debugPanel'), document.getElementById('debugToggleBtn'));
 }
 
 // 性能降级时是否自动展开调试区（默认勾选）
@@ -730,7 +717,7 @@ function onDbgAutoOpenChange(){
 function autoOpenDebugPanel(){
   if(!debugEnabled || !dbgAutoOpen) return;
   const panel = document.getElementById('debugPanel');
-  if(panel) panel.classList.add('open');
+  if(panel) positionDropPanel(panel, document.getElementById('debugToggleBtn'));
   setTimeout(() => { if(typeof scrollDebugBottom === 'function') scrollDebugBottom(); }, 0);
 }
 
@@ -2019,20 +2006,9 @@ loadSongList();
 const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
 const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
 
-// 谱面管理弹窗：透明度 / 模糊度与菜单/调试面板共享同一组值
-function _syncManageAppearanceFromPanel(){
-  const mt = document.getElementById('manageTransparency');
-  const mb = document.getElementById('manageBlur');
-  const pt = document.getElementById('panelTransparency');
-  const pb = document.getElementById('panelBlur');
-  if(mt && pt) mt.value = pt.value;
-  if(mb && pb) mb.value = pb.value;
-}
-function applyManageAppearance(){
-  const mt = document.getElementById('manageTransparency');
-  const mb = document.getElementById('manageBlur');
-  _applyAllAppearance(mt ? parseFloat(mt.value) : 100, mb ? parseFloat(mb.value) : 25);
-}
+// 谱面管理面板：透明度 / 模糊度与菜单面板共享同一组值（滑块只在设置面板）
+function _syncManageAppearanceFromPanel(){ /* 滑块已移至设置面板，无需同步 */ }
+function applyManageAppearance(){ applyPanelAppearance(); }
 
 function _manageRow(name, opts){
   opts = opts || {};
@@ -2067,9 +2043,8 @@ async function openManageModal(){
   loading.className = 'manage-empty';
   loading.textContent = '加载中…';
   list.appendChild(loading);
-  modal.classList.add('show');
-  _syncManageAppearanceFromPanel();
-  applyManageAppearance();
+  positionDropPanel(modal, document.getElementById('manageBtn'));
+  applyPanelAppearance();
 
   const frag = document.createDocumentFragment();
   // 用户上传谱
@@ -2120,13 +2095,8 @@ async function openManageModal(){
 }
 function closeManageModal(){
   const modal = document.getElementById('manageModal');
-  if(modal) modal.classList.remove('show');
+  if(modal) modal.classList.remove('open');
 }
-// 点击弹窗外部自动收起（委托到 document，因弹窗 DOM 在脚本之后）
-document.addEventListener('pointerdown', (e) => {
-  const modal = document.getElementById('manageModal');
-  if(modal && modal.classList.contains('show') && e.target === modal) closeManageModal();
-});
 async function deleteSong(name){
   await deleteUserSong(name);
   await loadSongList();
@@ -2223,7 +2193,8 @@ function parseAndPlayMidi(buf, filename){
   document.getElementById('statPlayed').textContent = '已播：0/' + allNotes.length;
   document.getElementById('statPercent').textContent = '0.00%';
   document.getElementById('playBtn').disabled = false;
-  document.querySelector('button[onclick="replayPlay()"]').disabled = false;
+  document.getElementById('replayBtn').disabled = false;
+  document.getElementById('nextBtn').disabled = false;
   document.getElementById('loopBtn').disabled = false;
   document.getElementById('totalTime').textContent = formatTime(totalDuration);
   currentTime = 0;
@@ -2392,6 +2363,15 @@ function replayPlay(){
   setTimeout(() => { initAudio(); startPlay(); }, 50);
 }
 
+// 下一首：切到列表中的下一首（到底回到第一首）
+function nextSong(){
+  const sel = document.getElementById('songSel');
+  if(!sel || sel.options.length === 0) return;
+  const nextIdx = (sel.selectedIndex + 1) % sel.options.length;
+  sel.selectedIndex = nextIdx;
+  onSongChange(sel.value);
+}
+
 function toggleLoop(){
   loopMode = loopMode === 'list' ? 'one' : 'list';
   const btn = document.getElementById('loopBtn');
@@ -2401,18 +2381,9 @@ function toggleLoop(){
 
 function toggleMenu(){
   const panel = document.getElementById('controlPanel');
-  const mask = document.getElementById('overlayMask');
-  const group = document.getElementById('fabGroup');
-  const isOpen = panel.classList.toggle('open');
-  if(mask) mask.classList.toggle('show', isOpen);
-  if(group){
-    if(isOpen){
-      group.classList.add('hidden-btn');
-    } else {
-      group.classList.remove('hidden-btn');
-      showMenuBtn();
-    }
-  }
+  // 全屏时从悬浮设置按钮展开，否则从控制行设置按钮展开
+  const trigger = _isFullscreenNow() ? document.getElementById('fsSettingsBtn') : document.getElementById('settingsBtn');
+  openDropPanel(panel, trigger);
 }
 
 // 菜单/调试按钮组：二者都可拖动，捆绑一起移动；轻点各自触发对应功能
@@ -2807,7 +2778,7 @@ function updatePaletteToggleIcon(){
   const icon = document.getElementById('paletteToggleIcon');
   const row = _paletteRow();
   if(!icon || !row) return;
-  const collapsed = row.classList.contains('collapsed');
+  const collapsed = !row.classList.contains('open');
   icon.style.transform = collapsed ? 'rotate(180deg)' : '';
   const btn = document.getElementById('paletteToggleBtn');
   if(btn) btn.title = collapsed ? '展开配色面板' : '收起配色面板';
@@ -2815,7 +2786,7 @@ function updatePaletteToggleIcon(){
 function setPaletteRowCollapsed(collapsed){
   const row = _paletteRow();
   if(!row) return;
-  row.classList.toggle('collapsed', !!collapsed);
+  row.classList.toggle('open', !collapsed);
   updatePaletteToggleIcon();
 }
 function cancelPaletteAutoCollapse(){
@@ -2825,7 +2796,7 @@ function cancelPaletteAutoCollapse(){
 function schedulePaletteAutoCollapse(){
   cancelPaletteAutoCollapse();
   const row = _paletteRow();
-  if(!isPlaying || !row || row.classList.contains('collapsed')) return;
+  if(!isPlaying || !row || !row.classList.contains('open')) return;
   paletteAutoCollapseTimer = setTimeout(() => {
     paletteAutoCollapseTimer = null;
     setPaletteRowCollapsed(true);
@@ -2835,9 +2806,9 @@ function togglePaletteRow(){
   const row = _paletteRow();
   if(!row) return;
   cancelPaletteAutoCollapse();
-  const collapse = !row.classList.contains('collapsed');
-  setPaletteRowCollapsed(collapse);
-  if(!collapse) schedulePaletteAutoCollapse(); // 展开且正在播放则重新计时
+  openDropPanel(row, document.getElementById('paletteToggleBtn'));
+  updatePaletteToggleIcon();
+  if(row.classList.contains('open')) schedulePaletteAutoCollapse();
 }
 // 操作配色面板（点按）时重置自动收起计时
 const _paletteRowEl = _paletteRow();
@@ -3033,22 +3004,19 @@ function _fsShowControls(){
 function _fsHideControls(){
   if(_fsIdleTimer){ clearTimeout(_fsIdleTimer); _fsIdleTimer = null; }
 }
-// 进入/退出全屏：菜单面板与遮罩随全屏元素移动（让设置按钮可用）
+// 进入/退出全屏：设置面板随全屏元素移动（让左上角设置按钮能展开它）
 const _panelEl = document.getElementById('controlPanel');
-const _maskEl = document.getElementById('overlayMask');
 const _panelHome = _panelEl ? { parent: _panelEl.parentElement, next: _panelEl.nextSibling } : null;
-const _maskHome = _maskEl ? { parent: _maskEl.parentElement, next: _maskEl.nextSibling } : null;
 function _syncFsLayout(){
   const vp = document.querySelector('.visual-panel');
   if(!vp) return;
   if(_isFullscreenNow()){
-    if(_maskEl) vp.appendChild(_maskEl);
     if(_panelEl) vp.appendChild(_panelEl);
     _fsShowControls();
   } else {
     _fsHideControls();
     const fo = document.getElementById('fsOverlay'); if(fo) fo.classList.remove('faded');
-    if(_maskEl && _maskHome) _maskHome.parent.insertBefore(_maskEl, _maskHome.next);
+    closeAllDropPanels();
     if(_panelEl && _panelHome) _panelHome.parent.insertBefore(_panelEl, _panelHome.next);
   }
 }
@@ -3409,7 +3377,7 @@ updatePaletteToggleIcon();  // 配色栏默认展开，同步收起/展开按钮
 applyPanelAppearance();     // 统一菜单/调试/选谱/管理面板的透明度与模糊（含动态创建的 .csel-pop）
 </script>
 <!-- 自定义配色弹窗 -->
-<div id="paletteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:3000;align-items:center;justify-content:center">
+<div id="paletteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:20000;align-items:center;justify-content:center">
   <div style="background:#1a1a2e;border-radius:12px;padding:18px;width:92%;max-width:440px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <h3 style="margin:0;color:#fff;font-size:16px">自定义配色</h3>
@@ -3431,18 +3399,12 @@ applyPanelAppearance();     // 统一菜单/调试/选谱/管理面板的透明�
 </div>
 
 <!-- 谱面管理弹窗 -->
-<div id="manageModal" class="manage-overlay">
-  <div class="manage-card">
-    <div class="manage-head">
-      <h3>谱面管理</h3>
-      <div class="manage-appearance">
-        <label title="面板透明度">透明 <input id="manageTransparency" type="range" min="0" max="100" step="5" value="100" oninput="applyManageAppearance()"></label>
-        <label title="面板背景模糊">模糊 <input id="manageBlur" type="range" min="0" max="100" step="5" value="25" oninput="applyManageAppearance()"></label>
-      </div>
-      <button class="manage-close" onclick="closeManageModal()" title="关闭">✕</button>
-    </div>
-    <div id="manageList"></div>
+<div id="manageModal" class="drop-panel manage-panel">
+  <div class="manage-head">
+    <h3>谱面管理</h3>
+    <button class="manage-close" onclick="closeManageModal()" title="关闭">✕</button>
   </div>
+  <div id="manageList"></div>
 </div>
 
 </body>
