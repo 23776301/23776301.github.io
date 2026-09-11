@@ -36,7 +36,7 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
 .fab-group.faded{opacity:0.5}
 .fab-group.hidden-btn{display:none !important}
 .menu-btn{
-  display:none;
+  display:flex;
   width:44px;height:44px;
   border-radius:50%;
   background:rgba(22,22,31,.85);border:1px solid var(--border);
@@ -209,6 +209,24 @@ select:focus{border-color:var(--accent)}
 .progress-fill{height:100%;background:var(--accent);width:0%;transition:width .1s linear}
 .time-row{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:4px}
 #visualCanvas{width:100%;height:500px;background:#0a0a10;border-radius:8px;display:block}
+/* PC：整页锁定视口高度，绘制区自适应剩余高度，钢琴始终在屏幕底部、无需滚动 */
+@media(min-width:801px){
+  html,body{height:100%}
+  body{height:100vh;height:100dvh;overflow:hidden}
+  .container{height:100%;display:flex;flex-direction:column;padding:12px 16px 8px}
+  .layout{flex:1;min-height:0}
+  .control-panel{min-height:0;overflow-y:auto}
+  .layout > div:last-child{display:flex;flex-direction:column;min-height:0}
+  .top-bar{flex-shrink:0}
+  .visual-panel{flex:1;min-height:0;display:flex;flex-direction:column;padding:8px}
+  #visualCanvas{flex:1;min-height:0;height:auto}
+  /* 菜单折叠：隐藏左侧面板，绘制区占满整行 */
+  .layout.menu-collapsed{grid-template-columns:0 1fr;gap:0}
+  .layout.menu-collapsed .control-panel{display:none}
+}
+/* 全屏绘制区 */
+.visual-panel:fullscreen{padding:0;background:#000;display:flex;flex-direction:column}
+.visual-panel:fullscreen #visualCanvas{flex:1;min-height:0;width:100%;height:auto !important;border-radius:0}
 .file-info{font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6}
 .file-info b{color:var(--text)}
 .timbre-hint{font-size:11px;color:var(--dim);margin-top:4px;min-height:16px}
@@ -2009,8 +2027,15 @@ function toggleLoop(){
 
 function toggleMenu(){
   const panel = document.getElementById('controlPanel');
-  const mask = document.getElementById('overlayMask');
   const group = document.getElementById('fabGroup');
+  // PC：折叠/展开左侧面板（隐藏后绘制区占满整行），菜单按钮始终保留以便再次展开
+  if(window.innerWidth > 800){
+    const layout = document.querySelector('.layout');
+    if(layout) layout.classList.toggle('menu-collapsed');
+    if(group) showMenuBtn();
+    return;
+  }
+  const mask = document.getElementById('overlayMask');
   const isOpen = panel.classList.toggle('open');
   mask.classList.toggle('show', isOpen);
   if(group){
