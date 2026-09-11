@@ -382,6 +382,11 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 - **两种模式都可用**：欣赏模式下自动发声的同时，用户敲击琴键可叠加额外声音；演奏模式则完全依赖用户敲击。
 - **坐标换算**：`_canvasPointToKey` 用 `getBoundingClientRect` 把客户端坐标映射到画布像素，再按 `keyAreaH` 判定是否落在键盘区。
 
+## 9.9 配色栏收起 / 展开
+
+- 「管理谱面」右侧的收起/展开按钮（`paletteToggleBtn`）控制配色栏 `paletteRow`（配色方案、力度色带、全屏按钮）的显示，默认展开。
+- **播放开始后 3 秒内**若未切换配色（`setPalette`）或点击全屏（`toggleFullscreen`），自动收起（`schedulePaletteAutoCollapse`）；手动切换按钮、切换配色或点击全屏都会取消自动收起。
+
 # 十、部署、流量与缓存策略（GitHub Pages）
 
 > 本章与「性能」分离：性能关注**运行时的帧率与音频延迟**，本章关注**网络流量、加载速度、存储与托管成本**。
