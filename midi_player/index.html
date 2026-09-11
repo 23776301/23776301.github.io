@@ -375,9 +375,9 @@ select:focus{border-color:var(--accent)}
           <span><span id="statTracks">轨道：-</span> · <span id="statTotal">音符：-</span></span>
           <span><span id="statPlayed">已播：-/-</span> · <span id="statPercent">0.00%</span></span>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+        <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
           <span style="font-size:9px;color:var(--dim);flex-shrink:0;height:44px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;line-height:1;"><span>配</span><span>色</span><span>方</span><span>案</span></span>
-          <div style="display:grid;grid-template-columns:auto auto;gap:5px;flex-shrink:0;">
+          <div style="display:grid;grid-template-columns:repeat(4,auto);gap:5px;flex-shrink:0;">
             <button class="pal-btn palette-btn" data-palette="A" onclick="setPalette('A')" title="纯紫">A</button>
             <button class="pal-btn palette-btn active" data-palette="B" onclick="setPalette('B')" title="青蓝×琥珀红">B</button>
             <button class="pal-btn palette-btn" data-palette="C" onclick="setPalette('C')" title="青绿×品红">C</button>
