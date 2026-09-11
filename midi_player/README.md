@@ -348,6 +348,7 @@
 - 调试终端：`DEBUG` 圆形按钮（与菜单按钮同组、可拖动），支持复制、置顶/置底、透明度/模糊、清空、降级自动弹窗。
 - 日志分级配色：`[INFO]` 蓝（下载/加载）、`[OK]` 绿（恢复）、黄 warn、红 error；同类告警 1.5s 折叠，DOM 行数上限 300。
 - 降级/恢复文案：`最近 2s出现N次性能问题，分别是丢帧、积压、停摆、时间戳，触发渲染降级` / `性能问题已缓解，恢复完整渲染。`
+- **后台诊断（`BgDiag` 看门狗，临时）**：独立观测三类信号定位「切标签可播、最小化/回桌面不播」——A. `visibilitychange`/`blur`/`focus` 是否触发；B. 看门狗自身运行间隔 >2.5s 视为渲染进程被冻结；C. `audioCtx.currentTime` 是否前进、后台调度 tick 间隔。输出 `visibilitychange →`、`window blur/focus`、`启动/停止后台调度器`、`★rAF 已停摆…但 visibilityState=visible`、`看门狗自身被冻结/延迟`、以及每 2s 一条 `BG状态 vis=… rafGap=… audioΔ=… state=… sched=… ticks=… tickGap=…`。
 
 # 十、测试与验证方法
 

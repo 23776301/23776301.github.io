@@ -1868,8 +1868,27 @@ const SCHED_LOOKAHEAD = 2.0;  // 后台提前排程秒数（需大于后台定�
 const SCHED_INTERVAL = 250;   // 后台调度轮询间隔(ms)
 let _bgSchedId = null;
 
+// ===== 后台诊断：定位"切标签可播、最小化/回桌面不播"的根因 =====
+// 独立观测三类信号，互不依赖：
+//  A. 可见性/焦点事件是否触发（visibilitychange / blur / focus）
+//  B. 看门狗自身运行间隔（>2.5s 说明渲染进程被冻结/挂起）
+//  C. 音频时钟是否前进 + 后台调度器 tick 间隔（音频上下文是否被挂起/节流）
+const BgDiag = {
+  lastWatchWall: performance.now(),
+  lastRafWall: performance.now(),
+  lastAudioTime: 0,
+  lastTickWall: 0,
+  lastTickGap: null,
+  ticks: 0,
+  rafStallLogged: false,
+  lastStatusWall: 0
+};
+
 function scheduleBg(){
   if(!isPlaying || !audioCtx || !document.hidden) return;
+  const _tw = performance.now();
+  if(BgDiag.lastTickWall) BgDiag.lastTickGap = _tw - BgDiag.lastTickWall;
+  BgDiag.lastTickWall = _tw; BgDiag.ticks++;
   const now = audioCtx.currentTime;
   const horizon = now + SCHED_LOOKAHEAD;
   let count = 0;
@@ -1891,12 +1910,83 @@ function scheduleBg(){
 }
 function startBgScheduler(){
   if(_bgSchedId || !isPlaying) return;
+  console.log('[AudioDebug][INFO] 启动后台调度器 vis=' + document.visibilityState +
+    ' hidden=' + document.hidden + ' focus=' + document.hasFocus());
   scheduleBg();
   _bgSchedId = setInterval(scheduleBg, SCHED_INTERVAL);
 }
 function stopBgScheduler(){
-  if(_bgSchedId){ clearInterval(_bgSchedId); _bgSchedId = null; }
+  if(_bgSchedId){
+    clearInterval(_bgSchedId); _bgSchedId = null;
+    console.log('[AudioDebug][INFO] 停止后台调度器 vis=' + document.visibilityState +
+      ' hidden=' + document.hidden);
+  }
 }
+
+// ===== 后台诊断监听与看门狗（临时，用于定位根因）=====
+document.addEventListener('visibilitychange', () => {
+  console.log('[AudioDebug][INFO] visibilitychange → hidden=' + document.hidden +
+    ' state=' + document.visibilityState +
+    ' focus=' + document.hasFocus() +
+    ' raf=' + (rafId !== null ? 'on' : 'off') +
+    ' bgSched=' + (_bgSchedId !== null ? 'on' : 'off') +
+    ' audioState=' + (audioCtx ? audioCtx.state : 'null') +
+    ' audioTime=' + (audioCtx ? audioCtx.currentTime.toFixed(2) : '-'));
+});
+window.addEventListener('blur', () => {
+  console.log('[AudioDebug][INFO] window blur vis=' + document.visibilityState +
+    ' hidden=' + document.hidden);
+});
+window.addEventListener('focus', () => {
+  console.log('[AudioDebug][INFO] window focus vis=' + document.visibilityState +
+    ' hidden=' + document.hidden);
+});
+setInterval(() => {
+  const wall = performance.now();
+  const wGap = wall - BgDiag.lastWatchWall;
+  BgDiag.lastWatchWall = wall;
+  const at = audioCtx ? audioCtx.currentTime : 0;
+  const aGapMs = (at - BgDiag.lastAudioTime) * 1000;
+  BgDiag.lastAudioTime = at;
+  const rafGap = wall - BgDiag.lastRafWall;
+  const playing = (typeof isPlaying !== 'undefined') && isPlaying;
+
+  // B. 看门狗自身被冻结/严重延迟 → 渲染进程被挂起
+  if(wGap > 2500){
+    console.warn('[AudioDebug] 看门狗自身被冻结/延迟 ' + wGap.toFixed(0) +
+      'ms（渲染进程疑似被挂起）vis=' + document.visibilityState +
+      ' hidden=' + document.hidden + ' focus=' + document.hasFocus());
+  }
+  if(!playing) return;
+
+  // A. rAF 停摆但页面仍 visible → 遮挡/最小化未触发 visibilitychange
+  if(!document.hidden && rafGap > 1000 && !BgDiag.rafStallLogged){
+    BgDiag.rafStallLogged = true;
+    console.warn('[AudioDebug] ★rAF 已停摆 ' + rafGap.toFixed(0) +
+      'ms 但 visibilityState=' + document.visibilityState +
+      ' hidden=' + document.hidden + ' focus=' + document.hasFocus() +
+      ' bgSched=' + (_bgSchedId !== null ? 'on' : 'off') +
+      ' audioState=' + (audioCtx ? audioCtx.state : 'null'));
+  } else if(rafGap < 500 || document.hidden){
+    BgDiag.rafStallLogged = false;
+  }
+
+  // C. 后台/异常期间每 2s 输出一条状态，记录音频时钟与调度器 tick 间隔
+  const inBg = document.hidden || rafGap > 1000;
+  if(inBg && wall - BgDiag.lastStatusWall > 2000){
+    BgDiag.lastStatusWall = wall;
+    console.log('[AudioDebug][INFO] BG状态 vis=' + document.visibilityState +
+      ' hidden=' + document.hidden + ' focus=' + document.hasFocus() +
+      ' rafGap=' + rafGap.toFixed(0) + 'ms' +
+      ' audioΔ=' + aGapMs.toFixed(0) + 'ms' +
+      ' state=' + (audioCtx ? audioCtx.state : 'null') +
+      ' sched=' + (_bgSchedId !== null ? 'on' : 'off') +
+      ' ticks=' + BgDiag.ticks +
+      ' tickGap=' + (BgDiag.lastTickGap != null ? BgDiag.lastTickGap.toFixed(0) : '-') + 'ms' +
+      ' notes=' + (typeof nextNoteIndex !== 'undefined' ? nextNoteIndex : '-') +
+      ' cur=' + (typeof currentTime !== 'undefined' ? currentTime.toFixed(1) : '-'));
+  }
+}, 1000);
 
 document.addEventListener('visibilitychange', () => {
   if(document.hidden){
@@ -1999,6 +2089,7 @@ function lowerBound(arr, target){
 function playLoop(){
   if(!isPlaying) return;
   const _frameT0 = performance.now();
+  BgDiag.lastRafWall = _frameT0;
   const now = audioCtx.currentTime;
 
   // 帧间隔跳变检测：主线程被阻塞（GC/长任务）会导致rAF延迟，
