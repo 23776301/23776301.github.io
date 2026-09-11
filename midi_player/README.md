@@ -368,16 +368,17 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.6 PC 布局与全屏
 
 - **视口自适应**：PC 端整页锁定视口高度（`height:100dvh` + `overflow:hidden`），`.layout` 用 `flex:1` 撑满，`.visual-panel` 与 Canvas 以 `flex:1` 占满——**钢琴键始终贴在屏幕底部，无需滚动页面**；菜单面板为浮层，不再挤压绘制区。
-- **顶栏排列**：进度条单独置于顶栏最底部；上传 MIDI 与**管理谱面**均为**圆形图标按钮**（`.ctl-btn.primary`，主题紫底 + 白图标，无文字）；上传用 `arcticons:folder-upload`，管理用 `fluent:text-bullet-list-edit-20-filled`。
-- **控制行（`.control-row`）**：顺序为 播放 / 重播 / 循环 / **设置** / **配色** / **调试**（`carbon:debug`）/ **全屏**，全部为圆形 `.ctl-btn.primary` 紫色按钮；循环按钮为**列表循环（`bi:repeat`）/ 单曲循环（`bi:repeat-1`）两态**。
-- **全屏按钮**：位于控制行**最右侧**，图标为 `solar:maximize-linear` / `solar:minimize-linear`（线性矢量 SVG），对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。全屏内另有悬浮控件（见 9.11）。
-- **配色按钮**：控制行内，点击展开独立的**配色面板**（见 9.9），不再内联占用布局。
+- **顶栏两行**：第一行 `重播 / 选谱列表 / 全屏`（重播在左、全屏在右）；第二行 `播放·暂停 / 下一首 / 列表·单曲循环 / 谱面管理 / 上传谱面 / 设置 / 配色 / 调试`。进度条与统计信息仍单独置底。
+- **下一首**：`nextSong()` 切到列表下一首，到底回到第一首；`#nextBtn` 在谱面加载后启用。
+- **按钮**：全部为圆形 `.ctl-btn.primary`（主题紫底 + 白图标，无文字）；上传 `arcticons:folder-upload`、管理 `fluent:text-bullet-list-edit-20-filled`、设置 `solar:settings-minimalistic-bold`、配色 `ic:round-color-lens`、调试 `carbon:debug`、全屏 `solar:maximize/minimize-linear`；循环为**列表（`bi:repeat`）/ 单曲（`bi:repeat-1`）两态**。
+- **全屏按钮**：第一行最右，对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。全屏内另有悬浮控件（见 9.11）。
+- **统一下拉面板**：设置 / 谱面管理 / 配色 / 调试四个面板风格一致，均从各自触发按钮**向下展开**（`positionDropPanel()` 按 `getBoundingClientRect` 定位、右对齐并夹取到视口内），最大高度约视口 2/3（≈渲染区 2/3），点击面板/触发按钮以外区域关闭（`closeAllDropPanels`）。
 
 ## 9.7 菜单面板、调试面板与滑动开关
 
-菜单面板（`.control-panel`）是**播放设置与音色**的统一容器，固定尺寸、内容可滚动；面板内所有开关均为**滑动开关**（`.switch`）而非勾选框。调试面板已重新分离（见 9.12）：
+菜单面板（`.control-panel.drop-panel`，即「设置」）是**播放设置与音色**的统一容器，从设置按钮向下展开、内容可滚动；面板内所有开关均为**滑动开关**（`.switch`）而非勾选框：
 
-- **半透明 + 模糊**：面板背景为 `rgba(0,0,0,alpha)` + `backdrop-filter: blur()`；「透明」滑块 100 = 全透明（alpha 0）、0 = 全黑，默认 **100**；「模糊」默认 **25%**；菜单面板与调试面板各有一组滑块，通过 `_applyAllAppearance()` 双向绑定并持久化（`panelTransparency` / `panelBlur`）。
+- **透明度 / 模糊（仅设置面板）**：面板顶部保留「透明 / 模糊」滑块，背景为 `rgba(0,0,0,alpha)` + `backdrop-filter: blur()`；透明 100 = 全透明（alpha 0）、0 = 全黑，默认 **100**；模糊默认 **25%**；通过 `_applyAllAppearance()` 应用到设置/调试/配色/选谱/管理面板并持久化（`panelTransparency` / `panelBlur`）。调试面板与管理面板已**移除各自的滑块**。
 - **钢琴高度**：`pianoHeightSlider`（5%–50%，默认 16%）调节键盘区占绘制区的高度，`renderStatic` / `drawScene` 用 `C.h * pianoHeightPct/100`。
 - **欣赏 / 演奏模式**：滑动开关，默认「欣赏模式」——谱面音符自动发声；关闭为「演奏模式」——音符只下落、需用户点击琴键发声。
 - **降级自动展开**：开启时，性能降级会展开**调试面板**并滚到日志底部；恢复时不自动收起。
@@ -397,17 +398,17 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **常见钢琴版型**：全尺寸 **88 键**（A0–C8）最多，最小常见为 **25 键**；中间档位 **76 / 61 / 49 / 37 键**。提供预设按钮 `setKeyboardPreset(N)`，按 `88/N` 设缩放并居中（偏移 50%）。
 - 缩放上限 4× ≈ 显示约 22 键，覆盖 25 键版型；如需更细可再调偏移滑块平移可见音域。
 
-## 9.9 配色面板（独立浮层）
+## 9.9 配色面板（下拉浮层）
 
-- 控制行内的配色按钮（`paletteToggleBtn`，圆形紫色 `.ctl-btn.primary`，图标 `ic:round-color-lens`，收起时旋转 180°）切换 `paletteRow`；**默认收起**，点击展开。
-- **独立浮层**：`paletteRow` 为 `position:absolute; top:100%; right:0`，浮在渲染区之上，**不改变渲染区高度，也不影响进度条 / 统计信息位置**；背景与调试/菜单/选谱/管理面板共享同一透明度与模糊（`_panelTargets` 含 `paletteRow`）。
+- 控制行内的配色按钮（`paletteToggleBtn`，圆形紫色 `.ctl-btn.primary`，图标 `ic:round-color-lens`，收起时旋转 180°）切换 `paletteRow`；**默认收起**，点击从按钮下方展开。
+- **下拉浮层**：`paletteRow` 使用统一 `.drop-panel` 样式（`positionDropPanel` 定位），浮在渲染区之上，**不改变渲染区高度，也不影响进度条 / 统计信息位置**；背景与设置/调试/选谱/管理面板共享同一透明度与模糊（`_panelTargets` 含 `paletteRow`）。
 - **按钮尺寸**：A/B/C/自定义四个 `.pal-btn` 为 32px 圆形，与播放控制按钮同尺寸、单行对齐；已删除「配色方案」竖排文字标签。
 - **自动收起**：播放中若 2s 内未操作配色面板（点按面板或切换配色会重置计时），自动收起（`schedulePaletteAutoCollapse`，仅在 `isPlaying` 且面板展开时生效）；暂停时取消计时。
 
-## 9.10 谱面管理弹窗
+## 9.10 谱面管理面板（下拉浮层）
 
-- **风格统一**：`manageModal` 使用与菜单面板一致的半透明 + 背景模糊卡片（`.manage-card`），并提供「透明 / 模糊」滑块；滑块值与菜单面板**共享同一组状态**（`_syncManageAppearanceFromPanel` / `applyManageAppearance`），任一处调整都会同步。
-- **点击外部收起**：点击遮罩（`e.target === modal`）自动关闭；点卡片内部不关闭。
+- **统一样式**：`manageModal` 为 `.drop-panel.manage-panel`，从「管理谱面」按钮向下展开、最大高度约视口 2/3；背景与设置/调试/配色/选谱面板共享同一透明度与模糊（`_panelTargets` 含 `manageModal`）。已移除独立卡片与「透明 / 模糊」滑块。
+- **点击外部收起**：统一由 `closeAllDropPanels()`（document 捕获 pointerdown，排除 `.drop-panel` 与 `.drop-trigger`）处理。
 - **内置谱删除 / 重下**：内置谱默认显示垃圾桶图标，点击后加入 `localStorage.deletedBuiltin` 并从谱库下拉中移除、清除缓存；该行图标变为**下载**图标，点击可重新下载并恢复。用户上传谱删除同样使用垃圾桶 SVG。
 
 ## 9.11 全屏悬浮控件
@@ -420,10 +421,10 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ## 9.12 调试面板（独立浮层）
 
-- 控制行内新增圆形 `.ctl-btn.primary` 调试按钮（`debugToggleBtn`，图标 `carbon:debug`），位于**配色按钮左侧**；点击 `toggleDebugPanel()` 切换 `.debug-panel.open`，面板从控制行**向下展开**（`position:absolute; top:100%; right:0`），浮在渲染区之上，**不改变渲染区高度**。
-- 面板内含：启用调试开关、透明 / 模糊滑块（与菜单面板双向绑定）、日志区（200px 可滚动）与 copy / 下载日志 / clear / 顶部 / 底部、降级自动展开开关。
+- 控制行内新增圆形 `.ctl-btn.primary` 调试按钮（`debugToggleBtn`，图标 `carbon:debug`），位于**配色按钮左侧**；点击 `toggleDebugPanel()` 切换 `.debug-panel.open`，面板从按钮**向下展开**（统一 `.drop-panel`，`positionDropPanel` 定位），浮在渲染区之上，**不改变渲染区高度**。
+- 面板内含：启用调试开关、日志区（200px 可滚动）与 copy / 下载日志 / clear / 顶部 / 底部、降级自动展开开关。**透明 / 模糊滑块已移除**（只在设置面板保留）。
 - 调试总开关默认开启；关闭后 `body.dbg-off` 隐藏 `.dbg-body`、停止采集与监控。
-- 面板背景与菜单 / 配色 / 选谱 / 管理面板共享同一透明度与模糊（见 9.7、9.9）。
+- 面板背景与设置 / 配色 / 选谱 / 管理面板共享同一透明度与模糊（见 9.7、9.9）。
 
 ## 9.13 选谱与软键盘
 
@@ -763,4 +764,5 @@ midi_player/
 | 双击播放 | 双击（双触）非钢琴键的渲染区等价于播放/暂停 | `8d38638` |
 | 手势与全屏 | 上边缘拖动调钢琴高度（5%–50%）、两指捏合缩放钢琴宽度（1x–5x，渲染区同步、不可见音符跳过渲染、播放不受影响）；全屏新增设置/退出/双锁定悬浮按钮（总锁，锁定时手势视为敲键），2s 淡出、点击即暂停，菜单面板移入全屏元素 | `9f30fd7` |
 | 浮动控件重构 | 锁定按钮普通+全屏常驻（左右、顶部2/5、默认锁定、黑底50%、Toast）；所有悬浮按钮 2s 未点击淡到 10%、锁按钮吸附边缘露一半，仅点按钮才重置；调试面板独立（`carbon:debug` 按钮，配色左侧）；菜单/调试/配色/选谱/管理面板共享透明度；配色面板独立浮层、按钮 32px、播放中 2s 自动收起；软键盘/配色展开不改变渲染区高度 | `244c1dc` |
+| 顶栏两行 | 第一行 重播/选谱/全屏，第二行 播放/下一首/循环/管理/上传/设置/配色/调试；新增下一首（到底回第一首）；设置与管理改为统一下拉面板（从触发按钮向下展开、最大 2/3 视口、点外部关闭）；透明度/模糊滑块仅保留在设置面板顶部 | `a636720` |
 | 手势改滑块 | 移除上边缘拖动/两指捏合/锁定交互；菜单新增宽度缩放（1–4×）与水平偏移滑块及 88/76/61/49/37/25 键预设；抬起琴键即 `stopNote` 清除高亮；点音色/谱面列表不再自动聚焦搜索框 | `95c5873` |
