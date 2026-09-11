@@ -440,7 +440,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.12 调试面板（独立浮层）
 
 - 控制行内新增圆形 `.ctl-btn.primary` 调试按钮（`debugToggleBtn`，图标 `carbon:debug`），位于**配色按钮左侧**；点击 `toggleDebugPanel()` 切换 `.debug-panel.open`，面板从控制行**向下展开**（统一 `.drop-panel`，绝对定位），浮在渲染区之上，**不改变渲染区高度**。
-- 面板内含：启用调试开关、日志区（200px 可滚动）与 **圆形 SVG 图标按钮**（复制 / 下载日志 / 清空 / 置顶 / 置底）。工具行顺序为：**降级自动展开开关（最左，每次开启调试默认打开）→ 复制 → 下载日志 → 清空 → 置顶 → 置底 → 重置所有设置（最右，`fluent:arrow-reset-20-regular`，`resetAllSettings()` 清除 `panelTransparency` / `panelBlur` / `dbgAutoOpen` / `deletedBuiltin` 后刷新）**。面板底边通过 `_syncDebugPanelHeight()` 与设置面板实际高度对齐。**透明 / 模糊滑块已移除**（只在设置面板保留）。
+- 面板顶部工具行为：**启用调试开关（左）……重置所有选项按钮（右上角，红色警示样式，含文字「重置所有选项」+ `fluent:arrow-reset-20-regular` 图标，`resetAllSettings()` 清除 `panelTransparency` / `panelBlur` / `dbgAutoOpen` / `deletedBuiltin` 后刷新）**。第二行为日志操作按钮：**降级自动展开开关（最左，每次开启调试默认打开）→ 复制 → 下载日志 → 清空 → 置顶 → 置底**（圆形 SVG 图标）；日志区 200px 可滚动。面板底边通过 `_syncDebugPanelHeight()` 与设置面板实际高度对齐。**透明 / 模糊滑块已移除**（只在设置面板保留）。
 - **开启调试即降耗**：每次勾选「启用调试」自动把透明度设为 **20%**（较暗）、模糊 **0%** 并提示。
 - 调试总开关默认开启；关闭后 `body.dbg-off` 隐藏 `.dbg-body`、停止采集与监控。
 - 面板背景与设置 / 配色 / 选谱 / 管理面板共享同一透明度与模糊（见 9.7、9.9）。
@@ -449,7 +449,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - 自定义下拉（音色 / 谱面）弹层 `.csel-pop` 为 `position:fixed` 且挂到 `body`，直接遮挡渲染区；其背景/模糊同样纳入统一面板外观（`_panelTargets`）。
 - **不自动聚焦搜索框**：`open()` 不再调用 `search.focus()`，点击音色 / 谱面列表不会唤醒输入法；用户可手动点搜索框。
-- **状态区**：进度条上方的 `.time-row` 中间新增 `#statusText`，实时显示「乐谱下载 N%」「乐谱下载完成！」「音色下载 N%」「音色完成！」等，以及调试面板关闭时的最新调试日志（居中）；原顶部浮层 Toast 已移除（不再遮挡点击）。
+- **状态区**：进度条上方的 `.time-row` 中间新增 `#statusText`。调试面板关闭时，日志镜像到此处会**去掉时间戳与 `[AudioDebug]` 前缀**，只保留精确信息，名称用中括号包裹，如 `音色[古钢琴]从jsDelivr下载成功!`、`谱面[Rush E 3.mid]从jsDelivr下载失败，尝试从Pages直取…`、`音色[古钢琴]下载 42%`。原顶部浮层 Toast 已移除（不再遮挡点击）。
 - `viewport` 设 `interactive-widget=overlays-content`，并在 `visualViewport.resize` 中判断键盘高度差（`height < innerHeight-120`）时**跳过画布重算**，使软键盘 / 选谱弹层弹出时渲染区高度不变、由弹层直接遮挡。
 
 # 十、部署、流量与缓存策略（GitHub Pages）
@@ -512,7 +512,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **重复访问零流量**：音色与谱面命中 Cache API，回访用户不再下载（列表除外）。
 - **列表极小**：`list.json` 仅约 1 KB，且是唯一每次走网络的资源。
-- **按需加载音色**：只下载当前选中的音色，不同时拉取全部 56 个；后台仅预加载 2 个常用音色。
+- **按需加载音色**：默认只下载 **古钢琴（默认曲目）+ 三角钢琴 + 电钢琴2** 三个；其余音色仅在用户主动点下拉里的下载按钮、或切到 `songDefaultTimbre` 配置了该音色的谱面时（`onTimbreChange({auto:true})`）才下载，绝不拉取全部 56 个。
 - **用户上传不上云**：上传的 MIDI 存本地 IndexedDB，服务端零带宽。
 - **诊断不上网**：所有性能指标在本地采集，不发送遥测。
 
@@ -785,6 +785,7 @@ midi_player/
 | 手势与全屏 | 上边缘拖动调钢琴高度（5%–50%）、两指捏合缩放钢琴宽度（1x–5x，渲染区同步、不可见音符跳过渲染、播放不受影响）；全屏新增设置/退出/双锁定悬浮按钮（总锁，锁定时手势视为敲键），2s 淡出、点击即暂停，菜单面板移入全屏元素 | `9f30fd7` |
 | 浮动控件重构 | 锁定按钮普通+全屏常驻（左右、顶部2/5、默认锁定、黑底50%、Toast）；所有悬浮按钮 2s 未点击淡到 10%、锁按钮吸附边缘露一半，仅点按钮才重置；调试面板独立（`carbon:debug` 按钮，配色左侧）；菜单/调试/配色/选谱/管理面板共享透明度；配色面板独立浮层、按钮 32px、播放中 2s 自动收起；软键盘/配色展开不改变渲染区高度 | `244c1dc` |
 | 面板与版型交互 | 谱面管理二次点击收起；删除设置/音色大标题、音色行加「音色选择」标签；键数版型改 6 档滑块并为六种标准音域配置默认缩放/偏移（首键对齐最左）；音色列表加垃圾桶/下载按钮+百分比、未下载不可切换、删除「已就绪」提示；调试面板自动展开开关移最左、最右加重置所有设置按钮、底边对齐设置面板；重播改 `hugeicons:replay` | `cbe84ee` |
+| 调试工具行与音色策略 | 「重置所有选项」按钮移到右上角（启用调试右侧，带文字警示）；暂停/恢复时 `resetClocks()` 重置音频时钟基线，避免误报「长时间停摆」；状态区日志去掉时间戳与 `[AudioDebug]` 前缀、名称加中括号；音色默认只下载古钢琴/三角钢琴/电钢琴2，其余按需下载或谱面配置时自动下载 | `_pending_` |
 | 配色面板 | A/B/C 按钮缩到 27px、改用 Google Sans 常规字重；力度图 `flex-wrap:nowrap` + swatch 自适应收缩保证不换行；删除白键/黑键独立列，标签叠加到力度图上 | `bab754b` |
 | 暂停高亮与静音监测 | 暂停状态敲键/松键用 `requestStaticRedraw()` 补静态重绘，触屏点键恢复紫色按下反馈；输出静音探测加 `_autoSoundingMode()` 门控，仅欣赏模式监测，音游模式不再误报「连续静音」 | `ded0f3e` |
 | 媒体外置 | 音色/内置谱面/可视化 demo.ogg 优先走 jsDelivr CDN、回退本站 Pages（GitHub Release 无 CORS 不可用） | `48edf1f` |

@@ -180,6 +180,9 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .dbg-actions button{background:#333;color:#fff;border:none;width:26px;height:26px;padding:0;cursor:pointer;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
 .dbg-actions button svg{width:14px;height:14px}
 .dbg-actions button:hover{background:#444}
+.dbg-reset-btn{margin-left:auto;display:inline-flex;align-items:center;gap:5px;background:rgba(255,80,80,.12);color:#ff9b9b;border:1px solid rgba(255,80,80,.35);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
+.dbg-reset-btn:hover{background:rgba(255,80,80,.22);color:#ffb3b3}
+.dbg-reset-btn svg{width:14px;height:14px}
 .dbg-log{
   height:200px;overflow-y:auto;padding:4px 8px;line-height:1.4;
   font-family:monospace;font-size:11px;
@@ -370,6 +373,7 @@ select:focus{border-color:var(--accent)}
           <div class="debug-panel drop-panel" id="debugPanel">
             <div class="dbg-toolbar">
               <label class="switch"><input id="dbgEnabled" type="checkbox" checked onchange="onDebugEnabledChange()"><span class="track"><span class="knob"></span></span>启用调试</label>
+              <button class="dbg-reset-btn" id="debugResetBtn" onclick="resetAllSettings()" title="重置所有设置"><span>重置所有选项</span><svg viewBox="0 0 20 20" fill="currentColor"><path d="M5.854 2.646a.5.5 0 0 1 0 .708L4.207 5H11a6 6 0 1 1-6 6a.5.5 0 0 1 1 0a5 5 0 1 0 5-5H4.207l1.647 1.646a.5.5 0 1 1-.708.708l-2.5-2.5a.5.5 0 0 1 0-.708l2.5-2.5a.5.5 0 0 1 .708 0"/></svg></button>
             </div>
             <div class="dbg-off-hint">调试已关闭，无日志采集与监控。</div>
             <div class="dbg-body">
@@ -383,7 +387,6 @@ select:focus{border-color:var(--accent)}
                 <button class="dbg-icon-btn" onclick="clearDebugTerminal()" title="清空"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg></button>
                 <button class="dbg-icon-btn" onclick="scrollDebugTop()" title="顶部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15l-6-6l-6 6"/></svg></button>
                 <button class="dbg-icon-btn" onclick="scrollDebugBottom()" title="底部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9l6 6l6-6"/></svg></button>
-                <button class="dbg-icon-btn" id="debugResetBtn" onclick="resetAllSettings()" title="重置所有设置" style="margin-left:auto"><svg viewBox="0 0 20 20" fill="currentColor"><path d="M5.854 2.646a.5.5 0 0 1 0 .708L4.207 5H11a6 6 0 1 1-6 6a.5.5 0 0 1 1 0a5 5 0 1 0 5-5H4.207l1.647 1.646a.5.5 0 1 1-.708.708l-2.5-2.5a.5.5 0 0 1 0-.708l2.5-2.5a.5.5 0 0 1 .708 0"/></svg></button>
               </div>
               <div id="debugTerminalContent" class="dbg-log"></div>
             </div>
@@ -553,6 +556,16 @@ let _debugContentEl = null;
 let debugEnabled = true; // 调试总开关：关闭后无日志采集、无监控、无降级自动展开
 
 // 将 console 参数安全转为字符串：对象走 JSON，循环引用等异常时回退 String
+// 音色 id -> 界面显示名（如 clavinet -> 古钢琴），用于日志与状态区
+function timbreDisplayName(id){
+  if(id === '__synth__') return '合成钢琴';
+  const sel = document.getElementById('timbreSel');
+  if(sel && sel.options){
+    for(let i = 0; i < sel.options.length; i++){ if(sel.options[i].value === id) return sel.options[i].textContent; }
+  }
+  return id;
+}
+
 function _fmtArgs(args){
   return args.map(a => {
     if(typeof a === 'object' && a !== null){
@@ -581,9 +594,11 @@ function setStatus(text, sticky){
   if(text && !sticky){ _statusTimer = setTimeout(() => { el.textContent = ''; }, 3500); }
 }
 function _appendDebug(msg, type) {
-  // 调试面板未展开时，把最新日志显示到状态区
+  // 调试面板未展开时，把最新日志精简后显示到状态区（去掉 [AudioDebug][LEVEL] 前缀）
   const _dp = document.getElementById('debugPanel');
-  if(!_dp || !_dp.classList.contains('open')) setStatus(msg);
+  if(!_dp || !_dp.classList.contains('open')){
+    setStatus(String(msg).replace(/^\[AudioDebug\](\[[A-Za-z]+\])?\s*/, ''));
+  }
   if(!_debugContentEl) {
     _debugContentEl = document.getElementById('debugTerminalContent');
   }
@@ -990,6 +1005,13 @@ const AudioDebugMonitor = {
     if(rms > 0.001) this.lastLoudTime = performance.now();
   },
 
+  // 主动暂停 / 恢复播放时重置时钟基线：避免恢复后第一次汇总把暂停时长误判为"停摆"
+  resetClocks(){
+    this.lastWall = performance.now();
+    this.lastAudioTime = audioCtx ? audioCtx.currentTime : 0;
+    this.lastReport = 0;
+  },
+
   // 每秒汇总一次
   report(){
     if(!debugEnabled) return;
@@ -1147,31 +1169,38 @@ function _mediaUrls(relPath){
   const clean = String(relPath).replace(/^\.\//, '');
   return [cdnUrl('midi_player/' + clean), clean];
 }
-// 依次尝试候选源，流式下载并回报百分比（0-100）
-async function _fetchBlobWithProgress(urls, onProgress){
+// 依次尝试候选源，流式下载并回报百分比（0-100）；label 用于日志（如 谱面[xx.mid]）
+async function _fetchBlobWithProgress(urls, onProgress, label){
   let lastErr;
-  for(const url of urls){
+  for(let i = 0; i < urls.length; i++){
+    const src = (i === 0) ? 'jsDelivr' : 'Pages';
     try{
-      const resp = await fetch(url);
+      const resp = await fetch(urls[i]);
       if(!resp.ok) throw new Error('HTTP ' + resp.status);
       const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
+      let blob;
       if(!resp.body || !total || !resp.body.getReader){
-        const blob = new Blob([await resp.arrayBuffer()]);
+        blob = new Blob([await resp.arrayBuffer()]);
         if(onProgress) onProgress(100);
-        return blob;
+      } else {
+        const reader = resp.body.getReader();
+        const chunks = []; let received = 0;
+        while(true){
+          const {done, value} = await reader.read();
+          if(done) break;
+          chunks.push(value); received += value.length;
+          if(onProgress) onProgress(received / total * 100);
+        }
+        blob = new Blob(chunks);
+        if(onProgress) onProgress(100);
       }
-      const reader = resp.body.getReader();
-      const chunks = []; let received = 0;
-      while(true){
-        const {done, value} = await reader.read();
-        if(done) break;
-        chunks.push(value); received += value.length;
-        if(onProgress) onProgress(received / total * 100);
-      }
-      const blob = new Blob(chunks);
-      if(onProgress) onProgress(100);
+      console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + src + '下载成功!');
       return blob;
-    }catch(e){ lastErr = e; if(onProgress) onProgress(0); }
+    }catch(e){
+      lastErr = e; if(onProgress) onProgress(0);
+      const next = urls[i + 1] ? ('，尝试从' + ((i + 1 === 1) ? 'Pages' : '备用源') + '直取…') : '';
+      console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + src + '下载失败' + next);
+    }
   }
   throw lastErr || new Error('下载失败');
 }
@@ -1253,25 +1282,29 @@ const SoundfontLoader = {
   // 读取音色文本：优先缓存（内容校验通过），否则走网络并回写缓存
   async _fetchSoundfontText(name, urls, absUrl, cache, onProgress){
     if(typeof urls === 'string') urls = [urls];
+    const disp = timbreDisplayName(name);
     if(cache){
       try{
         const cached = await cache.match(absUrl, {ignoreSearch: true});
         if(cached){
           const t = await cached.text();
-          if(this._isSoundfontText(t, name)){ if(onProgress) onProgress(1); return { text: t, fromCache: true }; }
+          if(this._isSoundfontText(t, name)){ if(onProgress) onProgress(1); return { text: t, fromCache: true, source: '缓存' }; }
           // 坏缓存：删除该条，强制走网络，避免永久命中
           await cache.delete(absUrl);
           console.warn('[AudioDebug] 检测到损坏的音色缓存并已清除: ' + name);
         }
       }catch(e){}
     }
-    let resp = null, lastErr = null;
-    for(const u of urls){
+    let resp = null, lastErr = null, source = null;
+    for(let i = 0; i < urls.length; i++){
+      const src = (i === 0) ? 'jsDelivr' : 'Pages';
       try{
-        const r = await fetch(u, {mode: 'cors'});
-        if(r.ok){ resp = r; break; }
+        const r = await fetch(urls[i], {mode: 'cors'});
+        if(r.ok){ resp = r; source = src; break; }
         lastErr = new Error('下载失败 HTTP ' + r.status);
       }catch(e){ lastErr = e; }
+      const next = urls[i + 1] ? ('，尝试从' + ((i + 1 === 1) ? 'Pages' : '备用源') + '直取…') : '';
+      console.log('[AudioDebug][INFO] 音色[' + disp + ']从' + src + '下载失败' + next);
     }
     if(!resp) throw lastErr || new Error('下载失败');
     const _total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
@@ -1310,7 +1343,7 @@ const SoundfontLoader = {
         }catch(e2){}
       }
     }
-    return { text: text, fromCache: false };
+    return { text: text, fromCache: false, source: source };
   },
 
   // 扫描音色缓存，重建 cachedNames 集合
@@ -1365,8 +1398,8 @@ const SoundfontLoader = {
     this.cachedNames.add(name);
     // 正常播放音色相关每个谱只打一条：缓存命中 vs 网络下载
     if(onProgress){
-      console.log('[AudioDebug][INFO] 音色 ' + name +
-        (res.fromCache ? ' 从缓存加载并解析成功' : ' 下载并解析成功'));
+      console.log('[AudioDebug][INFO] 音色[' + timbreDisplayName(name) + ']' +
+        (res.fromCache ? '从缓存加载成功!' : '从' + (res.source || '网络') + '下载成功!'));
     }
     if(onProgress) onProgress(1, '音色加载完成');
   },
@@ -1890,9 +1923,12 @@ try{
 }catch(e){ console.warn('[AudioDebug] 自定义下拉初始化失败', e); }
 try{ SoundfontLoader.refreshCachedNames(); }catch(e){}
 
-async function onTimbreChange(){
+// opts.auto=true：谱面配置的音色，允许自动下载（不受"未下载不可切换"限制）
+async function onTimbreChange(opts){
+  const auto = !!(opts && opts.auto);
   const sel = document.getElementById('timbreSel');
   const name = sel.value;
+  const disp = timbreDisplayName(name);
   initAudio();
   // 切换音色前停止所有正在播放的音符，避免新旧音色叠加导致音量暴增
   SoundfontLoader.stopAll();
@@ -1900,18 +1936,20 @@ async function onTimbreChange(){
     SoundfontLoader.current = '__synth__';
     return;
   }
-  // 未完成下载不允许切换（下拉列表里的下载按钮完成下载后才可选）
-  if(!SoundfontLoader.cachedNames.has(name)){
-    setStatus('请先点击右侧下载按钮下载该音色');
+  // 用户手动选择：未完成下载不允许切换（需先点下拉里的下载按钮）
+  if(!SoundfontLoader.cachedNames.has(name) && !auto){
+    setStatus('音色[' + disp + ']未下载，请先点击右侧下载按钮');
     return;
   }
   try{
-    setStatus('音色加载中…');
-    await SoundfontLoader.load(name);
+    setStatus('音色[' + disp + ']加载中…');
+    await SoundfontLoader.load(name, auto ? (p) => {
+      if(p < 1) setStatus('音色[' + disp + ']下载 ' + Math.round(p * 100) + '%');
+    } : undefined);
     await SoundfontLoader.predecodeAll();
-    setStatus('音色完成！');
+    setStatus('音色[' + disp + ']完成!');
   }catch(e){
-    setStatus('音色加载失败：' + e.message + '，已回退合成钢琴');
+    setStatus('音色[' + disp + ']加载失败，已回退合成钢琴');
     sel.value = '__synth__';
     SoundfontLoader.current = '__synth__';
   }
@@ -2013,7 +2051,8 @@ let userGestureSeen = false;
       setStatus('音色完成！');
       if(startedWithFallback) showToast('古钢琴已就绪，已切换');
       startPlaybackOnce();
-      // 后台预加载其他常用音色（不阻塞播放，用_doLoad避免切换current）
+      // 默认只预取「三角钢琴」「电钢琴2」（+ 默认曲目的古钢琴），其余音色仅在用户
+      // 主动下载、或切到配置了该音色的谱面时才下载（用 _doLoad 避免切换 current）
       const PRELOAD = ['acoustic_grand_piano', 'electric_piano_2'].filter(n => n !== timbreName);
       for(const name of PRELOAD){
         try{ await SoundfontLoader._doLoad(name, null); }catch(e){}
@@ -2122,7 +2161,8 @@ async function _getBuiltinList(){
 // 带进度的下载（jsDelivr -> Pages 回退），用于「重新下载」时在按钮上显示百分比
 async function _fetchWithProgress(relPath, onProgress){
   const absUrl = AssetCache._abs(relPath);
-  const blob = await _fetchBlobWithProgress(_mediaUrls(relPath), onProgress);
+  const base = String(relPath).split('/').pop();
+  const blob = await _fetchBlobWithProgress(_mediaUrls(relPath), onProgress, '谱面[' + base + ']');
   try{
     const cache = await caches.open(AssetCache.cacheName);
     await cache.put(absUrl, new Response(blob));
@@ -2361,7 +2401,7 @@ async function onSongChange(val){
         const timbreSel = document.getElementById('timbreSel');
         if(timbreSel.value !== defaultTimbre){
           timbreSel.value = defaultTimbre;
-          await onTimbreChange();
+          await onTimbreChange({auto: true}); // 谱面配置的音色：允许自动下载
         }
       }
     }
@@ -2531,6 +2571,7 @@ function startPlay(){
   // 防止重复启动导致多个 rAF 循环同时推进 nextNoteIndex
   if(rafId) cancelAnimationFrame(rafId);
   isPlaying = true;
+  if(typeof AudioDebugMonitor !== 'undefined') AudioDebugMonitor.resetClocks();
   playStartTime = audioCtx.currentTime - currentTime / playSpeed;
   nextNoteIndex = lowerBound(allNotes, currentTime);
   const _pb = document.getElementById('playBtn');
@@ -2541,6 +2582,7 @@ function startPlay(){
 
 function pausePlay(){
   isPlaying = false;
+  if(typeof AudioDebugMonitor !== 'undefined') AudioDebugMonitor.resetClocks();
   cancelPaletteAutoCollapse(); // 暂停后不再自动收起配色面板
   if(rafId) cancelAnimationFrame(rafId);
   rafId = null;
@@ -2554,6 +2596,7 @@ function pausePlay(){
 
 function stopPlay(){
   isPlaying = false;
+  if(typeof AudioDebugMonitor !== 'undefined') AudioDebugMonitor.resetClocks();
   if(rafId) cancelAnimationFrame(rafId);
   rafId = null;
   // 停止所有已排程/正在播放的音符
