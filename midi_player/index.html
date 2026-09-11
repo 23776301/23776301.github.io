@@ -242,6 +242,14 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .row input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:4px;background:rgba(255,255,255,.1)}
 .row input[type=range]::-moz-range-track{height:8px;border-radius:4px;background:rgba(255,255,255,.1)}
 .row .val{font-size:12px;color:var(--text);min-width:40px;text-align:right}
+/* 键数版型预设按钮 */
+.kb-presets{display:flex;flex-wrap:wrap;gap:5px;flex:1}
+.kb-preset{
+  padding:4px 8px;border-radius:8px;cursor:pointer;font-size:11px;
+  border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--dim);
+}
+.kb-preset:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.kb-preset.active{background:var(--accent);border-color:var(--accent);color:#fff}
 select{flex:1;background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);border-radius:12px;padding:10px 12px;font-size:13px;outline:none;cursor:pointer}
 select:focus{border-color:var(--accent)}
 
@@ -319,23 +327,8 @@ select:focus{border-color:var(--accent)}
 .fs-float-btn svg{width:20px;height:20px}
 .fs-settings{top:14px;left:14px}
 .fs-exit{top:14px;right:14px}
-/* 锁定按钮：普通+全屏都显示，位于绘制区左右、靠近顶部 2/5，不可移动；黑底、最高不透明度 50% */
-.lock-overlay{position:absolute;inset:0;z-index:6;pointer-events:none}
-.lock-btn{
-  position:absolute;width:40px;height:40px;border-radius:50%;padding:0;pointer-events:auto;
-  display:flex;align-items:center;justify-content:center;cursor:pointer;
-  border:none;background:#000;color:#fff;
-  opacity:.5;transition:opacity .3s,transform .3s;
-}
-.lock-btn svg{width:20px;height:20px}
-.lock-btn:active{opacity:.78}
-.lock-left{left:0;top:40%;transform:translateY(-50%)}
-.lock-right{right:0;top:40%;transform:translateY(-50%)}
-/* 2s 未点击按钮：全部悬浮按钮淡到 10%；锁定按钮同时吸附到左右边缘、只露一半 */
-.fs-overlay.faded .fs-float-btn,
-.lock-overlay.faded .lock-btn{opacity:.1}
-.lock-overlay.faded .lock-left{transform:translateY(-50%) translateX(-55%)}
-.lock-overlay.faded .lock-right{transform:translateY(-50%) translateX(55%)}
+/* 2s 未点击悬浮按钮：淡到 10% */
+.fs-overlay.faded .fs-float-btn{opacity:.1}
 /* 调试面板：从控制行的调试按钮向下展开，浮在渲染区之上，不改变其高度 */
 .debug-panel{
   position:absolute;top:100%;right:0;z-index:40;display:none;
@@ -386,6 +379,27 @@ select:focus{border-color:var(--accent)}
         <label>钢琴高度</label>
         <input type="range" id="pianoHeightSlider" min="5" max="50" step="1" value="16" oninput="onPianoHeightChange()">
         <span class="val" id="pianoHeightVal">16%</span>
+      </div>
+      <div class="row">
+        <label>宽度缩放</label>
+        <input type="range" id="pianoWidthSlider" min="1" max="4" step="0.1" value="1" oninput="onPianoWidthChange()">
+        <span class="val" id="pianoWidthVal">1.0×</span>
+      </div>
+      <div class="row">
+        <label>水平偏移</label>
+        <input type="range" id="pianoOffsetSlider" min="0" max="100" step="1" value="0" oninput="onPianoOffsetChange()">
+        <span class="val" id="pianoOffsetVal">0%</span>
+      </div>
+      <div class="row">
+        <label>键数版型</label>
+        <div class="kb-presets">
+          <button type="button" class="kb-preset active" data-keys="88" onclick="setKeyboardPreset(88)">88键</button>
+          <button type="button" class="kb-preset" data-keys="76" onclick="setKeyboardPreset(76)">76键</button>
+          <button type="button" class="kb-preset" data-keys="61" onclick="setKeyboardPreset(61)">61键</button>
+          <button type="button" class="kb-preset" data-keys="49" onclick="setKeyboardPreset(49)">49键</button>
+          <button type="button" class="kb-preset" data-keys="37" onclick="setKeyboardPreset(37)">37键</button>
+          <button type="button" class="kb-preset" data-keys="25" onclick="setKeyboardPreset(25)">25键</button>
+        </div>
       </div>
       <div class="row">
         <label>模式</label>
@@ -556,10 +570,6 @@ select:focus{border-color:var(--accent)}
       </div>
       <div class="panel visual-panel">
         <canvas id="visualCanvas"></canvas>
-        <div class="lock-overlay" id="lockOverlay">
-          <button class="lock-btn lock-left" id="lockLeft" title="锁定钢琴尺寸" aria-label="锁定钢琴尺寸"><svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></g></svg></button>
-          <button class="lock-btn lock-right" id="lockRight" title="锁定钢琴尺寸" aria-label="锁定钢琴尺寸"><svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></g></svg></button>
-        </div>
         <div class="fs-overlay" id="fsOverlay">
           <button class="fs-float-btn fs-settings" id="fsSettingsBtn" title="设置" aria-label="设置"><svg viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M12.4277 2C11.3139 2 10.2995 2.6007 8.27081 3.80211L7.58466 4.20846C5.55594 5.40987 4.54158 6.01057 3.98466 7C3.42773 7.98943 3.42773 9.19084 3.42773 11.5937V12.4063C3.42773 14.8092 3.42773 16.0106 3.98466 17C4.54158 17.9894 5.55594 18.5901 7.58466 19.7915L8.27081 20.1979C10.2995 21.3993 11.3139 22 12.4277 22C13.5416 22 14.5559 21.3993 16.5847 20.1979L17.2708 19.7915C19.2995 18.5901 20.3139 17.9894 20.8708 17C21.4277 16.0106 21.4277 14.8092 21.4277 12.4063V11.5937C21.4277 9.19084 21.4277 7.98943 20.8708 7C20.3139 6.01057 19.2995 5.40987 17.2708 4.20846L16.5847 3.80211C14.5559 2.6007 13.5416 2 12.4277 2ZM8.67773 12C8.67773 9.92893 10.3567 8.25 12.4277 8.25C14.4988 8.25 16.1777 9.92893 16.1777 12C16.1777 14.0711 14.4988 15.75 12.4277 15.75C10.3567 15.75 8.67773 14.0711 8.67773 12Z" clip-rule="evenodd"/></svg></button>
           <button class="fs-float-btn fs-exit" id="fsExitBtn" title="退出全屏" aria-label="退出全屏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M2 22L9 15M9 20.8571V15H3.14286"/><path d="M22 2L15 9M15 3.14286V9H20.8571"/></g></svg></button>
@@ -1371,6 +1381,31 @@ const SoundfontLoader = {
     this.lastTriggerTime.fill(0);
   },
 
+  // 松开某个琴键：立即停止该 midi 正在发声的 voice（用户敲击抬起手指时用）
+  stopNote(midi){
+    const t = audioCtx ? audioCtx.currentTime : 0;
+    for(let i = this.activeVoices.length - 1; i >= 0; i--){
+      const v = this.activeVoices[i];
+      if(v.midi !== midi) continue;
+      try{
+        if(v.kind === 'sample'){
+          v.gain.gain.cancelScheduledValues(t);
+          v.gain.gain.setValueAtTime(v.gain.gain.value, t);
+          v.gain.gain.linearRampToValueAtTime(0, t + 0.01);
+          v.src.stop(t + 0.02);
+        } else if(v.kind === 'synth'){
+          v.env.gain.cancelScheduledValues(t);
+          v.env.gain.setValueAtTime(v.env.gain.value, t);
+          v.env.gain.linearRampToValueAtTime(0, t + 0.01);
+          v.oscs.forEach(o => { try{ o.stop(t + 0.02); }catch(e){} });
+        }
+      }catch(e){}
+      this._unregisterVoice(v);
+      if(v.kind === 'synth' && this.activeSynth[midi] === v) delete this.activeSynth[midi];
+      if(v.kind === 'sample' && this.activeSources[midi] && this.activeSources[midi].src === v.src) this.activeSources[midi] = null;
+    }
+  },
+
   // 定期节点泄漏检测（每5秒一次，仅异常时告警）
   debugReport(){
     const now = performance.now();
@@ -1652,7 +1687,7 @@ function initCustomSelect(select, opts){
     pop.classList.add('open');
     trigger.setAttribute('aria-expanded', 'true');
     position();
-    if(search) setTimeout(function(){ try{ search.focus(); }catch(e){} }, 0);
+    // 不自动聚焦搜索框：避免点击列表即唤醒输入法（用户可手动点搜索框）
     document.addEventListener('pointerdown', onDocDown, true);
     window.addEventListener('resize', position);
     window.addEventListener('scroll', position, true);
@@ -2259,10 +2294,10 @@ const activeKeySet = new Set();
 let loopMode = 'list'; // 'list' 列表循环 | 'one' 单曲循环
 let playMode = 'appreciate';   // 'appreciate' 欣赏模式（自动发声） | 'perform' 演奏模式（需点击琴键发声）
 let pianoHeightPct = 16;       // 钢琴（键盘区）高度占绘制区比例，范围 5-50
-let pianoWidthScale = 1;       // 钢琴宽度缩放（两指捏合），>=1；缩放后渲染区与音符轨道同步变化
-let viewOffsetX = 0;           // 钢琴水平偏移（canvas 设备像素），缩放时以捏合中点为锚点
-let pianoLocked = true;        // 默认锁定：禁用上边缘拖动与捏合，手势一律视为敲键
-const PIANO_MAX_SCALE = 5;
+let pianoWidthScale = 1;       // 钢琴宽度缩放（菜单滑块），1x-4x；缩放后渲染区与音符轨道同步变化
+let viewOffsetX = 0;           // 钢琴水平偏移（canvas 设备像素），由偏移滑块控制
+const PIANO_MIN_SCALE = 1;
+const PIANO_MAX_SCALE = 4;
 
 // 欣赏模式 / 演奏模式切换
 function onPlayModeChange(){
@@ -2980,33 +3015,20 @@ document.addEventListener('fullscreenchange', _syncFsIcon);
 document.addEventListener('webkitfullscreenchange', _syncFsIcon);
 
 /* ============================================================
- * 全屏悬浮控件：设置(左上) / 退出(右上) / 锁定(左中、右中)
- * 2s 无操作淡出；点击任意悬浮按钮立即暂停播放
+ * 全屏悬浮控件：设置(左上) / 退出(右上)
+ * 2s 无操作淡出；点击悬浮按钮立即暂停播放
  * ========================================================== */
-const LOCK_ICON_LOCKED = '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></g>';
-const LOCK_ICON_UNLOCKED = '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></g>';
 let _fsIdleTimer = null;
 function _isFullscreenNow(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
 // 仅全屏时：点击悬浮按钮立即暂停
 function _fsPauseIfPlaying(){ if(_isFullscreenNow() && isPlaying){ try{ pausePlay(); }catch(e){} } }
-function _fsUpdateLockIcons(){
-  const inner = pianoLocked ? LOCK_ICON_LOCKED : LOCK_ICON_UNLOCKED;
-  document.querySelectorAll('.lock-icon').forEach(el => { el.innerHTML = inner; });
-  const title = pianoLocked ? '解锁钢琴尺寸' : '锁定钢琴尺寸';
-  const l = document.getElementById('lockLeft'); if(l) l.title = title;
-  const r = document.getElementById('lockRight'); if(r) r.title = title;
-}
-function togglePianoLock(){
-  pianoLocked = !pianoLocked;
-  _fsUpdateLockIcons();
-  if(window.showToast) window.showToast(pianoLocked ? '钢琴尺寸已锁定' : '钢琴尺寸已解锁');
-}
-// 2s 未点击任何悬浮按钮 → 全部淡到 10%；锁定按钮吸附左右边缘、只露一半
+// 2s 未点击悬浮按钮 → 淡到 10%
 function _fsShowControls(){
-  const els = [document.getElementById('fsOverlay'), document.getElementById('lockOverlay')];
-  els.forEach(el => { if(el) el.classList.remove('faded'); });
+  const ov = document.getElementById('fsOverlay');
+  if(!ov) return;
+  ov.classList.remove('faded');
   if(_fsIdleTimer) clearTimeout(_fsIdleTimer);
-  _fsIdleTimer = setTimeout(() => { els.forEach(el => { if(el) el.classList.add('faded'); }); }, 2000);
+  _fsIdleTimer = setTimeout(() => { ov.classList.add('faded'); }, 2000);
 }
 function _fsHideControls(){
   if(_fsIdleTimer){ clearTimeout(_fsIdleTimer); _fsIdleTimer = null; }
@@ -3045,9 +3067,6 @@ function _fsBindButton(id, action){
 }
 _fsBindButton('fsExitBtn', () => toggleFullscreen());
 _fsBindButton('fsSettingsBtn', () => toggleMenu());
-_fsBindButton('lockLeft', () => togglePianoLock());
-_fsBindButton('lockRight', () => togglePianoLock());
-_fsUpdateLockIcons();
 _fsShowControls();
 
 function resizeCanvas(){
@@ -3055,8 +3074,8 @@ function resizeCanvas(){
   canvas.width = Math.max(320, Math.floor(r.width * devicePixelRatio));
   canvas.height = Math.max(320, Math.floor(r.height * devicePixelRatio));
   C.w = canvas.width; C.h = canvas.height;
-  // 重新计算布局和映射
-  _clampViewOffset();
+  // 重新计算布局和映射（按当前偏移百分比重算水平偏移）
+  _viewOffsetFromPct();
   cachedLayout = getKeyLayout();
   keyByMidi = new Array(109).fill(null);
   cachedLayout.keys.forEach(k => { keyByMidi[k.midi] = k; });
@@ -3185,6 +3204,39 @@ function _clampViewOffset(){
   const minOff = Math.min(0, C.w - totalW);
   if(viewOffsetX > 0) viewOffsetX = 0;
   else if(viewOffsetX < minOff) viewOffsetX = minOff;
+}
+// 由「水平偏移」滑块百分比换算 viewOffsetX（0% 最左，100% 最右）
+function _viewOffsetFromPct(){
+  const os = document.getElementById('pianoOffsetSlider');
+  const pct = Math.max(0, Math.min(100, parseFloat(os && os.value) || 0));
+  const totalW = C.w * pianoWidthScale;
+  const maxOff = Math.min(0, C.w - totalW); // <= 0
+  viewOffsetX = maxOff * (pct / 100);
+}
+// 宽度缩放 / 水平偏移滑块 → 应用（缩放变化后按当前偏移百分比重算）
+function _applyPianoViewFromSliders(){
+  const ws = document.getElementById('pianoWidthSlider');
+  pianoWidthScale = Math.max(PIANO_MIN_SCALE, Math.min(PIANO_MAX_SCALE, parseFloat(ws && ws.value) || 1));
+  const wv = document.getElementById('pianoWidthVal');
+  if(wv) wv.textContent = pianoWidthScale.toFixed(1) + '×';
+  _viewOffsetFromPct();
+  const ov = document.getElementById('pianoOffsetVal');
+  const os = document.getElementById('pianoOffsetSlider');
+  if(ov && os) ov.textContent = Math.round(parseFloat(os.value) || 0) + '%';
+  _applyPianoZoom();
+}
+function onPianoWidthChange(){ _applyPianoViewFromSliders(); }
+function onPianoOffsetChange(){ _applyPianoViewFromSliders(); }
+// 常见钢琴版型：88 全尺寸 / 76 / 61 / 49 / 37 / 25 键（缩放居中，可再调偏移）
+const KEYBOARD_PRESETS = [88, 76, 61, 49, 37, 25];
+function setKeyboardPreset(keys){
+  const scale = Math.max(PIANO_MIN_SCALE, Math.min(PIANO_MAX_SCALE, 88 / keys));
+  const ws = document.getElementById('pianoWidthSlider');
+  const os = document.getElementById('pianoOffsetSlider');
+  if(ws) ws.value = scale;
+  if(os) os.value = 50; // 居中显示
+  document.querySelectorAll('.kb-preset').forEach(b => b.classList.toggle('active', parseInt(b.dataset.keys, 10) === keys));
+  _applyPianoViewFromSliders();
 }
 // 缩放 / 偏移变化后重算布局、静态层与当前帧
 function _applyPianoZoom(){
@@ -3324,47 +3376,7 @@ function _userPlayKey(midi){
   SoundfontLoader.playNote(midi, 0.9, 0.7); // 用户敲击：固定力度与时长
 }
 let _lastCanvasTap = 0;
-// 画布坐标（canvas 设备像素）
-function _canvasPos(e){
-  const rect = canvas.getBoundingClientRect();
-  return {
-    x: (e.clientX - rect.left) / rect.width * C.w,
-    y: (e.clientY - rect.top) / rect.height * C.h
-  };
-}
-const _canvasPointers = new Map(); // pointerId -> {x,y}（画布像素），用于捏合
-let _heightDrag = null;            // {id} 上边缘拖动
-let _pinch = null;                 // {ids, d0, s0, off0, m0x} 双指捏合
-function _pianoKeyTop(){
-  return C.h - C.h * (pianoHeightPct / 100);
-}
 canvas.addEventListener('pointerdown', (e) => {
-  const pos = _canvasPos(e);
-  _canvasPointers.set(e.pointerId, pos);
-
-  if(!pianoLocked){
-    // 1) 钢琴上边缘：按住拖动调整高度（5%-50%）
-    const keyTop = _pianoKeyTop();
-    const hit = 16 * devicePixelRatio;
-    if(!_pinch && pos.y >= keyTop - hit && pos.y <= keyTop + hit * 0.5){
-      _heightDrag = { id: e.pointerId };
-      try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
-      e.preventDefault();
-      return;
-    }
-    // 2) 双指捏合：缩放钢琴宽度（渲染区与音符轨道同步变化）
-    if(_canvasPointers.size === 2){
-      const ids = [..._canvasPointers.keys()];
-      const a = _canvasPointers.get(ids[0]), b = _canvasPointers.get(ids[1]);
-      const d0 = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-      _pinch = { ids, d0, s0: pianoWidthScale, off0: viewOffsetX, m0x: (a.x + b.x) / 2 };
-      _keyPointers.clear();
-      try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
-      e.preventDefault();
-      return;
-    }
-  }
-
   const midi = _canvasPointToKey(e);
   if(midi == null){
     // 非钢琴键的渲染区：双击（含双触）等价于播放/暂停
@@ -3379,36 +3391,13 @@ canvas.addEventListener('pointerdown', (e) => {
   _userPlayKey(midi);
   e.preventDefault();
 });
-canvas.addEventListener('pointermove', (e) => {
-  if(!_canvasPointers.has(e.pointerId)) return;
-  const pos = _canvasPos(e);
-  _canvasPointers.set(e.pointerId, pos);
-
-  if(_heightDrag && e.pointerId === _heightDrag.id){
-    _setPianoHeightPct((C.h - pos.y) / C.h * 100);
-    e.preventDefault();
-    return;
-  }
-  if(_pinch && _pinch.ids.includes(e.pointerId)){
-    const a = _canvasPointers.get(_pinch.ids[0]);
-    const b = _canvasPointers.get(_pinch.ids[1]);
-    if(!a || !b) return;
-    const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-    const ns = Math.max(1, Math.min(PIANO_MAX_SCALE, _pinch.s0 * d / _pinch.d0));
-    const totalW0 = C.w * _pinch.s0;
-    const f = totalW0 > 0 ? (_pinch.m0x - _pinch.off0) / totalW0 : 0.5;
-    const mx = (a.x + b.x) / 2;
-    pianoWidthScale = ns;
-    viewOffsetX = mx - f * C.w * ns;
-    _applyPianoZoom();
-    e.preventDefault();
-  }
-});
+// 抬起手指：立即停止该键的发声并清除高亮（同一键仍被其它手指按住则不停）
 function _endCanvasPointer(e){
+  const midi = _keyPointers.get(e.pointerId);
   _keyPointers.delete(e.pointerId);
-  _canvasPointers.delete(e.pointerId);
-  if(_heightDrag && e.pointerId === _heightDrag.id) _heightDrag = null;
-  if(_pinch && !_pinch.ids.every(id => _canvasPointers.has(id))) _pinch = null;
+  if(midi == null) return;
+  for(const m of _keyPointers.values()){ if(m === midi) return; }
+  try{ SoundfontLoader.stopNote(midi); }catch(_){}
 }
 canvas.addEventListener('pointerup', _endCanvasPointer);
 canvas.addEventListener('pointercancel', _endCanvasPointer);
