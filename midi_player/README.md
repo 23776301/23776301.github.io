@@ -380,7 +380,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 菜单面板（`.control-panel.drop-panel`，即「设置」）是**播放设置与音色**的统一容器，从设置按钮向下展开、内容可滚动；面板内所有开关均为**滑动开关**（`.switch`）而非勾选框。已删除「设置 / 音色」两个分组大标题；音色行与其它设置行一致：左侧 `音色选择` 标签、右侧下拉列表：
 
-- **透明度 / 模糊（仅设置面板）**：面板顶部保留「透明 / 模糊」滑块，背景为 `rgba(0,0,0,alpha)` + `backdrop-filter: blur()`；透明 100 = 全透明（alpha 0）、0 = 全黑，默认 **100**；模糊默认 **25%**；通过 `_applyAllAppearance()` 应用到设置/调试/配色/选谱/管理面板并持久化（`panelTransparency` / `panelBlur`）。两个滑块放在 `.appearance-sliders` 里**上下堆叠、左对齐**；「音游?」开关 `margin-left:auto` **右对齐**，`#playModeLabel` 文字为**纯白 `#fff`**。调试面板与管理面板已**移除各自的滑块**。
+- **透明度 / 模糊（仅设置面板）**：面板顶部保留「透明 / 模糊」滑块，背景为 `rgba(0,0,0,alpha)` + `backdrop-filter: blur()`；透明 100 = 全透明（alpha 0）、0 = 全黑，默认 **25%**（alpha 0.75）；模糊默认 **0%**；通过 `_applyAllAppearance()` 应用到设置/调试/配色/选谱/管理面板并持久化（`panelTransparency` / `panelBlur`）。两个滑块放在 `.appearance-sliders` 里**上下堆叠、左对齐**；「音游?」开关 `margin-left:auto` **右对齐**，`#playModeLabel` 文字为**纯白 `#fff`**。调试面板与管理面板已**移除各自的滑块**。
 - **音乐倍速**：`speedSlider`（0.1–3.0×，步进 0.1，与下落流速一致的滑块）；**音量滑块已移除**，主增益固定 100%，由系统音量控制。
 - **钢琴高度**：`pianoHeightSlider`（5%–50%，默认 16%）调节键盘区占绘制区的高度，`renderStatic` / `drawScene` 用 `C.h * pianoHeightPct/100`。
 - **音游? 开关**：位于设置面板右上角（透明度/模糊滑块右侧）；开 = 「欣赏模式」（音符自动发声），关 = 「音游模式」（音符只下落、需点击琴键）。
@@ -422,7 +422,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ## 9.10 谱面管理面板（下拉浮层）
 
-- **统一样式**：`manageModal` 为 `.drop-panel.manage-panel`，从「管理谱面」按钮向下展开、最大高度约视口 2/3；列表正文 `.manage-row .name` 与设置面板正文一致为 **12px**，标题 `.manage-head h3` 稍大一号 **14px**（`.manage-empty` 也 12px），与设置/调试面板观感统一；背景与设置/调试/配色/选谱面板共享同一透明度与模糊（`_panelTargets` 含 `manageModal`）。已移除独立卡片与「透明 / 模糊」滑块。
+- **统一样式**：`manageModal` 为 `.drop-panel.manage-panel`，从「管理谱面」按钮向下展开、最大高度约视口 2/3；列表正文 `.manage-row .name` 与设置面板正文一致为 **12px**，标题 `.manage-head h3` 稍大一号 **14px**（`.manage-empty` 也 12px）；**行距收紧**（行 `padding:5px 10px;margin-bottom:2px`、分节 `margin:8px 0 4px`、标题 `margin-bottom:8px`）以贴合设置面板的紧凑度；背景与设置/调试/配色/选谱面板共享同一透明度与模糊（`_panelTargets` 含 `manageModal`）。已移除独立卡片与「透明 / 模糊」滑块。
 - **点击外部收起**：统一由 `closeAllDropPanels()`（document 捕获 pointerdown，排除 `.drop-panel` 与 `.drop-trigger`）处理。
 - **就地删除 / 重下**：行内只有名称 + 右侧垃圾桶/下载图标（无「内置 / 已删除 / 上传」文字标签）。点击后图标就地变为**加载中**（下载时若服务端给出 `content-length` 则显示百分比），完成后原地切换为另一图标，**不再重建并重新弹出整个面板**；`deleteBuiltinSong` / `redownloadBuiltinSong` 仅做操作并刷新选谱下拉。
 - **删除即真正清理空间**：`deleteBuiltinSong` 会遍历 Cache API 删除该谱面所有缓存键（按文件名匹配，兼容 CDN/Pages 键名），并释放其配置的默认音色缓存（若不再被其它未删除的内置谱使用且非当前音色），日志输出释放的 MB 数。删除状态存于 `deletedBuiltin`，**不随「重置所有选项」恢复**，因此删除后不会自动回来。
@@ -437,6 +437,8 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **2s 淡出 + 吸附**：仅**点击悬浮按钮**会重置 2s 计时（点琴键 / 音符区不算）；超时后加 `.faded`：`opacity:.2`，设置按钮移向左上角、退出按钮移向右上角，各露出 70%（`transition:opacity .3s, transform .3s`）。
 - **全屏设置面板**：`.control-panel.in-fs` 改为 `position:fixed; top:14px; left:62px`，即从设置按钮**右侧**弹出、**上边界与按钮对齐**（按钮 `left:0 + translate(14px,14px)`、宽 42px，右缘 56px + 6px 间距）。
 - **菜单可用**：由于浏览器全屏只渲染全屏元素，进入全屏时把 `.control-panel` 与 `.overlay-mask` 临时移入 `.visual-panel`（`_syncFsLayout`），退出时移回原位，从而左上角设置按钮能在全屏内打开菜单。
+- **顶部悬浮进度面板**：进入全屏时把整个 `#progressPanel`（进度统计 + 时间/状态/调试信息 + 进度条）移入全屏元素并加 `.in-fs`：`position:absolute; top:8px; left:50%; transform:translateX(-50%)`，即**渲染区顶部中央的悬浮卡片**，**绝对定位不影响渲染区布局**；退出全屏移回原位。
+- **单击收起/显示**：全屏时单击渲染区（非钢琴键区）切换 `#progressPanel.hidden`（`toggleProgressOverlay()`）；单击与双击（播放/暂停）用 300ms 定时器区分，双击仍切换播放。
 - **已移除**：锁定悬浮按钮与总锁（连同拖动 / 捏合手势）。
 
 ## 9.12 调试面板（独立浮层）
@@ -788,6 +790,7 @@ midi_player/
 | 手势与全屏 | 上边缘拖动调钢琴高度（5%–50%）、两指捏合缩放钢琴宽度（1x–5x，渲染区同步、不可见音符跳过渲染、播放不受影响）；全屏新增设置/退出/双锁定悬浮按钮（总锁，锁定时手势视为敲键），2s 淡出、点击即暂停，菜单面板移入全屏元素 | `9f30fd7` |
 | 浮动控件重构 | 锁定按钮普通+全屏常驻（左右、顶部2/5、默认锁定、黑底50%、Toast）；所有悬浮按钮 2s 未点击淡到 10%、锁按钮吸附边缘露一半，仅点按钮才重置；调试面板独立（`carbon:debug` 按钮，配色左侧）；菜单/调试/配色/选谱/管理面板共享透明度；配色面板独立浮层、按钮 32px、播放中 2s 自动收起；软键盘/配色展开不改变渲染区高度 | `244c1dc` |
 | 面板与版型交互 | 谱面管理二次点击收起；删除设置/音色大标题、音色行加「音色选择」标签；键数版型改 6 档滑块并为六种标准音域配置默认缩放/偏移（首键对齐最左）；音色列表加垃圾桶/下载按钮+百分比、未下载不可切换、删除「已就绪」提示；调试面板自动展开开关移最左、最右加重置所有设置按钮、底边对齐设置面板；重播改 `hugeicons:replay` | `cbe84ee` |
+| 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `_pending_` |
 | 开关与流量 | 滑动开关关闭态由深灰 `#444` 改为浅灰 `#c9ccd6`（不再像被冻结），knob 加阴影；`The Sound of Silence` 后台预取改走 jsDelivr，减少 Pages 流量 | `0aef5ba` |
 | 谱面面板字号 | 谱面列表正文 14px→12px 与设置/调试面板一致，标题 15px→14px 稍大一号，空态 13px→12px | `297935f` |
 | 细节修正 | 重播圆环半径再缩小；设置/配色/上传图标放大到 18px；上传非 MIDI 或解析失败打 warn；音游/欣赏模式文字纯白；版型首键对齐改为写入精确缩放（修复 61 键 C2 偏移）；状态区只镜像 INFO 且去掉通用完成提示；重置按钮改实心暗红且绝对不透明；重置不再恢复已删除谱面、删除真正清理缓存 | `_pending_` |

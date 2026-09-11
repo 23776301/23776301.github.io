@@ -149,7 +149,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 /* 谱面管理面板：统一下拉浮层 */
 .manage-panel{display:none}
 .manage-panel.open{display:block}
-.manage-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.manage-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .manage-head h3{margin:0;font-size:14px;color:var(--text);flex:1}
 .manage-appearance{display:flex;gap:10px;font-size:10px;color:var(--dim)}
 .manage-appearance label{display:flex;align-items:center;gap:4px;cursor:pointer}
@@ -157,9 +157,9 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .manage-close{background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;line-height:1}
 .manage-close:hover{color:var(--text)}
 #manageList{overflow-y:auto;flex:1}
-.manage-section{color:var(--dim);font-size:12px;margin:12px 0 6px}
-.manage-empty{color:var(--dim);text-align:center;padding:16px;font-size:12px}
-.manage-row{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;margin-bottom:4px;background:rgba(255,255,255,.04)}
+.manage-section{color:var(--dim);font-size:12px;margin:8px 0 4px}
+.manage-empty{color:var(--dim);text-align:center;padding:12px;font-size:12px}
+.manage-row{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:6px;margin-bottom:2px;background:rgba(255,255,255,.04)}
 .manage-row .name{flex:1;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .manage-row .tag{font-size:12px;color:var(--dim)}
 .icon-btn{background:none;border:none;color:var(--dim);cursor:pointer;padding:4px;display:inline-flex;align-items:center;border-radius:6px}
@@ -293,6 +293,17 @@ select:focus{border-color:var(--accent)}
 .top-bar .csel-trigger{padding:4px 8px;font-size:12px;border-radius:10px;min-height:28px}
 .hint{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5}
 .progress-wrap{margin:12px 0}
+/* 全屏：进度面板整体悬浮在渲染区顶部中央（绝对定位，不影响渲染区布局） */
+#progressPanel.in-fs{
+  position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  width:min(92%,560px);z-index:6;
+  padding:8px 12px;border-radius:12px;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  box-shadow:0 8px 28px rgba(0,0,0,.5);
+}
+#progressPanel.in-fs.hidden{display:none}
+#progressPanel.in-fs .stats-bar{margin-top:0}
+#progressPanel.in-fs .progress-wrap{margin:6px 0 0}
 .progress-bar{height:6px;background:#e5e5e5;border-radius:3px;overflow:hidden;cursor:pointer}
 .progress-fill{height:100%;background:var(--accent);width:0%;transition:width .1s linear}
 .time-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--dim);margin-top:4px}
@@ -406,8 +417,8 @@ select:focus{border-color:var(--accent)}
             <div class="dbg-section" id="appearanceSection">
               <div class="dbg-toolbar">
                 <div class="appearance-sliders">
-                  <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="100" oninput="applyPanelAppearance()"></label>
-                  <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="25" oninput="applyPanelAppearance()"></label>
+                  <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="25" oninput="applyPanelAppearance()"></label>
+                  <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="0" oninput="applyPanelAppearance()"></label>
                 </div>
                 <label class="switch" title="欣赏模式：音符自动发声；音游模式：需点击琴键发声" style="margin-left:auto">
                   <input id="playModeSw" type="checkbox" checked onchange="onPlayModeChange()">
@@ -530,18 +541,20 @@ select:focus{border-color:var(--accent)}
         <div id="manageList"></div>
       </div>
         </div>
-        <div class="stats-bar" style="font-size:10px;color:var(--dim);margin-top:3px;display:flex;justify-content:space-between">
-          <span><span id="statTracks">轨道：-</span> · <span id="statTotal">音符：-</span></span>
-          <span><span id="statPlayed">已播：-/-</span> · <span id="statPercent">0.00%</span></span>
-        </div>
-        <div class="progress-wrap">
-          <div class="time-row">
-            <span id="curTime">0:00</span>
-            <span id="statusText"></span>
-            <span id="totalTime">0:00</span>
+        <div id="progressPanel">
+          <div class="stats-bar" style="font-size:10px;color:var(--dim);margin-top:3px;display:flex;justify-content:space-between">
+            <span><span id="statTracks">轨道：-</span> · <span id="statTotal">音符：-</span></span>
+            <span><span id="statPlayed">已播：-/-</span> · <span id="statPercent">0.00%</span></span>
           </div>
-          <div class="progress-bar" id="progressBar" onmousedown="startSeek(event)" ontouchstart="startSeek(event)">
-            <div class="progress-fill" id="progressFill"></div>
+          <div class="progress-wrap">
+            <div class="time-row">
+              <span id="curTime">0:00</span>
+              <span id="statusText"></span>
+              <span id="totalTime">0:00</span>
+            </div>
+            <div class="progress-bar" id="progressBar" onmousedown="startSeek(event)" ontouchstart="startSeek(event)">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
           </div>
         </div>
         <div id="fileInfo" style="display:none"></div>
@@ -720,7 +733,7 @@ function _applyAllAppearance(transparency, blurPct){
 function applyPanelAppearance(){
   const tp = document.getElementById('panelTransparency');
   const bl = document.getElementById('panelBlur');
-  _applyAllAppearance(tp ? parseFloat(tp.value) : 100, bl ? parseFloat(bl.value) : 25);
+  _applyAllAppearance(tp ? parseFloat(tp.value) : 25, bl ? parseFloat(bl.value) : 0);
 }
 // ===== 统一下拉面板：从控制行下方展开，最大高度约渲染区 2/3 =====
 function _closeDropPanelsOnly(except){
@@ -3335,11 +3348,15 @@ function _fsHideControls(){
 // 进入/退出全屏：设置面板随全屏元素移动（让左上角设置按钮能展开它）
 const _panelEl = document.getElementById('controlPanel');
 const _panelHome = _panelEl ? { parent: _panelEl.parentElement, next: _panelEl.nextSibling } : null;
+// 全屏时把整个进度面板（统计+时间+状态+进度条）挂到渲染区顶部中央
+const _progressEl = document.getElementById('progressPanel');
+const _progressHome = _progressEl ? { parent: _progressEl.parentElement, next: _progressEl.nextSibling } : null;
 function _syncFsLayout(){
   const vp = document.querySelector('.visual-panel');
   if(!vp) return;
   if(_isFullscreenNow()){
     if(_panelEl){ vp.appendChild(_panelEl); _panelEl.classList.add('in-fs'); }
+    if(_progressEl){ vp.appendChild(_progressEl); _progressEl.classList.add('in-fs'); _progressEl.classList.remove('hidden'); }
     _fsShowControls();
   } else {
     _fsHideControls();
@@ -3349,7 +3366,17 @@ function _syncFsLayout(){
       _panelEl.classList.remove('in-fs');
       if(_panelHome) _panelHome.parent.insertBefore(_panelEl, _panelHome.next);
     }
+    if(_progressEl){
+      _progressEl.classList.remove('in-fs'); _progressEl.classList.remove('hidden');
+      if(_progressHome) _progressHome.parent.insertBefore(_progressEl, _progressHome.next);
+    }
   }
+}
+// 全屏时单击渲染区：收起/重新显示悬浮进度面板
+function toggleProgressOverlay(){
+  if(!_isFullscreenNow()) return;
+  const p = document.getElementById('progressPanel');
+  if(p) p.classList.toggle('hidden');
 }
 document.addEventListener('fullscreenchange', _syncFsLayout);
 document.addEventListener('webkitfullscreenchange', _syncFsLayout);
@@ -3740,14 +3767,17 @@ function _userPlayKey(midi){
   SoundfontLoader.playNote(midi, 0.9, 0.7); // 用户敲击：固定力度与时长
   requestStaticRedraw(); // 暂停时也要立即显示按下紫色高亮
 }
-let _lastCanvasTap = 0;
+let _canvasTapTimer = null;
 canvas.addEventListener('pointerdown', (e) => {
   const midi = _canvasPointToKey(e);
   if(midi == null){
-    // 非钢琴键的渲染区：双击（含双触）等价于播放/暂停
-    const now = Date.now();
-    if(now - _lastCanvasTap < 300){ _lastCanvasTap = 0; togglePlay(); }
-    else { _lastCanvasTap = now; }
+    // 非钢琴键的渲染区：单击收起/显示进度面板；双击（含双触）播放/暂停
+    if(_canvasTapTimer){
+      clearTimeout(_canvasTapTimer); _canvasTapTimer = null;
+      togglePlay();
+    } else {
+      _canvasTapTimer = setTimeout(() => { _canvasTapTimer = null; toggleProgressOverlay(); }, 300);
+    }
     e.preventDefault();
     return;
   }
