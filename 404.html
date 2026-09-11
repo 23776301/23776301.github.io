@@ -3,52 +3,89 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="robots" content="noindex">
-<meta http-equiv="refresh" content="12;url=/">
-<title>404 · 页面走丢了 · teecatt</title>
+<title>404 · teecatt</title>
 <style>
-:root{--bg:#0d1117;--bg2:#0a0d13;--surface:#161b22;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--violet:#c822ff;--red:#ff3f58}
+:root{--bg:#0d1117;--surface:#161b22;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--accent2:#3fb950;--hover:#21262d;--violet:#c822ff;--red:#ff3f58;--warn:#e8b64c}
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',Helvetica,Arial,sans-serif;background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(88,166,255,.12),transparent),radial-gradient(ellipse 60% 50% at 85% 110%,rgba(200,34,255,.08),transparent),var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 20px;overflow:hidden;position:relative}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:44px 44px;pointer-events:none}
-.code{position:relative;font-size:clamp(96px,22vw,190px);font-weight:900;letter-spacing:-.04em;line-height:1;background:linear-gradient(120deg,var(--accent) 10%,var(--violet) 60%,var(--red) 110%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 18px 50px rgba(88,166,255,.28));animation:float 5.5s ease-in-out infinite;user-select:none}
-.code::after{content:'404';position:absolute;inset:0;background:linear-gradient(120deg,var(--accent),var(--violet),var(--red));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:blur(28px);opacity:.35;z-index:-1}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
-.title{margin-top:20px;font-size:clamp(18px,3.4vw,24px);font-weight:700}
-.sub{margin-top:10px;font-size:clamp(13px,2.4vw,14.5px);color:var(--muted);line-height:1.7;max-width:460px;text-align:center}
-.countdown{margin-top:18px;font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums}
-.btns{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:30px}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:10px;font-size:14px;font-weight:600;text-decoration:none;border:1px solid var(--line);color:var(--text);background:var(--surface);transition:all .18s;min-height:44px}
-.btn:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.35)}
-.btn-primary{background:linear-gradient(135deg,rgba(88,166,255,.18),rgba(200,34,255,.14));border-color:rgba(88,166,255,.5)}
-.btn-primary:hover{border-color:var(--accent)}
-.hint{position:absolute;bottom:20px;font-size:11px;color:rgba(139,148,158,.6)}
-@media(max-width:600px){.btns{gap:8px;margin-top:22px}.btn{padding:10px 16px;font-size:13px}}
+*{-webkit-tap-highlight-color:transparent}
+a{text-decoration:none;color:inherit}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+.topbar{height:56px;display:flex;align-items:center;padding:0 24px;gap:12px;border-bottom:1px solid var(--line);background:var(--surface)}
+.logo{font-size:16px;font-weight:700;background:linear-gradient(120deg,var(--accent),var(--violet));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.topbar .sub{font-size:12px;color:var(--muted)}
+.hero{padding:56px 24px 8px;text-align:center}
+.hero h1{font-size:40px;font-weight:800;margin-bottom:12px;background:linear-gradient(120deg,var(--accent),var(--violet));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;display:inline-block}
+.hero p{font-size:13px;color:var(--muted)}
+.grid{flex:1;display:grid;gap:18px;justify-content:center;align-content:start;padding:36px 24px 60px;max-width:1080px;margin:0 auto;width:100%;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px 22px;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.card:active{opacity:.82}
+.card .ico{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;background:rgba(88,166,255,.15);border:1px solid rgba(88,166,255,.4)}
+.card h2{font-size:16px;font-weight:600}
+.card .desc{font-size:12.5px;color:var(--muted);line-height:1.6;flex:1}
+.card .go{font-size:13px;color:var(--accent);font-weight:600}
+footer{border-top:1px solid var(--line);padding:16px 24px;text-align:center;font-size:11px;color:var(--muted)}
+footer a{color:var(--accent)}
+@media(max-width:600px){.hero{padding-top:36px}.hero h1{font-size:32px}.grid{padding:24px 16px 40px;gap:14px}}
 </style>
 </head>
 <body>
-<div class="code">404</div>
-<div class="title">页面走丢了</div>
-<div class="sub">你访问的地址不存在、已被移动或刚刚重构过。<br>别担心,站点的其他内容都还在。</div>
-<div class="countdown">将在 <span id="sec">12</span> 秒后自动返回首页</div>
-<div class="btns">
-  <a class="btn btn-primary" href="/">← 返回首页</a>
-  <a class="btn" href="/tools/">个人实用工具</a>
-  <a class="btn" href="/links/">外部实用小工具</a>
-  <a class="btn" href="/music_visualization/">音频可视化</a>
+<div class="topbar">
+  <span class="logo">teecatt</span>
+  <span class="sub">404</span>
 </div>
-<div class="hint">teecatt · GitHub Pages</div>
+<div class="hero">
+  <h1>404</h1>
+  <p>页面不存在或已被移动。下面是从主页实时同步的入口：</p>
+</div>
+<div class="grid" id="links"></div>
+<footer>teecatt · Powered by GitHub Pages · <a href="/">返回首页</a></footer>
+
 <script>
-(function(){
-  var el = document.getElementById('sec');
-  if(!el) return;
-  var left = 12;
-  var t = setInterval(function(){
-    left--;
-    if(left <= 0){ clearInterval(t); location.href = '/'; return; }
-    el.textContent = left;
-  }, 1000);
+/* 实时从主页 index.html 解析卡片，生成入口按钮，主页更新即自动同步 */
+(async function(){
+  var grid = document.getElementById('links');
+  function addCard(href, title, desc, ico){
+    var a = document.createElement('a');
+    a.className = 'card';
+    a.href = href;
+    var d = document.createElement('div'); d.className='ico'; d.textContent = ico || '🔗';
+    var h = document.createElement('h2'); h.textContent = title;
+    var p = document.createElement('div'); p.className='desc'; p.textContent = desc || '';
+    var g = document.createElement('div'); g.className='go'; g.textContent = '打开 →';
+    a.appendChild(d); a.appendChild(h); a.appendChild(p); a.appendChild(g);
+    grid.appendChild(a);
+  }
+  function abs(href){
+    try{ return new URL(href, location.origin + '/').href; }catch(e){ return href; }
+  }
+  try{
+    var res = await fetch('/', {cache:'no-store'});
+    if(!res.ok) throw new Error('fetch '+res.status);
+    var html = await res.text();
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    var cards = doc.querySelectorAll('.card');
+    cards.forEach(function(card){
+      var link = card.matches('a.card') ? card : card.querySelector('a.card-body, a.go, a');
+      if(!link) return;
+      var rawHref = link.getAttribute('href');
+      if(!rawHref) return;
+      var h2 = card.querySelector('h2');
+      var title = h2 ? h2.textContent.replace(/在线版|NEW/g,'').trim() : rawHref;
+      var descEl = card.querySelector('.desc');
+      var desc = descEl ? descEl.textContent.trim() : '';
+      var icoEl = card.querySelector('.ico');
+      var ico = icoEl ? icoEl.textContent.trim() : '🔗';
+      addCard(abs(rawHref), title, desc, ico);
+    });
+    if(!grid.children.length) throw new Error('no cards');
+  }catch(e){
+    /* 回退：静态入口 */
+    addCard('/', '返回首页', '', '🏠');
+    addCard('/tools/', '资源库', '按类型整理的工具与脚本', '⚙');
+    addCard('/links/', '外部实用小工具', '好用的小玩意', '🔗');
+    addCard('/music_visualization/', '音频可视化', '10 种可视化样式', '♫');
+  }
 })();
 </script>
 </body>
