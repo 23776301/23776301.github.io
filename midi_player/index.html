@@ -306,6 +306,19 @@ select:focus{border-color:var(--accent)}
         <input type="range" id="volSlider" min="0" max="1" step="0.01" value="0.7" oninput="onVolChange()">
         <span class="val" id="volVal">70%</span>
       </div>
+      <div class="row">
+        <label>钢琴高度</label>
+        <input type="range" id="pianoHeightSlider" min="5" max="50" step="1" value="16" oninput="onPianoHeightChange()">
+        <span class="val" id="pianoHeightVal">16%</span>
+      </div>
+      <div class="row">
+        <label>模式</label>
+        <label class="switch" title="欣赏模式：音符自动发声；演奏模式：需点击琴键发声">
+          <input id="playModeSw" type="checkbox" checked onchange="onPlayModeChange()">
+          <span class="track"><span class="knob"></span></span>
+          <span id="playModeLabel">欣赏模式</span>
+        </label>
+      </div>
 
       <h2 style="margin-top:20px">音色</h2>
       <div class="row">
@@ -2045,6 +2058,25 @@ let nextNoteIndex = 0;
 let rafId = null;
 const activeKeySet = new Set();
 let loopEnabled = false;
+let playMode = 'appreciate';   // 'appreciate' 欣赏模式（自动发声） | 'perform' 演奏模式（需点击琴键发声）
+let pianoHeightPct = 16;       // 钢琴（键盘区）高度占绘制区比例，范围 5-50
+
+// 欣赏模式 / 演奏模式切换
+function onPlayModeChange(){
+  const sw = document.getElementById('playModeSw');
+  playMode = (sw && sw.checked) ? 'appreciate' : 'perform';
+  const label = document.getElementById('playModeLabel');
+  if(label) label.textContent = (playMode === 'appreciate') ? '欣赏模式' : '演奏模式';
+  if(playMode === 'perform') SoundfontLoader.stopAll(); // 演奏模式：停止自动排程的音符
+}
+// 钢琴高度（键盘区占绘制区比例）调节
+function onPianoHeightChange(){
+  const s = document.getElementById('pianoHeightSlider');
+  pianoHeightPct = s ? Math.max(5, Math.min(50, parseFloat(s.value) || 16)) : 16;
+  const v = document.getElementById('pianoHeightVal');
+  if(v) v.textContent = Math.round(pianoHeightPct) + '%';
+  try{ resizeCanvas(); }catch(e){}
+}
 
 // 播放控制图标（Feather 线性风格；currentColor 使其自动融入任意主题配色）
 const _svgIcon = (inner, size) => '<svg width="' + (size || 14) + '" height="' + (size || 14) +
@@ -2392,7 +2424,8 @@ function playLoop(){
     }
     const note = allNotes[nextNoteIndex];
     _trigCount++;
-    SoundfontLoader.playNote(note.midi, note.velocity, note.duration / playSpeed);
+    // 演奏模式：音符只下落不自动发声，需用户点击琴键
+    if(playMode === 'appreciate') SoundfontLoader.playNote(note.midi, note.velocity, note.duration / playSpeed);
     nextNoteIndex++;
   }
   if(_skipped > 0){
@@ -2725,7 +2758,7 @@ function renderStatic(){
   staticCanvas.width = C.w; staticCanvas.height = C.h;
   const sctx = staticCanvas.getContext('2d');
   const layout = cachedLayout;
-  const keyAreaH = 80 * devicePixelRatio;
+  const keyAreaH = C.h * (pianoHeightPct / 100);
   const keyTop = C.h - keyAreaH;
   const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
   // 背景
@@ -2812,7 +2845,7 @@ function drawScene(notes, startIdx, endIdx, curTime){
   curTime = curTime || 0;
   // 直接贴预渲染的静态层
   ctx.drawImage(staticCanvas, 0, 0);
-  const keyAreaH = 80 * devicePixelRatio;
+  const keyAreaH = C.h * (pianoHeightPct / 100);
   const keyTop = C.h - keyAreaH;
   const fallDuration = 2.0 / fallSpeedMultiplier;
   const invFallDur = 1 / fallDuration;
