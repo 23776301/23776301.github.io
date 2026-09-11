@@ -36,7 +36,7 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
 .fab-group.faded{opacity:0.5}
 .fab-group.hidden-btn{display:none !important}
 .menu-btn{
-  display:flex;
+  display:none;
   width:44px;height:44px;
   border-radius:50%;
   background:rgba(22,22,31,.85);border:1px solid var(--border);
@@ -62,9 +62,14 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
   backdrop-filter:blur(8px);user-select:none;
   flex:0 0 auto;
 }
-/* PC 端没有菜单按钮：按钮组固定在右下角 */
+/* PC 端：隐藏悬浮按钮组，菜单按钮改到顶栏（上传 MIDI 左侧） */
 @media(min-width:801px){
-  .fab-group{left:auto;right:8px;top:auto;bottom:8px;transform:none;}
+  .fab-group{display:none}
+}
+/* PC 顶栏菜单按钮（移动端隐藏） */
+.btn.menu-top-btn{display:none}
+@media(min-width:801px){
+  .btn.menu-top-btn{display:inline-flex}
 }
 
 /* 自定义配色弹窗的目标选择按钮 */
@@ -419,22 +424,9 @@ select:focus{border-color:var(--accent)}
           <button class="btn primary" id="loopBtn" onclick="toggleLoop()" disabled style="flex:1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>顺序播放</button>
           <button class="btn" onclick="openManageModal()" style="flex:1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>管理谱面</button>
         </div>
-        <div class="progress-wrap">
-          <div class="time-row">
-            <span id="curTime">0:00</span>
-            <span id="totalTime">0:00</span>
-          </div>
-          <div class="progress-bar" id="progressBar" onmousedown="startSeek(event)" ontouchstart="startSeek(event)">
-            <div class="progress-fill" id="progressFill"></div>
-          </div>
-        </div>
-        <div class="stats-bar" style="font-size:10px;color:var(--dim);margin-top:3px;display:flex;justify-content:space-between">
-          <span><span id="statTracks">轨道：-</span> · <span id="statTotal">音符：-</span></span>
-          <span><span id="statPlayed">已播：-/-</span> · <span id="statPercent">0.00%</span></span>
-        </div>
         <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
           <span style="font-size:9px;color:var(--dim);flex-shrink:0;height:44px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;line-height:1;"><span>配</span><span>色</span><span>方</span><span>案</span></span>
-          <div style="display:grid;grid-template-columns:repeat(4,auto);gap:5px;flex-shrink:0;">
+          <div class="pal-grid">
             <button class="pal-btn palette-btn" data-palette="A" onclick="setPalette('A')" title="纯紫">A</button>
             <button class="pal-btn palette-btn active" data-palette="B" onclick="setPalette('B')" title="青蓝×琥珀红">B</button>
             <button class="pal-btn palette-btn" data-palette="C" onclick="setPalette('C')" title="青绿×品红">C</button>
@@ -447,9 +439,22 @@ select:focus{border-color:var(--accent)}
             <span style="height:20px;display:flex;align-items:flex-end;line-height:1;">黑键</span>
           </div>
           <div id="paletteSwatch" style="flex:1;min-width:90px;max-width:340px;height:44px;position:relative;"></div>
-          <button class="pal-btn" id="fsBtn" onclick="toggleFullscreen()" title="全屏绘制区" aria-label="全屏绘制区" style="flex-shrink:0">
-            <svg id="fsIcon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          <button class="fs-btn" id="fsBtn" onclick="toggleFullscreen()" title="全屏绘制区" aria-label="全屏绘制区">
+            <svg id="fsIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
           </button>
+        </div>
+        <div class="stats-bar" style="font-size:10px;color:var(--dim);margin-top:3px;display:flex;justify-content:space-between">
+          <span><span id="statTracks">轨道：-</span> · <span id="statTotal">音符：-</span></span>
+          <span><span id="statPlayed">已播：-/-</span> · <span id="statPercent">0.00%</span></span>
+        </div>
+        <div class="progress-wrap">
+          <div class="time-row">
+            <span id="curTime">0:00</span>
+            <span id="totalTime">0:00</span>
+          </div>
+          <div class="progress-bar" id="progressBar" onmousedown="startSeek(event)" ontouchstart="startSeek(event)">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
         </div>
         <div id="fileInfo" style="display:none"></div>
       </div>
@@ -2662,8 +2667,8 @@ function savePaletteCustom(){
 })();
 
 // 全屏绘制区
-const FS_ICON_MAX = '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>';
-const FS_ICON_MIN = '<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>';
+const FS_ICON_MAX = '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>';
+const FS_ICON_MIN = '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>';
 function toggleFullscreen(){
   const el = document.querySelector('.visual-panel');
   if(!el) return;
