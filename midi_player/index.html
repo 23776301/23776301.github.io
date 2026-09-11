@@ -102,37 +102,31 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 /* 键盘焦点轮廓跟随圆角（仅键盘触发，触屏不显示） */
 .pal-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-/* 移动端菜单面板：占满宽、上方 2/3 高，渐隐渐显（无左右抽屉动画） */
-@media(max-width:800px){
-  .control-panel{
-    position:fixed;top:0;left:0;z-index:1000;
-    width:100vw;height:66.67vh;
-    overflow-y:auto;
-    border-radius:0 0 16px 16px;
-    opacity:0;visibility:hidden;pointer-events:none;
-    transition:opacity .22s ease, visibility .22s;
-    box-shadow:0 14px 44px rgba(0,0,0,.55);
-  }
-  .control-panel.open{opacity:1;visibility:visible;pointer-events:auto}
-  /* 右侧容器固定全屏 */
-  .layout > div:last-child{
-    position:fixed;inset:0;display:flex;flex-direction:column;
-  }
-  .top-bar{flex-shrink:0}
-  .visual-panel{
-    flex:1;border-radius:0;border:none;padding:0;
-    min-height:0;position:relative;overflow:hidden;
-  }
-  #visualCanvas{height:100% !important;border-radius:0}
-  .overlay-mask{
-    display:none;position:fixed;inset:0;z-index:999;
-    background:rgba(0,0,0,.4);
-  }
-  .overlay-mask.show{display:block}
+/* 菜单面板：PC 与移动端统一为浮层，渐隐渐显，半透明 + 背景模糊 */
+.control-panel{
+  position:fixed;top:0;left:0;z-index:1000;
+  height:66.67vh;overflow-y:auto;
+  border-radius:0 0 16px 0;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .22s ease, visibility .22s;
+  box-shadow:0 14px 44px rgba(0,0,0,.55);
+  background:rgba(0,0,0,0);
+  backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
 }
-
-/* 菜单面板：采用调试面板的半透明 + 背景模糊风格（透明度/模糊度由面板内滑块调节） */
-.control-panel{background:rgba(0,0,0,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.control-panel.open{opacity:1;visibility:visible;pointer-events:auto}
+.overlay-mask{display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.4)}
+.overlay-mask.show{display:block}
+@media(max-width:800px){
+  .control-panel{width:100vw}
+  /* 右侧容器固定全屏 */
+  .layout > div:last-child{position:fixed;inset:0;display:flex;flex-direction:column}
+  .top-bar{flex-shrink:0}
+  .visual-panel{flex:1;border-radius:0;border:none;padding:0;min-height:0;position:relative;overflow:hidden}
+  #visualCanvas{height:100% !important;border-radius:0}
+}
+@media(min-width:801px){
+  .control-panel{width:50vw;max-width:560px}
+}
 
 /* 配色方案按钮：移动端 2×2，PC 单行（降低配色栏高度） */
 .pal-grid{display:grid;grid-template-columns:repeat(2,auto);gap:5px;flex-shrink:0}
@@ -253,15 +247,11 @@ select:focus{border-color:var(--accent)}
   html,body{height:100%}
   body{height:100vh;height:100dvh;overflow:hidden}
   .container{height:100%;display:flex;flex-direction:column;padding:12px 16px 8px}
-  .layout{flex:1;min-height:0}
-  .control-panel{min-height:0;overflow-y:auto}
-  .layout > div:last-child{display:flex;flex-direction:column;min-height:0}
+  .layout{flex:1;min-height:0;display:flex;flex-direction:column}
+  .layout > div:last-child{flex:1;min-height:0;display:flex;flex-direction:column}
   .top-bar{flex-shrink:0}
   .visual-panel{flex:1;min-height:0;display:flex;flex-direction:column;padding:8px}
   #visualCanvas{flex:1;min-height:0;height:auto}
-  /* 菜单折叠：隐藏左侧面板，绘制区占满整行 */
-  .layout.menu-collapsed{grid-template-columns:0 1fr;gap:0}
-  .layout.menu-collapsed .control-panel{display:none}
 }
 /* 全屏绘制区 */
 .visual-panel:fullscreen{padding:0;background:#000;display:flex;flex-direction:column}
@@ -2115,17 +2105,10 @@ function toggleLoop(){
 
 function toggleMenu(){
   const panel = document.getElementById('controlPanel');
-  const group = document.getElementById('fabGroup');
-  // PC：折叠/展开左侧面板（隐藏后绘制区占满整行），菜单按钮始终保留以便再次展开
-  if(window.innerWidth > 800){
-    const layout = document.querySelector('.layout');
-    if(layout) layout.classList.toggle('menu-collapsed');
-    if(group) showMenuBtn();
-    return;
-  }
   const mask = document.getElementById('overlayMask');
+  const group = document.getElementById('fabGroup');
   const isOpen = panel.classList.toggle('open');
-  mask.classList.toggle('show', isOpen);
+  if(mask) mask.classList.toggle('show', isOpen);
   if(group){
     if(isOpen){
       group.classList.add('hidden-btn');
