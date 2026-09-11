@@ -81,17 +81,18 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
   width:32px;height:32px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
   padding:0;border:none;cursor:pointer;
-  background:rgba(124,58,237,.15);color:#c4b5fd;
+  background:var(--accent);color:#fff;
   font-size:13px;font-weight:600;
   transition:background .15s,box-shadow .15s;
 }
-.pal-btn.active{background:var(--accent);color:#fff}
-.pal-btn:hover{background:rgba(124,58,237,.3)}
-/* 按下反馈：背景与环形阴影都随 border-radius 裁切，形状与外观一致 */
-.pal-btn:active{background:rgba(124,58,237,.5);box-shadow:0 0 0 3px rgba(124,58,237,.28);opacity:1}
+/* 选中：实心主题紫 + 外圈白框标识（与播放控制按钮一致的选中观感） */
+.pal-btn.active{background:var(--accent);color:#fff;box-shadow:0 0 0 2px #fff}
+.pal-btn:hover{background:#7c3aed}
+/* 按下反馈 */
+.pal-btn:active{background:#6d28d9;opacity:1}
 .pal-btn:focus{outline:none}
 /* 键盘焦点轮廓跟随圆角（仅键盘触发，触屏不显示） */
-.pal-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pal-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
 
 /* 统一下拉面板：从控制行下方展开，浮在渲染区之上，最大高度约渲染区 2/3 */
 .drop-panel{
@@ -134,7 +135,8 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .ctl-btn.primary:hover{background:#7c3aed}
 .ctl-btn svg{width:16px;height:16px}
 /* 配色面板：从控制行下方展开（absolute，不遮挡按钮） */
-.palette-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:230px}
+.palette-row{display:none;align-items:center;gap:8px;flex-wrap:wrap;min-width:230px}
+.palette-row.open{display:flex}
 #paletteToggleIcon{transition:transform .2s}
 
 /* 谱面管理面板：统一下拉浮层 */
@@ -680,13 +682,18 @@ function applyPanelAppearance(){
   _applyAllAppearance(tp ? parseFloat(tp.value) : 100, bl ? parseFloat(bl.value) : 25);
 }
 // ===== 统一下拉面板：从控制行下方展开，最大高度约渲染区 2/3 =====
-function closeAllDropPanels(except){
+function _closeDropPanelsOnly(except){
   document.querySelectorAll('.drop-panel.open').forEach(p => { if(p !== except) p.classList.remove('open'); });
 }
-// 点击面板 / 触发按钮以外区域：关闭所有下拉面板
+// 关闭所有下拉面板 + 选谱/音色下拉（互斥）
+function closeAllDropPanels(except){
+  _closeDropPanelsOnly(except);
+  if(typeof closeAllCustomSelects === 'function') closeAllCustomSelects();
+}
+// 点击面板 / 触发按钮 / 下拉以外区域：关闭所有
 document.addEventListener('pointerdown', (e) => {
   const t = e.target;
-  if(t && t.closest && (t.closest('.drop-panel') || t.closest('.drop-trigger'))) return;
+  if(t && t.closest && (t.closest('.drop-panel') || t.closest('.drop-trigger') || t.closest('.csel') || t.closest('.csel-pop'))) return;
   closeAllDropPanels();
 }, true);
 // 调试面板：从控制行下方展开（CSS absolute 定位）
@@ -1659,6 +1666,7 @@ function initCustomSelect(select, opts){
   function onDocDown(e){ if(!wrap.contains(e.target) && !pop.contains(e.target)) close(); }
   function open(){
     closeAllCustomSelects();
+    if(typeof _closeDropPanelsOnly === 'function') _closeDropPanelsOnly(); // 与设置/调试/配色/管理面板互斥
     if(search) search.value = '';
     buildList();
     wrap.classList.add('open');
