@@ -876,52 +876,93 @@ const SoundfontLoader = {
     this.current = name;
   },
 
+  // 校验内容是否为合法音色 JS：防止把 HTML 错误页或截断文件当 JS 解析
+  _isSoundfontText(text, name){
+    if(!text || text.length < 1024) return false;
+    if(text.indexOf('MIDI.Soundfont') < 0) return false;
+    if(text.indexOf(name) < 0) return false;
+    return /}\s*$/.test(text); // 截断文件停在 base64 中间，结尾无 }
+  },
+
+  // 解析音色文本；失败时抛出带诊断信息的错误（而非笼统的 token 错误）
+  _parseSoundfont(text, name){
+    let raw;
+    try{
+      const MIDI = { Soundfont: {} };
+      const fn = new Function('MIDI', text + '\nreturn MIDI.Soundfont["' + name + '"];');
+      raw = fn(MIDI);
+    }catch(e){
+      throw new Error('音色内容不是合法JS（疑似截断或错误页）: ' +
+        text.slice(0, 80).replace(/\s+/g, ' '));
+    }
+    if(!raw || typeof raw !== 'object') throw new Error('音色数据解析失败');
+    return raw;
+  },
+
+  // 读取音色文本：优先缓存（内容校验通过），否则走网络并回写缓存
+  async _fetchSoundfontText(name, url, absUrl, cache){
+    if(cache){
+      try{
+        const cached = await cache.match(absUrl, {ignoreSearch: true});
+        if(cached){
+          const t = await cached.text();
+          if(this._isSoundfontText(t, name)) return { text: t, fromCache: true };
+          // 坏缓存：删除该条，强制走网络，避免永久命中
+          await cache.delete(absUrl);
+          console.warn('[AudioDebug] 检测到损坏的音色缓存并已清除: ' + name);
+        }
+      }catch(e){}
+    }
+    const resp = await fetch(url, {mode: 'cors'});
+    if(!resp.ok) throw new Error('下载失败 HTTP ' + resp.status);
+    const text = await resp.text();
+    if(!this._isSoundfontText(text, name)){
+      throw new Error('音色文件内容异常（非JS，可能被截断或网络返回错误页）: ' +
+        text.slice(0, 80).replace(/\s+/g, ' '));
+    }
+    if(cache){
+      // 直接用已校验的 text 构造 Response 写缓存：
+      // 旧写法 text=await resp.text() 后再 resp.clone() 会因 body 已消费而抛错，
+      // 导致好响应永远写不进缓存。
+      const mk = () => new Response(text, {headers: {'Content-Type': 'application/javascript; charset=utf-8'}});
+      try{
+        await cache.put(absUrl, mk());
+      }catch(e){
+        // 存储空间不足时，清理一半旧缓存后重试
+        try{
+          const keys = await cache.keys();
+          for(let i = 0; i < Math.floor(keys.length / 2); i++) await cache.delete(keys[i]);
+          await cache.put(absUrl, mk());
+        }catch(e2){}
+      }
+    }
+    return { text: text, fromCache: false };
+  },
+
   async _doLoad(name, onProgress){
     const url = this.cdnBase + name + '-ogg.js';
     // 统一转绝对路径作为缓存key，避免相对路径解析问题
     const absUrl = new URL(url, window.location.href).href;
     if(onProgress) onProgress(0, '正在下载音色…');
-    let text = null;
-    let fromCache = false;
+    let cache = null;
+    try{ cache = await caches.open(this.cacheName); }catch(e){}
+    let res = await this._fetchSoundfontText(name, url, absUrl, cache);
+    if(onProgress) onProgress(0.5, res.fromCache ? '从缓存读取音色…' : '下载完成，解析中…');
+    let raw;
     try{
-      const cache = await caches.open(this.cacheName);
-      // ignoreSearch忽略查询参数
-      const cached = await cache.match(absUrl, {ignoreSearch: true});
-      if(cached){
-        text = await cached.text();
-        fromCache = true;
-        if(onProgress) onProgress(0.5, '从缓存读取音色…');
-      }
-    }catch(e){}
-    if(!text){
-      const resp = await fetch(url, {mode: 'cors'});
-      if(!resp.ok) throw new Error('下载失败 HTTP ' + resp.status);
-      text = await resp.text();
-      // 用resp.clone()缓存原始Response，保留正确headers
-      try{
-        const cache = await caches.open(this.cacheName);
-        await cache.put(absUrl, resp.clone());
-      }catch(e){
-        // 存储空间不足时，清理旧缓存后重试
-        try{
-          const cache = await caches.open(this.cacheName);
-          const keys = await cache.keys();
-          // 清理一半旧缓存
-          for(let i = 0; i < Math.floor(keys.length / 2); i++) await cache.delete(keys[i]);
-          await cache.put(absUrl, resp.clone());
-        }catch(e2){}
-      }
-      if(onProgress) onProgress(0.5, '下载完成，解析中…');
+      raw = this._parseSoundfont(res.text, name);
+    }catch(e){
+      // 缓存内容能过格式校验却解析失败：删除该条并强制走网络重试一次
+      if(!res.fromCache) throw e;
+      if(cache){ try{ await cache.delete(absUrl); }catch(_){} }
+      res = await this._fetchSoundfontText(name, url, absUrl, cache);
+      raw = this._parseSoundfont(res.text, name);
     }
-    const MIDI = { Soundfont: {} };
-    const fn = new Function('MIDI', text + '\nreturn MIDI.Soundfont["' + name + '"];');
-    const raw = fn(MIDI);
-    if(!raw) throw new Error('音色数据解析失败');
     this.loaded[name] = { raw: raw, buffers: {}, ready: true };
     // 正常播放音色相关每个谱只打一条：缓存命中 vs 网络下载
     if(onProgress){
       console.log('[AudioDebug][INFO] 音色 ' + name +
-        (fromCache ? ' 从缓存加载并解析成功' : ' 下载并解析成功'));
+        (res.fromCache ? ' 从缓存加载并解析成功' : ' 下载并解析成功'));
     }
     if(onProgress) onProgress(1, '音色加载完成');
   },
