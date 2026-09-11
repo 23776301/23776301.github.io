@@ -130,8 +130,8 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .ctl-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .ctl-btn.primary:hover{background:#7c3aed}
 .ctl-btn svg{width:16px;height:16px}
-/* 配色面板：下拉浮层，内部布局 */
-.palette-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:230px}
+/* 配色面板：从控制行下方展开（absolute，不遮挡按钮） */
+.palette-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:230px;position:absolute;top:100%;right:0;margin-top:6px}
 #paletteToggleIcon{transition:transform .2s}
 
 /* 谱面管理面板：统一下拉浮层 */
@@ -302,8 +302,8 @@ select:focus{border-color:var(--accent)}
 .fs-exit{top:14px;right:14px}
 /* 2s 未点击悬浮按钮：淡到 10% */
 .fs-overlay.faded .fs-float-btn{opacity:.1}
-/* 调试面板：统一下拉浮层 */
-.debug-panel{display:none}
+/* 调试面板：从控制行下方展开（absolute，不遮挡按钮） */
+.debug-panel{display:none;position:absolute;top:100%;right:0;margin-top:6px}
 .debug-panel.open{display:block}
 .file-info{font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6}
 .file-info b{color:var(--text)}
@@ -701,9 +701,12 @@ document.addEventListener('pointerdown', (e) => {
   if(t && t.closest && (t.closest('.drop-panel') || t.closest('.drop-trigger'))) return;
   closeAllDropPanels();
 }, true);
-// 调试面板：从调试按钮向下展开
+// 调试面板：从控制行下方展开（CSS absolute 定位）
 function toggleDebugPanel(){
-  openDropPanel(document.getElementById('debugPanel'), document.getElementById('debugToggleBtn'));
+  const p = document.getElementById('debugPanel');
+  if(!p) return;
+  closeAllDropPanels(p);
+  p.classList.toggle('open');
 }
 
 // 性能降级时是否自动展开调试区（默认勾选）
@@ -717,7 +720,7 @@ function onDbgAutoOpenChange(){
 function autoOpenDebugPanel(){
   if(!debugEnabled || !dbgAutoOpen) return;
   const panel = document.getElementById('debugPanel');
-  if(panel) positionDropPanel(panel, document.getElementById('debugToggleBtn'));
+  if(panel){ closeAllDropPanels(panel); panel.classList.add('open'); }
   setTimeout(() => { if(typeof scrollDebugBottom === 'function') scrollDebugBottom(); }, 0);
 }
 
@@ -2806,7 +2809,8 @@ function togglePaletteRow(){
   const row = _paletteRow();
   if(!row) return;
   cancelPaletteAutoCollapse();
-  openDropPanel(row, document.getElementById('paletteToggleBtn'));
+  closeAllDropPanels(row);
+  row.classList.toggle('open');
   updatePaletteToggleIcon();
   if(row.classList.contains('open')) schedulePaletteAutoCollapse();
 }
