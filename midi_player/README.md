@@ -372,7 +372,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **下一首**：`nextSong()` 切到列表下一首，到底回到第一首；`#nextBtn` 在谱面加载后启用。
 - **按钮**：全部为圆形 `.ctl-btn.primary`（主题紫底 + 白图标，无文字）；上传 `arcticons:folder-upload`、管理 `fluent:text-bullet-list-edit-20-filled`、设置 `solar:settings-minimalistic-bold`、配色 `ic:round-color-lens`、调试 `carbon:debug`、全屏 `solar:maximize/minimize-linear`；循环为**列表（`bi:repeat`）/ 单曲（`bi:repeat-1`）两态**。
 - **全屏按钮**：第一行最右，对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。全屏内另有悬浮控件（见 9.11）。
-- **统一下拉面板**：设置 / 谱面管理 / 配色 / 调试四个面板风格一致，均从各自触发按钮**向下展开**（`positionDropPanel()` 按 `getBoundingClientRect` 定位、右对齐并夹取到视口内），最大高度约视口 2/3（≈渲染区 2/3），点击面板/触发按钮以外区域关闭（`closeAllDropPanels`）。
+- **统一下拉面板**：设置 / 谱面管理 / 配色 / 调试四个面板风格一致，均从各自触发按钮**向下展开**（四个面板均作为 `.control-row` 子元素，`position:absolute; top:100%; right:0`，即控制行下方），最大高度约视口 2/3（≈渲染区 2/3），点击面板/触发按钮以外区域关闭（`closeAllDropPanels`）。
 
 ## 9.7 菜单面板、调试面板与滑动开关
 
@@ -401,7 +401,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.9 配色面板（下拉浮层）
 
 - 控制行内的配色按钮（`paletteToggleBtn`，圆形紫色 `.ctl-btn.primary`，图标 `ic:round-color-lens`，收起时旋转 180°）切换 `paletteRow`；**默认收起**，点击从按钮下方展开。
-- **下拉浮层**：`paletteRow` 使用统一 `.drop-panel` 样式（`positionDropPanel` 定位），浮在渲染区之上，**不改变渲染区高度，也不影响进度条 / 统计信息位置**；背景与设置/调试/选谱/管理面板共享同一透明度与模糊（`_panelTargets` 含 `paletteRow`）。
+- **下拉浮层**：`paletteRow` 使用统一 `.drop-panel` 样式（绝对定位在控制行下方），浮在渲染区之上，**不改变渲染区高度，也不影响进度条 / 统计信息位置**；背景与设置/调试/选谱/管理面板共享同一透明度与模糊（`_panelTargets` 含 `paletteRow`）。
 - **按钮尺寸**：A/B/C/自定义四个 `.pal-btn` 为 32px 圆形，与播放控制按钮同尺寸、单行对齐；已删除「配色方案」竖排文字标签。
 - **自动收起**：播放中若 2s 内未操作配色面板（点按面板或切换配色会重置计时），自动收起（`schedulePaletteAutoCollapse`，仅在 `isPlaying` 且面板展开时生效）；暂停时取消计时。
 
@@ -421,7 +421,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ## 9.12 调试面板（独立浮层）
 
-- 控制行内新增圆形 `.ctl-btn.primary` 调试按钮（`debugToggleBtn`，图标 `carbon:debug`），位于**配色按钮左侧**；点击 `toggleDebugPanel()` 切换 `.debug-panel.open`，面板从按钮**向下展开**（统一 `.drop-panel`，`positionDropPanel` 定位），浮在渲染区之上，**不改变渲染区高度**。
+- 控制行内新增圆形 `.ctl-btn.primary` 调试按钮（`debugToggleBtn`，图标 `carbon:debug`），位于**配色按钮左侧**；点击 `toggleDebugPanel()` 切换 `.debug-panel.open`，面板从控制行**向下展开**（统一 `.drop-panel`，绝对定位），浮在渲染区之上，**不改变渲染区高度**。
 - 面板内含：启用调试开关、日志区（200px 可滚动）与 copy / 下载日志 / clear / 顶部 / 底部、降级自动展开开关。**透明 / 模糊滑块已移除**（只在设置面板保留）。
 - 调试总开关默认开启；关闭后 `body.dbg-off` 隐藏 `.dbg-body`、停止采集与监控。
 - 面板背景与设置 / 配色 / 选谱 / 管理面板共享同一透明度与模糊（见 9.7、9.9）。
@@ -764,5 +764,6 @@ midi_player/
 | 双击播放 | 双击（双触）非钢琴键的渲染区等价于播放/暂停 | `8d38638` |
 | 手势与全屏 | 上边缘拖动调钢琴高度（5%–50%）、两指捏合缩放钢琴宽度（1x–5x，渲染区同步、不可见音符跳过渲染、播放不受影响）；全屏新增设置/退出/双锁定悬浮按钮（总锁，锁定时手势视为敲键），2s 淡出、点击即暂停，菜单面板移入全屏元素 | `9f30fd7` |
 | 浮动控件重构 | 锁定按钮普通+全屏常驻（左右、顶部2/5、默认锁定、黑底50%、Toast）；所有悬浮按钮 2s 未点击淡到 10%、锁按钮吸附边缘露一半，仅点按钮才重置；调试面板独立（`carbon:debug` 按钮，配色左侧）；菜单/调试/配色/选谱/管理面板共享透明度；配色面板独立浮层、按钮 32px、播放中 2s 自动收起；软键盘/配色展开不改变渲染区高度 | `244c1dc` |
+| 面板定位修正 | 配色/调试/设置/管理四个面板统一移入控制行、绝对定位在控制行下方展开，修复配色面板遮挡按钮的问题；全屏设置面板加 `.in-fs` 固定到左上角 | `24a4e50` |
 | 顶栏两行 | 第一行 重播/选谱/全屏，第二行 播放/下一首/循环/管理/上传/设置/配色/调试；新增下一首（到底回第一首）；设置与管理改为统一下拉面板（从触发按钮向下展开、最大 2/3 视口、点外部关闭）；透明度/模糊滑块仅保留在设置面板顶部 | `a636720` |
 | 手势改滑块 | 移除上边缘拖动/两指捏合/锁定交互；菜单新增宽度缩放（1–4×）与水平偏移滑块及 88/76/61/49/37/25 键预设；抬起琴键即 `stopNote` 清除高亮；点音色/谱面列表不再自动聚焦搜索框 | `95c5873` |
