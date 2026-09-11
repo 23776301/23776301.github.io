@@ -2939,6 +2939,41 @@ function drawScene(notes, startIdx, endIdx, curTime){
   }
 }
 
+/* ============================================================
+ * 8. 钢琴键盘交互：点击 / 触摸琴键发声（欣赏模式与演奏模式均可用）
+ * ========================================================== */
+const _keyPointers = new Map(); // pointerId -> midi（用于多指）
+function _canvasPointToKey(e){
+  const rect = canvas.getBoundingClientRect();
+  if(!rect.width || !rect.height || !cachedLayout || !cachedLayout.keys) return null;
+  const px = (e.clientX - rect.left) / rect.width * C.w;
+  const py = (e.clientY - rect.top) / rect.height * C.h;
+  const keyAreaH = C.h * (pianoHeightPct / 100);
+  const keyTop = C.h - keyAreaH;
+  if(py < keyTop) return null; // 仅键盘区可点击
+  // 黑键绘制在上层，优先命中
+  let hit = null;
+  for(const k of cachedLayout.keys){ if(k.isBlack && px >= k.x && px < k.x + k.w){ hit = k; break; } }
+  if(!hit){ for(const k of cachedLayout.keys){ if(!k.isBlack && px >= k.x && px < k.x + k.w){ hit = k; break; } } }
+  return hit ? hit.midi : null;
+}
+function _userPlayKey(midi){
+  if(midi == null) return;
+  initAudio();
+  if(audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  SoundfontLoader.playNote(midi, 0.9, 0.7); // 用户敲击：固定力度与时长
+}
+canvas.addEventListener('pointerdown', (e) => {
+  const midi = _canvasPointToKey(e);
+  if(midi == null) return;
+  _keyPointers.set(e.pointerId, midi);
+  try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
+  _userPlayKey(midi);
+  e.preventDefault();
+});
+canvas.addEventListener('pointerup', (e) => { _keyPointers.delete(e.pointerId); });
+canvas.addEventListener('pointercancel', (e) => { _keyPointers.delete(e.pointerId); });
+
 // 初始化
 resizeCanvas();
 setPalette(currentPalette); // 同步按钮选中态并按恢复的配色重绘
