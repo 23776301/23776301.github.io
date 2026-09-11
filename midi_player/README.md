@@ -330,7 +330,7 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 
 ## 9.2 菜单面板（渐隐渐显，PC 与移动端统一）
 
-- `.control-panel` 为浮层：**高度占 2/3 屏**（`height:66.67vh`），用 `opacity` + `visibility` **渐隐渐显**展开/收起（无左右抽屉滑动）。宽度：移动端 `100vw`，PC `50vw`（上限 560px）。
+- `.control-panel` 为**居中浮层**（`top/left:50%` + `translate(-50%,-50%)`）：**高度占 2/3 屏**（`height:66.67vh`），用 `opacity` + `visibility` **渐隐渐显**展开/收起（无左右抽屉滑动）。宽度：移动端 `100vw`，PC `50vw`（上限 560px）。
 - `.overlay-mask` 半透明遮罩，点击调用 `toggleMenu()` 关闭；打开菜单时隐藏 FAB 组。
 - 面板采用**半透明 + 背景模糊**风格，面板内的「透明 / 模糊」滑块可实时调节（见 9.7）。**默认透明 100%（全透明）、模糊 25%**。
 
@@ -362,6 +362,7 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 - **视口自适应**：PC 端整页锁定视口高度（`height:100dvh` + `overflow:hidden`），`.layout` 用 `flex:1` 撑满，`.visual-panel` 与 Canvas 以 `flex:1` 占满——**钢琴键始终贴在屏幕底部，无需滚动页面**；菜单面板为浮层，不再挤压绘制区。
 - **菜单按钮**：PC 端菜单按钮固定在上传 MIDI 左侧，点击展开/收起浮层菜单（与移动端同一套渐隐逻辑）。
 - **顶栏排列**：进度条单独置于顶栏最底部；播放控制、谱面管理、配色方案、颜色力度指示、全屏按钮均排在进度条上方。
+- **控制行（`.control-row`）**：播放 / 重播 / 循环 / 管理谱面均为**圆形图标按钮**（`.ctl-btn`，无文字）；顺序播放图标为**双右箭头**。它们与配色栏 `paletteRow` 同行，且位于可收起区域之外，收起配色栏时仍可操作播放。
 - **全屏绘制区**：配色栏最右侧的**方形**「全屏」按钮（右上 / 左下双箭头图标，B 站 / YouTube 风格）对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时 `fullscreenchange` 触发画布重新布局与静态层预渲染，图标切换为向内的双箭头。
 - **配色栏布局**：A/B/C/自定义色板按钮在**移动端为 2×2、PC 端为单行**，与「配色方案」竖排标签、「白键 / 黑键」标签及色带（`paletteSwatch`）底边对齐。
 
@@ -386,6 +387,12 @@ document.getElementById('loopBtn').innerHTML = loopEnabled ? REPEAT_ICON + '单�
 
 - 「管理谱面」右侧的收起/展开按钮（`paletteToggleBtn`）控制配色栏 `paletteRow`（配色方案、力度色带、全屏按钮）的显示，默认展开。
 - **播放开始后 3 秒内**若未切换配色（`setPalette`）或点击全屏（`toggleFullscreen`），自动收起（`schedulePaletteAutoCollapse`）；手动切换按钮、切换配色或点击全屏都会取消自动收起。
+
+## 9.10 谱面管理弹窗
+
+- **风格统一**：`manageModal` 使用与菜单面板一致的半透明 + 背景模糊卡片（`.manage-card`），并提供「透明 / 模糊」滑块；滑块值与菜单面板**共享同一组状态**（`_syncManageAppearanceFromPanel` / `applyManageAppearance`），任一处调整都会同步。
+- **点击外部收起**：点击遮罩（`e.target === modal`）自动关闭；点卡片内部不关闭。
+- **内置谱删除 / 重下**：内置谱默认显示垃圾桶图标，点击后加入 `localStorage.deletedBuiltin` 并从谱库下拉中移除、清除缓存；该行图标变为**下载**图标，点击可重新下载并恢复。用户上传谱删除同样使用垃圾桶 SVG。
 
 # 十、部署、流量与缓存策略（GitHub Pages）
 
@@ -704,3 +711,11 @@ midi_player/
 | 钢琴高度 | 新增 5%–50% 钢琴高度滑块 | `cc9591e` |
 | 滑动开关 | 面板内勾选框全部替换为滑动开关 | `bed56c7` |
 | 自动播放 | 修复 PC 端加载完成前已交互导致不再自动起播的问题（记录 `userGestureSeen`） | `b2dd1cf` |
+
+## 2026-09 控制栏与谱面管理
+
+| 主题 | 摘要 | 代表 commit |
+| --- | --- | --- |
+| 控制栏 | 播放 / 重播 / 循环 / 管理改为圆形图标按钮并移入配色行；顺序播放图标改为双右箭头 | `3639a8e` |
+| 菜单居中 | 菜单面板由左上角改为居中显示 | `9a4985b` |
+| 谱面管理 | 管理弹窗改为半透明 + 模糊、共享透明/模糊滑块、点击外部收起；支持内置谱删除与重新下载 | `4101b10` |
