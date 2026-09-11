@@ -979,18 +979,11 @@ const SoundfontLoader = {
 
   // ===== 全局复音管理：注册/注销/抢占 =====
   _registerVoice(v){
-    if(v._start == null) v._start = audioCtx ? audioCtx.currentTime : 0;
+    v._start = audioCtx ? audioCtx.currentTime : 0;
     this.activeVoices.push(v);
-  },
-  // 只统计"已开始发声"的 voice，避免后台前瞻排程的 future voice 被误抢占。
-  // 每帧/每次后台调度调用一次，避免逐音符 O(n) 统计。
-  enforceVoiceCap(){
-    const now = audioCtx ? audioCtx.currentTime : 0;
-    let active = 0;
-    for(const v of this.activeVoices){ if(v._start <= now + 0.02) active++; }
-    while(active > this.MAX_VOICES){
-      if(!this._stealOldest()) break;
-      active--;
+    // 超过上限则抢占最早开始的voice，保证音频线程活跃voice有界
+    while(this.activeVoices.length > this.MAX_VOICES){
+      this._stealOldest();
     }
   },
   _unregisterVoice(v){
@@ -998,13 +991,10 @@ const SoundfontLoader = {
     if(i >= 0) this.activeVoices.splice(i, 1);
   },
   _stealOldest(){
-    const now = audioCtx ? audioCtx.currentTime : 0;
-    let oldest = null;
-    for(const v of this.activeVoices){
-      if(v._start <= now + 0.02 && (!oldest || v._start < oldest._start)) oldest = v;
-    }
-    if(!oldest) return false;
-    const t = now;
+    if(!this.activeVoices.length) return;
+    let oldest = this.activeVoices[0];
+    for(const v of this.activeVoices){ if(v._start < oldest._start) oldest = v; }
+    const t = audioCtx ? audioCtx.currentTime : 0;
     try{
       if(oldest.kind === 'sample'){
         oldest.gain.gain.cancelScheduledValues(t);
@@ -1021,36 +1011,38 @@ const SoundfontLoader = {
     this._unregisterVoice(oldest);
     if(oldest.kind === 'synth' && this.activeSynth[oldest.midi] === oldest) delete this.activeSynth[oldest.midi];
     if(oldest.kind === 'sample' && this.activeSources[oldest.midi] && this.activeSources[oldest.midi].src === oldest.src) this.activeSources[oldest.midi] = null;
-    return true;
   },
 
-  // 停止所有已排程/正在播放的音符（暂停、seek、切换音色时调用）。
-  // 后台前瞻排程下同一音高可能同时有多个 future voice，必须遍历 activeVoices 全部停止。
+  // 停止所有正在播放的音符（切换音色时调用）
   stopAll(){
     const t = audioCtx ? audioCtx.currentTime : 0;
     let stopped = 0;
-    for(const v of this.activeVoices){
-      try{
-        if(v.kind === 'sample'){
-          v.gain.gain.cancelScheduledValues(t);
-          v.gain.gain.setValueAtTime(v.gain.gain.value, t);
-          v.gain.gain.linearRampToValueAtTime(0, t + 0.01);
-          v.src.stop(t + 0.02);
-        } else if(v.kind === 'synth'){
-          v.env.gain.cancelScheduledValues(t);
-          v.env.gain.setValueAtTime(v.env.gain.value, t);
-          v.env.gain.linearRampToValueAtTime(0, t + 0.01);
-          v.oscs.forEach(o => { try{ o.stop(t + 0.02); }catch(e){} });
-        }
+    for(let i = 0; i < this.activeSources.length; i++){
+      const s = this.activeSources[i];
+      if(s){
+        try{
+          s.gain.gain.cancelScheduledValues(t);
+          s.gain.gain.setValueAtTime(s.gain.gain.value, t);
+          s.gain.gain.linearRampToValueAtTime(0, t + 0.01);
+          s.src.stop(t + 0.02);
+        }catch(e){}
+        this.activeSources[i] = null;
         stopped++;
-      }catch(e){}
+      }
     }
-    this.activeSources.fill(null);
-    this.synthVoices.length = 0;
+    if(stopped > 0) console.log('[AudioDebug][INFO] stopAll停止了', stopped, '个节点');
+    // 合成钢琴分支的振荡器也必须停掉
+    if(this.synthVoices.length){
+      const n = this.synthVoices.length;
+      for(const v of this.synthVoices){
+        try{ v.oscs.forEach(o => o.stop(t + 0.02)); }catch(e){}
+      }
+      this.synthVoices.length = 0;
+      console.log('[AudioDebug][INFO] stopAll停止了', n, '个合成钢琴voice');
+    }
     this.activeSynth = {};
     this.activeVoices.length = 0;
     this.lastTriggerTime.fill(0);
-    if(stopped > 0) console.log('[AudioDebug][INFO] stopAll停止了', stopped, '个voice');
   },
 
   // 定期节点泄漏检测（每5秒一次，仅异常时告警）
@@ -1067,10 +1059,9 @@ const SoundfontLoader = {
     }
   },
 
-  playNote(midi, velocity, duration, when){
+  playNote(midi, velocity, duration){
     if(!audioCtx) return;
-    // when 为后台前瞻调度器给出的排程时间；早于当前时间则立即播放
-    const t = (when != null && when > audioCtx.currentTime) ? when : audioCtx.currentTime;
+    const t = audioCtx.currentTime;
     this.debug.playNoteCalls++;
     // 检测AudioContext状态异常
     if(audioCtx.state !== 'running'){
@@ -1110,8 +1101,11 @@ const SoundfontLoader = {
             prev.gain.gain.setValueAtTime(prev.gain.gain.value, t);
             prev.gain.gain.linearRampToValueAtTime(0, t + 0.01);
             prev.src.stop(t + 0.02);
-            // 断开交由该 voice 自己的 onended 处理；不能用 setTimeout 墙钟计时，
-            // 因为后台前瞻排程下 t 可能在未来，50ms 后断开会在发声前摘掉节点。
+            // 延迟disconnect，等淡出完成
+            const oldSrc = prev.src, oldGain = prev.gain;
+            setTimeout(() => {
+              try{ oldSrc.disconnect(); oldGain.disconnect(); }catch(e){}
+            }, 50);
             this._unregisterVoice(prev);
           }catch(e){}
         }
@@ -1136,9 +1130,9 @@ const SoundfontLoader = {
         g.gain.setValueAtTime(peak, t + Math.max(attack, d - release));
         g.gain.linearRampToValueAtTime(0, t + d);
         src.connect(g); g.connect(masterGain);
-        src.start(t);
+        src.start();
         src.stop(t + d + 0.05);
-        const voice = {kind: 'sample', midi: keyMidi, src, gain: g, _start: t};
+        const voice = {kind: 'sample', midi: keyMidi, src, gain: g};
         this.activeSources[keyMidi] = voice;
         this._registerVoice(voice);
         src.onended = () => {
@@ -1165,7 +1159,7 @@ const SoundfontLoader = {
     const prevS = this.activeSynth[midi];
     if(prevS){
       try{
-        const st = t;
+        const st = audioCtx.currentTime;
         prevS.env.gain.cancelScheduledValues(st);
         prevS.env.gain.setValueAtTime(prevS.env.gain.value, st);
         prevS.env.gain.linearRampToValueAtTime(0, st + 0.01);
@@ -1175,7 +1169,7 @@ const SoundfontLoader = {
       delete this.activeSynth[midi];
     }
     const f = 440 * Math.pow(2, (midi - 69) / 12);
-    const t0 = t;
+    const t0 = audioCtx.currentTime;
     const synthDur = Math.max(duration, 0.001); // 真实时长，仅 1ms epsilon
     const env = audioCtx.createGain();
     env.gain.setValueAtTime(0, t0);
@@ -1193,7 +1187,7 @@ const SoundfontLoader = {
       oscs.push(o);
     }
     // 登记 voice，并在结束时清理，避免振荡器累积
-    const voice = { kind: 'synth', midi, oscs, env, _start: t };
+    const voice = { kind: 'synth', midi, oscs, env };
     this.synthVoices.push(voice);
     this.activeSynth[midi] = voice;
     this._registerVoice(voice);
@@ -1662,14 +1656,12 @@ function startPlay(){
   nextNoteIndex = lowerBound(allNotes, currentTime);
   document.getElementById('playBtn').textContent = '⏸ 暂停';
   rafId = requestAnimationFrame(playLoop);
-  if(document.hidden) startBgScheduler(); // 在后台启动播放时直接走后台上排程
 }
 
 function pausePlay(){
   isPlaying = false;
   if(rafId) cancelAnimationFrame(rafId);
   rafId = null;
-  stopBgScheduler();
   // 已经排程到音频线程的音符不会自己停，必须显式停止
   SoundfontLoader.stopAll();
   currentTime = (audioCtx.currentTime - playStartTime) * playSpeed;
@@ -1680,7 +1672,6 @@ function stopPlay(){
   isPlaying = false;
   if(rafId) cancelAnimationFrame(rafId);
   rafId = null;
-  stopBgScheduler();
   // 停止所有已排程/正在播放的音符
   SoundfontLoader.stopAll();
   currentTime = 0;
@@ -1858,158 +1849,15 @@ function toggleMenu(){
   document.addEventListener('touchend', onUp);
 })();
 
-// ===== 前台/后台双模式调度 =====
-// 前台：playLoop（rAF）逐音符触发 + 渲染。
-// 后台：rAF 被浏览器挂起，且无需渲染、也不会切音色；
-//       改用 setInterval 前瞻调度器，提前把未来 SCHED_LOOKAHEAD 秒的音符
-//       按音频时钟排好，保证后台持续出声。切回前台时立刻停后台调度、
-//       恢复音频上下文、立即重绘一帧并重启 rAF。
-const SCHED_LOOKAHEAD = 2.0;  // 后台提前排程秒数（需大于后台定时器节流上限）
-const SCHED_INTERVAL = 250;   // 后台调度轮询间隔(ms)
-let _bgSchedId = null;
-
-// ===== 后台诊断：定位"切标签可播、最小化/回桌面不播"的根因 =====
-// 独立观测三类信号，互不依赖：
-//  A. 可见性/焦点事件是否触发（visibilitychange / blur / focus）
-//  B. 看门狗自身运行间隔（>2.5s 说明渲染进程被冻结/挂起）
-//  C. 音频时钟是否前进 + 后台调度器 tick 间隔（音频上下文是否被挂起/节流）
-const BgDiag = {
-  lastWatchWall: performance.now(),
-  lastRafWall: performance.now(),
-  lastAudioTime: 0,
-  lastTickWall: 0,
-  lastTickGap: null,
-  ticks: 0,
-  rafStallLogged: false,
-  lastStatusWall: 0
-};
-
-function scheduleBg(){
-  if(!isPlaying || !audioCtx || !document.hidden) return;
-  const _tw = performance.now();
-  if(BgDiag.lastTickWall) BgDiag.lastTickGap = _tw - BgDiag.lastTickWall;
-  BgDiag.lastTickWall = _tw; BgDiag.ticks++;
-  const now = audioCtx.currentTime;
-  const horizon = now + SCHED_LOOKAHEAD;
-  let count = 0;
-  while(nextNoteIndex < allNotes.length){
-    const note = allNotes[nextNoteIndex];
-    const when = playStartTime + note.time / playSpeed;
-    if(when > horizon) break;
-    if(when < now - 0.2){ nextNoteIndex++; continue; } // 过旧，丢弃
-    SoundfontLoader.playNote(note.midi, note.velocity, note.duration / playSpeed, Math.max(when, now));
-    count++; nextNoteIndex++;
-  }
-  // 后台循环：只在本曲内循环，不切歌/不换音色
-  if(loopEnabled && nextNoteIndex >= allNotes.length && (now - playStartTime) * playSpeed >= totalDuration){
-    nextNoteIndex = 0;
-    playStartTime = now;
-  }
-  SoundfontLoader.enforceVoiceCap();
-  if(count) AudioDebugMonitor.notesTriggered += count;
-}
-function startBgScheduler(){
-  if(_bgSchedId || !isPlaying) return;
-  console.log('[AudioDebug][INFO] 启动后台调度器 vis=' + document.visibilityState +
-    ' hidden=' + document.hidden + ' focus=' + document.hasFocus());
-  scheduleBg();
-  _bgSchedId = setInterval(scheduleBg, SCHED_INTERVAL);
-}
-function stopBgScheduler(){
-  if(_bgSchedId){
-    clearInterval(_bgSchedId); _bgSchedId = null;
-    console.log('[AudioDebug][INFO] 停止后台调度器 vis=' + document.visibilityState +
-      ' hidden=' + document.hidden);
-  }
-}
-
-// ===== 后台诊断监听与看门狗（临时，用于定位根因）=====
+// 回到前台自动续播（不因失焦暂停）
 document.addEventListener('visibilitychange', () => {
-  console.log('[AudioDebug][INFO] visibilitychange → hidden=' + document.hidden +
-    ' state=' + document.visibilityState +
-    ' focus=' + document.hasFocus() +
-    ' raf=' + (rafId !== null ? 'on' : 'off') +
-    ' bgSched=' + (_bgSchedId !== null ? 'on' : 'off') +
-    ' audioState=' + (audioCtx ? audioCtx.state : 'null') +
-    ' audioTime=' + (audioCtx ? audioCtx.currentTime.toFixed(2) : '-'));
-});
-window.addEventListener('blur', () => {
-  console.log('[AudioDebug][INFO] window blur vis=' + document.visibilityState +
-    ' hidden=' + document.hidden);
-});
-window.addEventListener('focus', () => {
-  console.log('[AudioDebug][INFO] window focus vis=' + document.visibilityState +
-    ' hidden=' + document.hidden);
-});
-setInterval(() => {
-  const wall = performance.now();
-  const wGap = wall - BgDiag.lastWatchWall;
-  BgDiag.lastWatchWall = wall;
-  const at = audioCtx ? audioCtx.currentTime : 0;
-  const aGapMs = (at - BgDiag.lastAudioTime) * 1000;
-  BgDiag.lastAudioTime = at;
-  const rafGap = wall - BgDiag.lastRafWall;
-  const playing = (typeof isPlaying !== 'undefined') && isPlaying;
-
-  // B. 看门狗自身被冻结/严重延迟 → 渲染进程被挂起
-  if(wGap > 2500){
-    console.warn('[AudioDebug] 看门狗自身被冻结/延迟 ' + wGap.toFixed(0) +
-      'ms（渲染进程疑似被挂起）vis=' + document.visibilityState +
-      ' hidden=' + document.hidden + ' focus=' + document.hasFocus());
-  }
-  if(!playing) return;
-
-  // A. rAF 停摆但页面仍 visible → 遮挡/最小化未触发 visibilitychange
-  if(!document.hidden && rafGap > 1000 && !BgDiag.rafStallLogged){
-    BgDiag.rafStallLogged = true;
-    console.warn('[AudioDebug] ★rAF 已停摆 ' + rafGap.toFixed(0) +
-      'ms 但 visibilityState=' + document.visibilityState +
-      ' hidden=' + document.hidden + ' focus=' + document.hasFocus() +
-      ' bgSched=' + (_bgSchedId !== null ? 'on' : 'off') +
-      ' audioState=' + (audioCtx ? audioCtx.state : 'null'));
-  } else if(rafGap < 500 || document.hidden){
-    BgDiag.rafStallLogged = false;
-  }
-
-  // C. 后台/异常期间每 2s 输出一条状态，记录音频时钟与调度器 tick 间隔
-  const inBg = document.hidden || rafGap > 1000;
-  if(inBg && wall - BgDiag.lastStatusWall > 2000){
-    BgDiag.lastStatusWall = wall;
-    console.log('[AudioDebug][INFO] BG状态 vis=' + document.visibilityState +
-      ' hidden=' + document.hidden + ' focus=' + document.hasFocus() +
-      ' rafGap=' + rafGap.toFixed(0) + 'ms' +
-      ' audioΔ=' + aGapMs.toFixed(0) + 'ms' +
-      ' state=' + (audioCtx ? audioCtx.state : 'null') +
-      ' sched=' + (_bgSchedId !== null ? 'on' : 'off') +
-      ' ticks=' + BgDiag.ticks +
-      ' tickGap=' + (BgDiag.lastTickGap != null ? BgDiag.lastTickGap.toFixed(0) : '-') + 'ms' +
-      ' notes=' + (typeof nextNoteIndex !== 'undefined' ? nextNoteIndex : '-') +
-      ' cur=' + (typeof currentTime !== 'undefined' ? currentTime.toFixed(1) : '-'));
-  }
-}, 1000);
-
-document.addEventListener('visibilitychange', () => {
-  if(document.hidden){
-    // 进入后台：停掉 rAF 渲染，切换为后台前瞻排程
-    if(isPlaying){
-      if(rafId) cancelAnimationFrame(rafId);
-      rafId = null;
-      startBgScheduler();
-    }
-    return;
-  }
-  // 回到前台：立刻停后台调度，恢复音频上下文，立即重绘并重启 rAF
-  stopBgScheduler();
-  if(isPlaying && totalDuration){
-    initAudio();
-    if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-    AudioDebugMonitor.lastFrameAudioTime = 0; // 避免把后台空档误判为丢帧
-    currentTime = (audioCtx.currentTime - playStartTime) * playSpeed;
-    const fallDur = 2.0 / fallSpeedMultiplier;
-    drawScene(allNotes, lowerBound(allNotes, currentTime - fallDur), lowerBound(allNotes, currentTime + fallDur), currentTime);
-    updateProgress();
-    rafId = requestAnimationFrame(playLoop);
-  }
+  if(document.hidden) return;
+  if(!isPlaying || !totalDuration) return;
+  // 浏览器可能在后台挂起音频上下文，回到前台时恢复
+  initAudio();
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  // 安全兜底：若渲染循环已停止则重新拉起
+  if(!rafId) rafId = requestAnimationFrame(playLoop);
 });
 
 // 进度条拖拽
@@ -2035,8 +1883,6 @@ function doSeek(event){
   if(isPlaying){
     playStartTime = audioCtx.currentTime - currentTime / playSpeed;
     nextNoteIndex = lowerBound(allNotes, currentTime);
-    // 清除已排程的未来音符，避免 seek 后新旧叠加（后台调度器会从新位置继续）
-    SoundfontLoader.stopAll();
   }
   updateProgress();
   // 拖拽时也更新可视化
@@ -2089,7 +1935,6 @@ function lowerBound(arr, target){
 function playLoop(){
   if(!isPlaying) return;
   const _frameT0 = performance.now();
-  BgDiag.lastRafWall = _frameT0;
   const now = audioCtx.currentTime;
 
   // 帧间隔跳变检测：主线程被阻塞（GC/长任务）会导致rAF延迟，
@@ -2128,7 +1973,6 @@ function playLoop(){
     AudioDebugMonitor.skippedNotes += _skipped;
   }
   AudioDebugMonitor.frame(performance.now() - _frameT0, _trigCount);
-  SoundfontLoader.enforceVoiceCap();
 
   // 计算可见音符范围：二分查找定位区间，不slice（避免大数组分配）
   const fallDuration = 2.0 / fallSpeedMultiplier;
@@ -2139,7 +1983,7 @@ function playLoop(){
   if(!lastStatUpdate || now - lastStatUpdate > 0.1){
     lastStatUpdate = now;
     updateProgress();
-    const played = lowerBound(allNotes, currentTime);
+    const played = nextNoteIndex;
     const total = allNotes.length;
     document.getElementById('statPlayed').textContent = '已播：' + played + '/' + total;
     document.getElementById('statPercent').textContent = (total > 0 ? (played / total * 100).toFixed(2) : '0.00') + '%';
