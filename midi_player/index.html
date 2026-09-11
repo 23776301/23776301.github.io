@@ -140,19 +140,14 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .palette-row{display:flex;align-items:center;gap:6px;flex:1;min-width:0;flex-wrap:wrap}
 .palette-row.collapsed{display:none}
 
-/* 全屏按钮：无背景、方形，矢量图标（带框箭头），主题色 */
-.fs-btn{
-  width:28px;height:28px;flex-shrink:0;padding:0;border-radius:0;margin-left:auto;
-  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
-  border:none;background:transparent;color:var(--accent);
-}
-.fs-btn:hover{opacity:.8}
-.fs-btn:active{opacity:.6}
-.fs-btn svg{width:20px;height:20px}
+/* 展开/收起按钮：移动端可见，靠右推齐；桌面端隐藏（见下方媒体查询） */
+.pal-toggle-btn{margin-left:auto}
+#paletteToggleIcon{transition:transform .2s}
 
 /* 桌面端：配色栏与播放控制同行，隐藏展开按钮，且自动收起不生效 */
 @media(min-width:801px){
   .pal-toggle-btn{display:none}
+  #fsBtn{margin-left:auto}
   .palette-row.collapsed{display:flex}
 }
 /* 移动端：配色栏在下方整行展开 / 收起 */
@@ -465,8 +460,8 @@ select:focus{border-color:var(--accent)}
     <div>
       <div class="top-bar">
         <div class="top-bar-row">
-          <button class="btn primary" onclick="document.getElementById('midiFile').click()" style="white-space:nowrap;flex-shrink:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>上传MIDI</button>
-          <button class="ctl-btn primary" onclick="openManageModal()" title="管理谱面" aria-label="管理谱面"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+          <button class="ctl-btn primary" onclick="document.getElementById('midiFile').click()" title="上传MIDI" aria-label="上传MIDI"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" style="flex-shrink:0"><path d="M4.5 11.5a3 3 0 0 1 3-3h8.718a4 4 0 0 1 2.325.745l4.914 3.51a4 4 0 0 0 2.325.745H40.5a3 3 0 0 1 3 3v20a3 3 0 0 1-3 3h-33a3 3 0 0 1-3-3z"/><path d="M24 33.5v-14m6.167 6.167L24 19.5l-6.167 6.167"/></svg></button>
+          <button class="ctl-btn primary" onclick="openManageModal()" title="管理谱面" aria-label="管理谱面"><svg viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0"><path d="M16.81 10.548a1.87 1.87 0 1 1 2.644 2.644l-4.829 4.83a2.2 2.2 0 0 1-1.021.578l-1.498.375a.89.89 0 0 1-1.079-1.08l.374-1.497c.097-.387.297-.74.579-1.021zM3.25 13.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m8.023 1.17a3.2 3.2 0 0 0-.597.83H7.75a.75.75 0 0 1 0-1.5h4.192zM3.25 8.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5q.159 0 .297.06c-.53.11-1.034.37-1.445.78l-.659.66H7.75a.75.75 0 0 1 0-1.5zm-14-5.5a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5m14 .5a.75.75 0 0 1 0 1.5h-9.5a.75.75 0 0 1 0-1.5z"/></svg></button>
           <input type="file" id="midiFile" accept=".mid,.midi" style="display:none" onchange="onMidiFile(event)">
           <select id="songSel" onchange="onSongChange(this.value)" style="flex:1">
             <option value="">加载谱库…</option>
@@ -476,7 +471,7 @@ select:focus{border-color:var(--accent)}
           <button class="ctl-btn primary" id="playBtn" onclick="togglePlay()" disabled title="播放"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
           <button class="ctl-btn primary" onclick="replayPlay()" disabled title="重播"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
           <button class="ctl-btn primary" id="loopBtn" onclick="toggleLoop()" disabled title="列表循环"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0"><path d="M11 5.466V4H5a4 4 0 0 0-3.584 5.777a.5.5 0 1 1-.896.446A5 5 0 0 1 5 3h6V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192m3.81.086a.5.5 0 0 1 .67.225A5 5 0 0 1 11 13H5v1.466a.25.25 0 0 1-.41.192l-2.36-1.966a.25.25 0 0 1 0-.384l2.36-1.966a.25.25 0 0 1 .41.192V12h6a4 4 0 0 0 3.585-5.777a.5.5 0 0 1 .225-.67Z"/></svg></button>
-          <button class="ctl-btn" onclick="toggleMenu()" title="设置" aria-label="设置"><svg viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M12.4277 2C11.3139 2 10.2995 2.6007 8.27081 3.80211L7.58466 4.20846C5.55594 5.40987 4.54158 6.01057 3.98466 7C3.42773 7.98943 3.42773 9.19084 3.42773 11.5937V12.4063C3.42773 14.8092 3.42773 16.0106 3.98466 17C4.54158 17.9894 5.55594 18.5901 7.58466 19.7915L8.27081 20.1979C10.2995 21.3993 11.3139 22 12.4277 22C13.5416 22 14.5559 21.3993 16.5847 20.1979L17.2708 19.7915C19.2995 18.5901 20.3139 17.9894 20.8708 17C21.4277 16.0106 21.4277 14.8092 21.4277 12.4063V11.5937C21.4277 9.19084 21.4277 7.98943 20.8708 7C20.3139 6.01057 19.2995 5.40987 17.2708 4.20846L16.5847 3.80211C14.5559 2.6007 13.5416 2 12.4277 2ZM8.67773 12C8.67773 9.92893 10.3567 8.25 12.4277 8.25C14.4988 8.25 16.1777 9.92893 16.1777 12C16.1777 14.0711 14.4988 15.75 12.4277 15.75C10.3567 15.75 8.67773 14.0711 8.67773 12Z" clip-rule="evenodd"/></svg></button>
+          <button class="ctl-btn primary" onclick="toggleMenu()" title="设置" aria-label="设置"><svg viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M12.4277 2C11.3139 2 10.2995 2.6007 8.27081 3.80211L7.58466 4.20846C5.55594 5.40987 4.54158 6.01057 3.98466 7C3.42773 7.98943 3.42773 9.19084 3.42773 11.5937V12.4063C3.42773 14.8092 3.42773 16.0106 3.98466 17C4.54158 17.9894 5.55594 18.5901 7.58466 19.7915L8.27081 20.1979C10.2995 21.3993 11.3139 22 12.4277 22C13.5416 22 14.5559 21.3993 16.5847 20.1979L17.2708 19.7915C19.2995 18.5901 20.3139 17.9894 20.8708 17C21.4277 16.0106 21.4277 14.8092 21.4277 12.4063V11.5937C21.4277 9.19084 21.4277 7.98943 20.8708 7C20.3139 6.01057 19.2995 5.40987 17.2708 4.20846L16.5847 3.80211C14.5559 2.6007 13.5416 2 12.4277 2ZM8.67773 12C8.67773 9.92893 10.3567 8.25 12.4277 8.25C14.4988 8.25 16.1777 9.92893 16.1777 12C16.1777 14.0711 14.4988 15.75 12.4277 15.75C10.3567 15.75 8.67773 14.0711 8.67773 12Z" clip-rule="evenodd"/></svg></button>
           <div id="paletteRow" class="palette-row">
             <span style="font-size:9px;color:var(--dim);flex-shrink:0;height:44px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;line-height:1;"><span>配</span><span>色</span><span>方</span><span>案</span></span>
             <div class="pal-grid">
@@ -484,7 +479,7 @@ select:focus{border-color:var(--accent)}
               <button class="pal-btn palette-btn active" data-palette="B" onclick="setPalette('B')" title="青蓝×琥珀红">B</button>
               <button class="pal-btn palette-btn" data-palette="C" onclick="setPalette('C')" title="青绿×品红">C</button>
               <button class="pal-btn" id="paletteEditBtn" onclick="openPaletteModal()" title="自定义配色">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5c0-.39-.15-.74-.39-1.01c-.23-.26-.38-.61-.38-.99c0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5c0-4.42-4.03-8-9-8m-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9S8 9.67 8 10.5S7.33 12 6.5 12m3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8m5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8m3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5s-.67 1.5-1.5 1.5"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M8.203 2.004c1.261 0 2.304 1.103 2.476 2.538l8.483 8.484l-7.778 7.778a3 3 0 0 1-4.243 0L2.9 16.562a3 3 0 0 1 0-4.243l2.804-2.805V4.961c0-1.633 1.12-2.957 2.5-2.957m.5 2.957v1.553l-1 1V4.961c0-.327.224-.591.5-.591c.277 0 .5.264.5.591m0 5.914V9.342l-4.39 4.391a1 1 0 0 0 0 1.414l4.243 4.243a1 1 0 0 0 1.414 0l6.364-6.364l-5.63-5.63v3.48l-.003.128h-2.01a1 1 0 0 0 .012-.129" clip-rule="evenodd"/><path d="M16.859 16.875a3 3 0 1 0 4.242 0l-2.121-2.121z"/></svg>
               </button>
             </div>
             <div style="display:flex;flex-direction:column;gap:4px;height:44px;font-size:9px;color:var(--dim);flex-shrink:0;">
@@ -493,10 +488,10 @@ select:focus{border-color:var(--accent)}
             </div>
             <div id="paletteSwatch" style="flex:1;min-width:90px;max-width:340px;height:44px;position:relative;"></div>
           </div>
-          <button class="fs-btn" id="fsBtn" onclick="toggleFullscreen()" title="全屏绘制区" aria-label="全屏绘制区">
+          <button class="ctl-btn primary pal-toggle-btn" id="paletteToggleBtn" onclick="togglePaletteRow()" title="收起/展开配色栏" aria-label="收起或展开配色栏"><svg id="paletteToggleIcon" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10a2.5 2.5 0 0 0 2.5-2.5c0-.61-.23-1.2-.64-1.67a.53.53 0 0 1-.13-.33c0-.28.22-.5.5-.5H16c3.31 0 6-2.69 6-6c0-4.96-4.49-9-10-9m5.5 11c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5s1.5.67 1.5 1.5s-.67 1.5-1.5 1.5m-3-4c-.83 0-1.5-.67-1.5-1.5S13.67 6 14.5 6s1.5.67 1.5 1.5S15.33 9 14.5 9M5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S7.33 13 6.5 13S5 12.33 5 11.5m6-4c0 .83-.67 1.5-1.5 1.5S8 8.33 8 7.5S8.67 6 9.5 6s1.5.67 1.5 1.5"/></svg></button>
+          <button class="ctl-btn primary" id="fsBtn" onclick="toggleFullscreen()" title="全屏绘制区" aria-label="全屏绘制区">
             <svg id="fsIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M9 15L2 22M2 16.1429V22H7.85714"/><path d="M15 9L22 2M22 7.85714V2H16.1429"/></g></svg>
           </button>
-          <button class="ctl-btn pal-toggle-btn" id="paletteToggleBtn" onclick="togglePaletteRow()" title="收起/展开配色栏" aria-label="收起或展开配色栏"><svg id="paletteToggleIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="18 15 12 9 6 15"/></svg></button>
         </div>
         <div class="stats-bar" style="font-size:10px;color:var(--dim);margin-top:3px;display:flex;justify-content:space-between">
           <span><span id="statTracks">轨道：-</span> · <span id="statTotal">音符：-</span></span>
@@ -2704,15 +2699,13 @@ let currentPalette = 'B';
 
 /* 配色栏收起/展开：默认展开；播放开始 3s 内未切换配色或点击全屏则自动收起 */
 let paletteAutoCollapseTimer = null;
-const PAL_ICON_UP = '<polyline points="18 15 12 9 6 15"/>';
-const PAL_ICON_DOWN = '<polyline points="6 9 12 15 18 9"/>';
 function _paletteRow(){ return document.getElementById('paletteRow'); }
 function updatePaletteToggleIcon(){
   const icon = document.getElementById('paletteToggleIcon');
   const row = _paletteRow();
   if(!icon || !row) return;
   const collapsed = row.classList.contains('collapsed');
-  icon.innerHTML = collapsed ? PAL_ICON_DOWN : PAL_ICON_UP;
+  icon.style.transform = collapsed ? 'rotate(180deg)' : '';
   const btn = document.getElementById('paletteToggleBtn');
   if(btn) btn.title = collapsed ? '展开配色栏' : '收起配色栏';
 }
