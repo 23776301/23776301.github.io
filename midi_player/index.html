@@ -138,6 +138,8 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .ctl-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .ctl-btn.primary:hover{background:#7c3aed}
 .ctl-btn svg{width:16px;height:16px}
+/* 重播图标放大，让外圈尽量贴近按钮边界 */
+#replayBtn svg{width:30px;height:30px}
 /* 配色面板：从控制行下方展开（absolute，不遮挡按钮） */
 .palette-row{display:none;align-items:center;gap:8px;flex-wrap:nowrap;min-width:230px}
 .palette-row.open{display:flex}
@@ -314,14 +316,18 @@ select:focus{border-color:var(--accent)}
   position:absolute;z-index:5;width:42px;height:42px;border-radius:50%;padding:0;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
   border:1px solid var(--accent);background:var(--accent);color:#fff;
-  opacity:1;transition:opacity .3s;
+  opacity:.5;transition:opacity .3s, transform .3s;
+  backdrop-filter:none;-webkit-backdrop-filter:none;filter:none;
 }
-.fs-float-btn:active{opacity:.78}
+.fs-float-btn:active{opacity:.7}
 .fs-float-btn svg{width:20px;height:20px}
-.fs-settings{top:14px;left:14px}
-.fs-exit{top:14px;right:14px}
-/* 2s 未点击悬浮按钮：淡到 10% */
-.fs-overlay.faded .fs-float-btn{opacity:.1}
+/* 活跃：内缩 14px 完整显示；空闲：吸附到左右边界只露半边圆 */
+.fs-settings{top:14px;left:0;transform:translateX(14px)}
+.fs-exit{top:14px;right:0;transform:translateX(-14px)}
+/* 2s 未点击悬浮按钮：淡到 20% 并吸附到边界（半圆） */
+.fs-overlay.faded .fs-float-btn{opacity:.2}
+.fs-overlay.faded .fs-settings{transform:translateX(-50%)}
+.fs-overlay.faded .fs-exit{transform:translateX(50%)}
 /* 调试面板：从控制行下方展开（absolute，不遮挡按钮） */
 .debug-panel{display:none}
 .debug-panel.open{display:block}
