@@ -387,6 +387,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **点击 / 触摸琴键发声**：`#visualCanvas` 上的 Pointer Events 命中键盘区（黑键优先）→ `SoundfontLoader.playNote(midi, 0.9, 0.7)`；支持多指（`_keyPointers` 按 pointerId 记录）。
 - **两种模式都可用**：欣赏模式下自动发声的同时，用户敲击琴键可叠加额外声音；演奏模式则完全依赖用户敲击。
+- **双击渲染区播放 / 暂停**：非钢琴键的渲染区域（下落音符区）内，300ms 内的第二次按下（鼠标双击或触摸双触）等价于播放/暂停（`togglePlay()`）；命中后计数归零，避免三连击重复触发。琴键区仍只负责发声。
 - **坐标换算**：`_canvasPointToKey` 用 `getBoundingClientRect` 把客户端坐标映射到画布像素，再按 `keyAreaH` 判定是否落在键盘区。
 
 ## 9.9 配色栏收起 / 展开
@@ -730,3 +731,4 @@ midi_player/
 | 设置按钮 | 菜单按钮改为 `arcticons:set-edit` 圆形设置按钮，移入控制行（循环右侧）；移除浮动 FAB 与顶栏菜单按钮；管理/全屏统一主题强调色 | `dcd17b7` |
 | 图标与循环 | 全屏改用 `solar:maximize/minimize-linear`、设置改用 `solar:settings-minimalistic-bold`、配色编辑改用 `ic:round-color-lens`；循环按钮改为列表循环（`bi:repeat`）/ 单曲循环（`bi:repeat-1`）两态，列表循环播到底回到第一首 | `f6d0e80` |
 | 按钮统一 | 上传改为纯图标圆形按钮（`arcticons:folder-upload`），管理改用 `fluent:text-bullet-list-edit-20-filled`；设置/全屏改为圆形紫底按钮，全屏移到最右；展开按钮改用 `ic:round-color-lens`（收起旋转 180°），自定义配色改用 `gg:color-bucket` | `759207a` |
+| 双击播放 | 双击（双触）非钢琴键的渲染区等价于播放/暂停 | `8d38638` |
