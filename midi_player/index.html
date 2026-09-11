@@ -1131,6 +1131,45 @@ try{
   }
 }catch(e){}
 
+// ===== 媒体源：优先 jsDelivr CDN（不消耗 GitHub Pages 流量），失败回退本站 Pages =====
+const CDN_REPO_BASE = 'https://cdn.jsdelivr.net/gh/teecatt/teecatt.github.io@master/';
+function cdnUrl(repoPath){
+  return CDN_REPO_BASE + String(repoPath).split('/').map(encodeURIComponent).join('/');
+}
+// midi_player 内的相对路径 -> [CDN, 本地] 候选源
+function _mediaUrls(relPath){
+  const clean = String(relPath).replace(/^\.\//, '');
+  return [cdnUrl('midi_player/' + clean), clean];
+}
+// 依次尝试候选源，流式下载并回报百分比（0-100）
+async function _fetchBlobWithProgress(urls, onProgress){
+  let lastErr;
+  for(const url of urls){
+    try{
+      const resp = await fetch(url);
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
+      if(!resp.body || !total || !resp.body.getReader){
+        const blob = new Blob([await resp.arrayBuffer()]);
+        if(onProgress) onProgress(100);
+        return blob;
+      }
+      const reader = resp.body.getReader();
+      const chunks = []; let received = 0;
+      while(true){
+        const {done, value} = await reader.read();
+        if(done) break;
+        chunks.push(value); received += value.length;
+        if(onProgress) onProgress(received / total * 100);
+      }
+      const blob = new Blob(chunks);
+      if(onProgress) onProgress(100);
+      return blob;
+    }catch(e){ lastErr = e; if(onProgress) onProgress(0); }
+  }
+  throw lastErr || new Error('下载失败');
+}
+
 const SoundfontLoader = {
   cacheName: 'midi-player-soundfont-cache-v1',
   cdnBase: './soundfonts/',
@@ -1206,7 +1245,8 @@ const SoundfontLoader = {
   },
 
   // 读取音色文本：优先缓存（内容校验通过），否则走网络并回写缓存
-  async _fetchSoundfontText(name, url, absUrl, cache, onProgress){
+  async _fetchSoundfontText(name, urls, absUrl, cache, onProgress){
+    if(typeof urls === 'string') urls = [urls];
     if(cache){
       try{
         const cached = await cache.match(absUrl, {ignoreSearch: true});
@@ -1219,8 +1259,15 @@ const SoundfontLoader = {
         }
       }catch(e){}
     }
-    const resp = await fetch(url, {mode: 'cors'});
-    if(!resp.ok) throw new Error('下载失败 HTTP ' + resp.status);
+    let resp = null, lastErr = null;
+    for(const u of urls){
+      try{
+        const r = await fetch(u, {mode: 'cors'});
+        if(r.ok){ resp = r; break; }
+        lastErr = new Error('下载失败 HTTP ' + r.status);
+      }catch(e){ lastErr = e; }
+    }
+    if(!resp) throw lastErr || new Error('下载失败');
     const _total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
     let text;
     if(resp.body && resp.body.getReader && _total){
@@ -1290,13 +1337,13 @@ const SoundfontLoader = {
   },
 
   async _doLoad(name, onProgress){
-    const url = this.cdnBase + name + '-ogg.js';
-    // 统一转绝对路径作为缓存key，避免相对路径解析问题
-    const absUrl = new URL(url, window.location.href).href;
+    // 候选源：jsDelivr CDN -> 本站 Pages；缓存 key 仍用本站绝对路径，兼容旧缓存
+    const urls = _mediaUrls('soundfonts/' + name + '-ogg.js');
+    const absUrl = new URL(this.cdnBase + name + '-ogg.js', window.location.href).href;
     if(onProgress) onProgress(0, '正在下载音色…');
     let cache = null;
     try{ cache = await caches.open(this.cacheName); }catch(e){}
-    let res = await this._fetchSoundfontText(name, url, absUrl, cache, (frac) => { if(onProgress) onProgress(frac * 0.9, '正在下载音色…'); });
+    let res = await this._fetchSoundfontText(name, urls, absUrl, cache, (frac) => { if(onProgress) onProgress(frac * 0.9, '正在下载音色…'); });
     if(onProgress) onProgress(0.5, res.fromCache ? '从缓存读取音色…' : '下载完成，解析中…');
     let raw;
     try{
@@ -1305,7 +1352,7 @@ const SoundfontLoader = {
       // 缓存内容能过格式校验却解析失败：删除该条并强制走网络重试一次
       if(!res.fromCache) throw e;
       if(cache){ try{ await cache.delete(absUrl); }catch(_){} }
-      res = await this._fetchSoundfontText(name, url, absUrl, cache, (frac) => { if(onProgress) onProgress(frac * 0.9, '正在下载音色…'); });
+      res = await this._fetchSoundfontText(name, urls, absUrl, cache, (frac) => { if(onProgress) onProgress(frac * 0.9, '正在下载音色…'); });
       raw = this._parseSoundfont(res.text, name);
     }
     this.loaded[name] = { raw: raw, buffers: {}, ready: true };
@@ -2066,34 +2113,26 @@ async function _getBuiltinList(){
   }catch(e){}
   return _builtinListCache || [];
 }
-// 带进度的下载：用于「重新下载」时在按钮上显示百分比
-async function _fetchWithProgress(url, onProgress){
-  const absUrl = AssetCache._abs(url);
-  const resp = await fetch(url);
-  if(!resp.ok) throw new Error('HTTP ' + resp.status);
-  const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
-  let blob;
-  if(!resp.body || !total || !resp.body.getReader){
-    const buf = await resp.arrayBuffer();
-    blob = new Blob([buf]);
-    if(onProgress) onProgress(100);
-  } else {
-    const reader = resp.body.getReader();
-    const chunks = []; let received = 0;
-    while(true){
-      const {done, value} = await reader.read();
-      if(done) break;
-      chunks.push(value); received += value.length;
-      if(onProgress) onProgress(received / total * 100);
-    }
-    blob = new Blob(chunks);
-    if(onProgress) onProgress(100);
-  }
+// 带进度的下载（jsDelivr -> Pages 回退），用于「重新下载」时在按钮上显示百分比
+async function _fetchWithProgress(relPath, onProgress){
+  const absUrl = AssetCache._abs(relPath);
+  const blob = await _fetchBlobWithProgress(_mediaUrls(relPath), onProgress);
   try{
     const cache = await caches.open(AssetCache.cacheName);
-    await cache.put(absUrl, new Response(blob, {headers: resp.headers}));
+    await cache.put(absUrl, new Response(blob));
   }catch(e){}
   return blob;
+}
+// 缓存优先 + CDN/Pages 回退：用于切歌等需要 Response 的场景
+async function fetchMedia(relPath, onProgress){
+  const absUrl = AssetCache._abs(relPath);
+  try{
+    const cache = await caches.open(AssetCache.cacheName);
+    const cached = await cache.match(absUrl, {ignoreSearch: true});
+    if(cached){ if(onProgress) onProgress(100); return cached.clone(); }
+  }catch(e){}
+  const blob = await _fetchWithProgress(relPath, onProgress);
+  return new Response(blob);
 }
 
 async function loadSongList(){
@@ -2295,7 +2334,7 @@ async function onSongChange(val){
     let buf, name;
     if(val.startsWith('builtin:')){
       const file = val.substring(8);
-      const resp = await AssetCache.fetch(file);
+      const resp = await fetchMedia(file);
       if(!resp.ok) throw new Error('加载失败 HTTP ' + resp.status);
       buf = await resp.arrayBuffer();
       name = file.split('/').pop();

@@ -285,6 +285,27 @@ const AssetCache = {
     }
   }
 };
+// 媒体源：优先 jsDelivr CDN（不消耗 GitHub Pages 流量），失败回退本站 Pages
+const CDN_REPO_BASE = 'https://cdn.jsdelivr.net/gh/teecatt/teecatt.github.io@master/';
+const DEMO_CDN_URL = CDN_REPO_BASE + 'music_visualization/demo.ogg';
+async function fetchDemo(){
+  const absUrl = AssetCache._abs('demo.ogg');
+  try {
+    const cache = await caches.open(AssetCache.cacheName);
+    const cached = await cache.match(absUrl, {ignoreSearch: true});
+    if (cached) return cached.clone();
+  } catch(e) {}
+  let blob = null;
+  for (const u of [DEMO_CDN_URL, 'demo.ogg']) {
+    try { const r = await fetch(u); if (r.ok) { blob = await r.blob(); break; } } catch(e) {}
+  }
+  if (!blob) throw new Error('demo.ogg 加载失败');
+  try {
+    const cache = await caches.open(AssetCache.cacheName);
+    await cache.put(absUrl, new Response(blob));
+  } catch(e) {}
+  return new Response(blob);
+}
 
 "use strict";
 const canvas = document.getElementById('mainCanvas');
@@ -1495,7 +1516,7 @@ requestAnimationFrame(render);
 // 保持默认100%缩放，不自动适配（窗口尺寸变化不改缩放，避免默认被压到很小）
 
 // 自动加载演示音频
-AssetCache.fetch('demo.ogg').then(r=>r.blob()).then(blob=>{
+fetchDemo().then(r=>r.blob()).then(blob=>{
   const file=new File([blob],'demo.ogg',{type:'audio/ogg'});
   loadAudio(file);
 }).catch(()=>{});
