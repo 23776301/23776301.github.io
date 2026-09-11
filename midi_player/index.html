@@ -1036,6 +1036,9 @@ const AudioDebugMonitor = {
     this.lastWall = performance.now();
     this.lastAudioTime = audioCtx ? audioCtx.currentTime : 0;
     this.lastReport = 0;
+    // 主动暂停/停止的间隔不算“停摆”：清掉上一帧音频时钟，
+    // 否则恢复播放的首帧会把暂停时长当成长时间停摆并误报
+    this.lastFrameAudioTime = 0;
   },
 
   // 每秒汇总一次
