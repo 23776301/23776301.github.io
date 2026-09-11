@@ -294,6 +294,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **音频图**：`AudioContext → masterGain → outputAnalyser → destination`，`masterGain` 负责总音量，`outputAnalyser`（FFT 2048）用于静音探测。
 - **音色加载**：Soundfont 以 `*-ogg.js` 形式提供，内部是 base64 音频；`_doLoad` 下载/读缓存后用 `new Function` 求值取数据，再经 `atob → Uint8Array → decodeAudioData` 得到 `AudioBuffer`。
+- **媒体源（jsDelivr → Pages 回退）**：音色、内置谱面、可视化示例音频优先从 `cdn.jsdelivr.net/gh/teecatt/teecatt.github.io@master/...` 获取（CORS 可用、不消耗 GitHub Pages 流量），失败再回退本站相对路径。GitHub Release 资产不发送 CORS 头，浏览器 `fetch` 无法读取，故未采用。
 - **预解码**：`predecodeAll` 按每批 8 个解码 88 个音，避免一次性解码阻塞主线程与音频时间线。
 - **合成回退**：`__synth__` 分支用 3 个振荡器（triangle + 2×sine）叠加，指数包络收尾；仅在音色加载失败或 buffer 缺失时使用。
 - **增益**：`timbreGain` 对个别音色（三角钢琴、古钢琴）单独设增益，其余默认 3.0。
@@ -370,13 +371,13 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **视口自适应**：PC 端整页锁定视口高度（`height:100dvh` + `overflow:hidden`），`.layout` 用 `flex:1` 撑满，`.visual-panel` 与 Canvas 以 `flex:1` 占满——**钢琴键始终贴在屏幕底部，无需滚动页面**；菜单面板为浮层，不再挤压绘制区。
 - **顶栏两行**：第一行 `重播 / 选谱列表 / 全屏`（重播在左、全屏在右）；第二行 `播放·暂停 / 下一首 / 循环 / 上传谱面 /（靠右）谱面管理 / 设置 / 配色 / 调试`。进度条与统计信息仍单独置底。
 - **下一首**：`nextSong()` 切到列表下一首，到底回到第一首；`#nextBtn` 在谱面加载后启用。
-- **按钮**：全部为圆形 `.ctl-btn.primary`；上传 `arcticons:folder-upload`、管理 `fluent:text-bullet-list-edit-20-filled`、设置 `solar:settings-minimalistic-bold`、配色 `ic:round-color-lens`、调试 `carbon:debug`、重播 `fluent:replay-20-regular`、全屏 `solar:maximize/minimize-linear`；循环为**列表（`bi:repeat`）/ 单曲（`bi:repeat-1`）/ 不循环（`mdi:repeat-off`）三态**。谱面管理/设置/配色/调试**靠右对齐**（管理按钮 `margin-left:auto`）。
+- **按钮**：全部为圆形 `.ctl-btn.primary`；上传 `arcticons:folder-upload`、管理 `fluent:text-bullet-list-edit-20-filled`、设置 `solar:settings-minimalistic-bold`、配色 `ic:round-color-lens`、调试 `carbon:debug`、重播 `hugeicons:replay`、全屏 `solar:maximize/minimize-linear`；循环为**列表（`bi:repeat`）/ 单曲（`bi:repeat-1`）/ 不循环（`mdi:repeat-off`）三态**。谱面管理/设置/配色/调试**靠右对齐**（管理按钮 `margin-left:auto`）。
 - **全屏按钮**：第一行最右，对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。全屏内另有悬浮控件（见 9.11）。
 - **统一下拉面板 + 互斥**：设置 / 谱面管理 / 配色 / 调试四个面板风格一致（打开其一自动关闭其余及选谱/音色下拉），均从各自触发按钮**向下展开**（四个面板均作为 `.control-row` 子元素，`position:absolute; top:100%; right:0`，即控制行下方），最大高度约视口 2/3（≈渲染区 2/3），点击面板/触发按钮以外区域关闭（`closeAllDropPanels`）。
 
 ## 9.7 菜单面板、调试面板与滑动开关
 
-菜单面板（`.control-panel.drop-panel`，即「设置」）是**播放设置与音色**的统一容器，从设置按钮向下展开、内容可滚动；面板内所有开关均为**滑动开关**（`.switch`）而非勾选框：
+菜单面板（`.control-panel.drop-panel`，即「设置」）是**播放设置与音色**的统一容器，从设置按钮向下展开、内容可滚动；面板内所有开关均为**滑动开关**（`.switch`）而非勾选框。已删除「设置 / 音色」两个分组大标题；音色行与其它设置行一致：左侧 `音色选择` 标签、右侧下拉列表：
 
 - **透明度 / 模糊（仅设置面板）**：面板顶部保留「透明 / 模糊」滑块，背景为 `rgba(0,0,0,alpha)` + `backdrop-filter: blur()`；透明 100 = 全透明（alpha 0）、0 = 全黑，默认 **100**；模糊默认 **25%**；通过 `_applyAllAppearance()` 应用到设置/调试/配色/选谱/管理面板并持久化（`panelTransparency` / `panelBlur`）。调试面板与管理面板已**移除各自的滑块**。
 - **音乐倍速**：`speedSlider`（0.1–3.0×，步进 0.1，与下落流速一致的滑块）；**音量滑块已移除**，主增益固定 100%，由系统音量控制。
@@ -396,8 +397,18 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.8.1 钢琴宽度缩放与版型
 
 - 菜单面板新增两个滑块：**宽度缩放** `pianoWidthSlider`（1.0×–4.0×）与**水平偏移** `pianoOffsetSlider`（0%–100%，0 最左、100 最右），分别控制 `pianoWidthScale` 与 `viewOffsetX`；缩放后 `getKeyLayout` 重算键宽，渲染区与音符轨道同步，`drawScene` 跳过水平不可见音符（`key.x+w<0 || key.x>C.w`）省性能，播放不受影响。
-- **常见钢琴版型**：全尺寸 **88 键**（A0–C8）最多，最小常见为 **25 键**；中间档位 **76 / 61 / 49 / 37 键**。提供预设按钮 `setKeyboardPreset(N)`，按 `88/N` 设缩放并居中（偏移 50%）。
-- 缩放上限 4× ≈ 显示约 22 键，覆盖 25 键版型；如需更细可再调偏移滑块平移可见音域。
+- **标准钢琴版型**：`keyboardPresetSlider` 为 **0–5 六档固定档位**（`step=1`），对应 88 / 76 / 61 / 49 / 37 / 25 键。每种版型带独立音域与默认缩放/偏移，选档后**该音域第一个键正好对齐渲染区最左侧**；缩放 = `52 / 音域白键数`（使音域白键恰好铺满画布宽），偏移 = `白键序号 × 缩放 / (52 × (缩放−1)) × 100%`：
+
+| 档位 | 键数 | 音域（科学音高 / MIDI） | 白键数 | 默认缩放 | 默认偏移 |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 88 | A0–C8（21–108） | 52 | 1.000× | 0% |
+| 1 | 76 | E1–G7（28–103） | 45 | 1.156× | 57.14% |
+| 2 | 61 | C2–C7（36–96） | 36 | 1.444× | 56.25% |
+| 3 | 49 | C2–C6（36–84） | 29 | 1.793× | 39.13% |
+| 4 | 37 | C3–C6（48–84） | 22 | 2.364× | 53.33% |
+| 5 | 25 | C3–C5（48–72） | 15 | 3.467× | 43.24% |
+
+- 水平偏移滑块改为 `step=0.1`，以便精确落在版型默认偏移；缩放上限 4× 覆盖 25 键版型，仍可再调偏移平移可见音域。
 
 ## 9.9 配色面板（下拉浮层）
 
@@ -413,6 +424,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **就地删除 / 重下**：行内只有名称 + 右侧垃圾桶/下载图标（无「内置 / 已删除 / 上传」文字标签）。点击后图标就地变为**加载中**（下载时若服务端给出 `content-length` 则显示百分比），完成后原地切换为另一图标，**不再重建并重新弹出整个面板**；`deleteBuiltinSong` / `redownloadBuiltinSong` 仅做操作并刷新选谱下拉。
 - **内置谱列表缓存**：`_getBuiltinList()` 用内存 + Cache API（cache-first），选谱下拉与管理面板打开不再每次联网拉 `list.json`。
 - **默认预取**：启动仅并行加载 `Rush E 3`（默认播放）并后台预取 `The Sound of Silence`；并发测试谱不默认下载，选到时才按需加载。
+- **音色列表按需下载**：音色下拉每一项右侧有垃圾桶 / 下载按钮（复用 `.icon-btn`，与谱面管理一致）。已缓存显示垃圾桶（正在使用的音色不可删），未缓存显示下载按钮、点击后就地显示百分比；**未完成下载的音色不允许切换**（`canChoose` 拦截并提示）。`SoundfontLoader.cachedNames` 由 `refreshCachedNames()` 扫描缓存重建，删除用 `deleteCached()`。已删除「当前音色：xx 已就绪」文字提示。
 
 ## 9.11 全屏悬浮控件
 
@@ -425,7 +437,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.12 调试面板（独立浮层）
 
 - 控制行内新增圆形 `.ctl-btn.primary` 调试按钮（`debugToggleBtn`，图标 `carbon:debug`），位于**配色按钮左侧**；点击 `toggleDebugPanel()` 切换 `.debug-panel.open`，面板从控制行**向下展开**（统一 `.drop-panel`，绝对定位），浮在渲染区之上，**不改变渲染区高度**。
-- 面板内含：启用调试开关、日志区（200px 可滚动）与 **圆形 SVG 图标按钮**（复制 / 下载日志 / 清空 / 置顶 / 置底）、降级自动展开开关（**左对齐**，每次开启调试默认打开）。**透明 / 模糊滑块已移除**（只在设置面板保留）。
+- 面板内含：启用调试开关、日志区（200px 可滚动）与 **圆形 SVG 图标按钮**（复制 / 下载日志 / 清空 / 置顶 / 置底）。工具行顺序为：**降级自动展开开关（最左，每次开启调试默认打开）→ 复制 → 下载日志 → 清空 → 置顶 → 置底 → 重置所有设置（最右，`fluent:arrow-reset-20-regular`，`resetAllSettings()` 清除 `panelTransparency` / `panelBlur` / `dbgAutoOpen` / `deletedBuiltin` 后刷新）**。面板底边通过 `_syncDebugPanelHeight()` 与设置面板实际高度对齐。**透明 / 模糊滑块已移除**（只在设置面板保留）。
 - **开启调试即降耗**：每次勾选「启用调试」自动把透明度设为 **20%**（较暗）、模糊 **0%** 并提示。
 - 调试总开关默认开启；关闭后 `body.dbg-off` 隐藏 `.dbg-body`、停止采集与监控。
 - 面板背景与设置 / 配色 / 选谱 / 管理面板共享同一透明度与模糊（见 9.7、9.9）。
@@ -505,7 +517,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 1. **精简仓库音色集**：只保留实际用到的音色，或提供「钢琴精简包」；132 MB 中大部分是长尾音色。
 2. **按需预加载 + 省流量模式**：读取 `navigator.connection.saveData` / `effectiveType`，在移动网络或省流量模式下跳过后台预加载。
-3. **音色外置**：把 Soundfont 放到 jsDelivr / 对象存储 / 独立 CDN，减轻 GitHub Pages 带宽压力，并利用其更强的边缘缓存。
+3. **音色外置（已实现）**：Soundfont / 内置谱面 / 示例音频改由 **jsDelivr CDN** 提供（`_mediaUrls` 生成候选源，`_fetchBlobWithProgress` 逐个回退），失败时回退本站 Pages；缓存 key 仍用本站绝对路径以兼容旧缓存。
 4. **缓存已解码的 AudioBuffer**：把 `decodeAudioData` 结果存入 IndexedDB，跳过每次会话的 base64 解码与解码等待（当前解码在 `predecodeAll` 中完成）。
 5. **文件名哈希 + 长缓存**：对静态资源使用内容哈希命名并配合 `immutable` 语义，配合 `ignoreSearch` 精确失效。
 6. **资源提示**：对 CDN/音色目录加 `preconnect`/`prefetch`，缩短首字节时间。
@@ -769,6 +781,8 @@ midi_player/
 | 双击播放 | 双击（双触）非钢琴键的渲染区等价于播放/暂停 | `8d38638` |
 | 手势与全屏 | 上边缘拖动调钢琴高度（5%–50%）、两指捏合缩放钢琴宽度（1x–5x，渲染区同步、不可见音符跳过渲染、播放不受影响）；全屏新增设置/退出/双锁定悬浮按钮（总锁，锁定时手势视为敲键），2s 淡出、点击即暂停，菜单面板移入全屏元素 | `9f30fd7` |
 | 浮动控件重构 | 锁定按钮普通+全屏常驻（左右、顶部2/5、默认锁定、黑底50%、Toast）；所有悬浮按钮 2s 未点击淡到 10%、锁按钮吸附边缘露一半，仅点按钮才重置；调试面板独立（`carbon:debug` 按钮，配色左侧）；菜单/调试/配色/选谱/管理面板共享透明度；配色面板独立浮层、按钮 32px、播放中 2s 自动收起；软键盘/配色展开不改变渲染区高度 | `244c1dc` |
+| 面板与版型交互 | 谱面管理二次点击收起；删除设置/音色大标题、音色行加「音色选择」标签；键数版型改 6 档滑块并为六种标准音域配置默认缩放/偏移（首键对齐最左）；音色列表加垃圾桶/下载按钮+百分比、未下载不可切换、删除「已就绪」提示；调试面板自动展开开关移最左、最右加重置所有设置按钮、底边对齐设置面板；重播改 `hugeicons:replay` | `cbe84ee` |
+| 媒体外置 | 音色/内置谱面/可视化 demo.ogg 优先走 jsDelivr CDN、回退本站 Pages（GitHub Release 无 CORS 不可用） | `48edf1f` |
 | 状态区与设置 | 管理移到设置左侧并靠右对齐；重播改 `fluent:replay-20-regular`；调试开启自动设透明20%/模糊0%、自动展开默认开、按钮改圆形 SVG、开关左对齐；设置「音游?」开关移到右上角（关闭=音游模式）；音乐倍速改 0.1–3.0 滑块；删除音量滑块（主增益100%）；修复音色下拉（不再关掉所在设置面板导致左上角小输入框/黑条）；新增进度条上方状态区显示下载百分比/完成/调试日志，移除遮挡点击的顶部 Toast | `4180f6a` |
 | 谱库与操作 | 内置谱列表内存+Cache 缓存（选谱/管理面板打开不再联网）；管理面板删除/重下改为行内图标加载中（下载显示百分比）、不再整表刷新重弹；去掉行内文字标签；默认仅预取 Rush E 3 与 The Sound of Silence；循环按钮增加「不循环」（`mdi:repeat-off`，播完暂停）三态；配色按钮去白圈保持实心紫；设置/配色/debug 靠右对齐 | `74db97e` |
 | 配色面板修正 | `.palette-row` 不再强制 `display:flex`（此前覆盖了 `.drop-panel` 的隐藏，导致 A/B/C 与力度色带常显）；配色面板改为默认收起、点击后在控制行下方展开；debug/配色/设置/管理/选谱互斥；配色按钮恒为实心主题紫、选中加白框 | `58b1a97` |

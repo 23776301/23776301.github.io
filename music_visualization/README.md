@@ -54,7 +54,7 @@
 
 - 音频文件上传（点击顶部区域选择，或拖入）。
 - 播放/暂停、进度条拖拽 seek、音量、循环。
-- 自动加载演示音频 `demo.ogg`。
+- 自动加载演示音频 `demo.ogg`（优先从 jsDelivr CDN 获取，失败回退本站 Pages）。
 
 ### 2.3 其它
 
@@ -334,4 +334,4 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 
 ## 附：缓存
 
-`AssetCache` 使用 Cache API，缓存名 `music-viz-assets-v1`，以绝对路径为键、`ignoreSearch` 提高命中率；缓存失败时回退到普通 `fetch`。目前仅用于演示音频 `demo.ogg`。
+`AssetCache` 使用 Cache API，缓存名 `music-viz-assets-v1`，以绝对路径为键、`ignoreSearch` 提高命中率；缓存失败时回退到普通 `fetch`。目前仅用于演示音频 `demo.ogg`：`fetchDemo()` 先查缓存，未命中则按 `cdn.jsdelivr.net/gh/teecatt/teecatt.github.io@master/music_visualization/demo.ogg` → 本地 `demo.ogg` 顺序尝试，命中后写回缓存（CORS 可用且不消耗 Pages 带宽）。
