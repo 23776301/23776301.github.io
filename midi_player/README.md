@@ -306,7 +306,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **音频图**：`AudioContext → masterGain → outputAnalyser → destination`，`masterGain` 负责总音量，`outputAnalyser`（FFT 2048）用于静音探测。
 - **音色加载**：Soundfont 以 `*-ogg.js` 形式提供，内部是 base64 音频；`_doLoad` 下载/读缓存后用 `new Function` 求值取数据，再经 `atob → Uint8Array → decodeAudioData` 得到 `AudioBuffer`。
-- **媒体源（jsDelivr → Pages 回退）**：音色、内置谱面、可视化示例音频优先从 `cdn.jsdelivr.net/gh/teecatt/teecatt.github.io@master/...` 获取（CORS 可用、不消耗 GitHub Pages 流量），失败再回退本站相对路径。GitHub Release 资产不发送 CORS 头，浏览器 `fetch` 无法读取，故未采用。
+- **媒体源（多 CDN 并发择优 + Pages 兜底）**：音色、内置谱面、可视化示例音频同时向多个 jsDelivr 边缘节点（`cdn.jsdelivr.net` / `fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `testingcf.jsdelivr.net`，均 `gh/teecatt/teecatt.github.io@master/...`）发起请求，`_raceFetch()` 用 `Promise.any` 取**最先成功返回响应**的源，其余立即 `AbortController.abort()`（Happy Eyeballs 思路，既快又不浪费流量），全部失败才回退本站相对路径（同源 Pages）。GitHub Release 资产不发送 CORS 头，浏览器 `fetch` 无法读取，故未采用。
 - **预解码**：`predecodeAll` 按每批 8 个解码 88 个音，避免一次性解码阻塞主线程与音频时间线。
 - **合成回退**：`__synth__` 分支用 3 个振荡器（triangle + 2×sine）叠加，指数包络收尾；仅在音色加载失败或 buffer 缺失时使用。
 - **增益**：`timbreGain` 对个别音色（三角钢琴、古钢琴）单独设增益，其余默认 3.0。
@@ -475,7 +475,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - 自定义下拉（音色 / 谱面）弹层 `.csel-pop` 为 `position:fixed` 且挂到 `body`，直接遮挡渲染区；其背景/模糊同样纳入统一面板外观（`_panelTargets`）。
 - **不自动聚焦搜索框**：`open()` 不再调用 `search.focus()`，点击音色 / 谱面列表不会唤醒输入法；用户可手动点搜索框。
 - **全屏可弹出**：`.csel-pop` 默认挂在 `document.body`，而全屏只渲染全屏元素，故 `open()` 时若处于全屏则把弹层挂到全屏元素（`.visual-panel`）内，保证全屏状态下音色/谱面列表能正常显示。
-- **状态区**：进度条上方的 `.time-row` 中间新增 `#statusText`。**仅 INFO 日志（`type==='log'`）** 镜像到此处，**去掉时间戳与 `[AudioDebug]` 前缀**，只保留精确信息，名称用中括号包裹，如 `音色[古钢琴]从jsDelivr下载成功!`、`谱面[Rush E 3.mid]从jsDelivr下载失败，尝试从Pages直取…`、`音色[古钢琴]下载 42%`；性能告警（warn）不再刷入状态区。下载/进度/完成的通用提示（如「乐谱下载完成！」）已删除，避免覆盖精确信息。原顶部浮层 Toast 已移除。
+- **状态区**：进度条上方的 `.time-row` 中间新增 `#statusText`。**仅 INFO 日志（`type==='log'`）** 镜像到此处，**去掉时间戳与 `[AudioDebug]` 前缀**，只保留精确信息，名称用中括号包裹，如 `音色[古钢琴]从jsDelivr下载成功!`、`谱面[Rush E 3.mid]从jsDelivr-Fastly下载成功!`、`音色[古钢琴]下载 42%`；性能告警（warn）不再刷入状态区。下载/进度/完成的通用提示（如「乐谱下载完成！」）已删除，避免覆盖精确信息。原顶部浮层 Toast 已移除。
 - `viewport` 设 `interactive-widget=overlays-content`，并在 `visualViewport.resize` 中判断键盘高度差（`height < innerHeight-120`）时**跳过画布重算**，使软键盘 / 选谱弹层弹出时渲染区高度不变、由弹层直接遮挡。
 
 # 十、部署、流量与缓存策略（GitHub Pages）
@@ -546,7 +546,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 1. **精简仓库音色集**：只保留实际用到的音色，或提供「钢琴精简包」；132 MB 中大部分是长尾音色。
 2. **按需预加载 + 省流量模式**：读取 `navigator.connection.saveData` / `effectiveType`，在移动网络或省流量模式下跳过后台预加载。
-3. **音色外置（已实现）**：Soundfont / 内置谱面 / 示例音频改由 **jsDelivr CDN** 提供（`_mediaUrls` 生成候选源，`_fetchBlobWithProgress` 逐个回退），失败时回退本站 Pages；缓存 key 仍用本站绝对路径以兼容旧缓存。
+3. **音色外置（已实现）**：Soundfont / 内置谱面 / 示例音频改由 **多个 jsDelivr 边缘节点** 提供（`_mediaUrls` 生成候选源，`_raceFetch` 并发择优、胜出者流式下载、其余 abort，失败按序回退），全部失败回退本站 Pages；缓存 key 仍用本站绝对路径以兼容旧缓存。
 4. **缓存已解码的 AudioBuffer**：把 `decodeAudioData` 结果存入 IndexedDB，跳过每次会话的 base64 解码与解码等待（当前解码在 `predecodeAll` 中完成）。
 5. **文件名哈希 + 长缓存**：对静态资源使用内容哈希命名并配合 `immutable` 语义，配合 `ignoreSearch` 精确失效。
 6. **资源提示**：对 CDN/音色目录加 `preconnect`/`prefetch`，缩短首字节时间。
@@ -820,6 +820,7 @@ midi_player/
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
 | 调试面板滚动 | 日志区不再单独滚动，整个调试面板作为唯一滚动容器；滚动日志即滚动面板，避免日志滑到边界后底部仍被裁掉需二次滑动；自动跟随与置顶/置底改为滚动面板 | `36904c1` |
 | 调试终端滚动修正 | 终端 `.dbg-log` 恢复为唯一滚动容器；`_debugPanelScrollEl` 改回返回终端，修复置顶/置底按钮无效与自动展开不滚到最新；自动展开改用 requestAnimationFrame 等布局完成 | `397c5fc` |
+| 多 CDN 并发择优 | `_mediaUrls` 返回 jsDelivr 四节点（cdn/fastly/gcore/testingcf）+ 本站 Pages；新增 `_raceFetch`/`_promiseAny`/`_sourceLabel`，同时请求、最先响应者胜出并 abort 其余；音色与谱面下载全部走此路径 | `_pending_` |
 | 谱面状态与实时更新 | 谱面管理初始按真实缓存显示（未下载=下载图标）；新增 `_onDownloadBuiltin` 与 `refreshManageRowState`；默认资源按序预取（Rush E3→古钢琴→Sound of Silence→三角钢琴→电钢琴2），每项下载完成实时刷新对应行/音色状态 | `4902ff2` |
 | 复制反馈矢量勾 | 调试面板复制按钮反馈由 `copied✓` 文字改为 lucide `copy-check` 矢量勾；修复反馈后图标不恢复的问题（改存 `innerHTML` 并在 1.2s 后还原） | `2b5dfc8` |
 | 下拉按钮旋转动画 | 谱面管理/设置/配色/调试四个按钮图标统一为「收起旋转 180°、展开转回」并加过渡动画；由 `syncDropToggleIcons()` 集中同步，打开其他面板或点击面板外收起时也会播放动画 | `885263d` |

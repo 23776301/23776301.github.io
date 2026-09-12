@@ -1356,47 +1356,106 @@ try{
   }
 }catch(e){}
 
-// ===== 媒体源：优先 jsDelivr CDN（不消耗 GitHub Pages 流量），失败回退本站 Pages =====
-const CDN_REPO_BASE = 'https://cdn.jsdelivr.net/gh/teecatt/teecatt.github.io@master/';
-function cdnUrl(repoPath){
-  return CDN_REPO_BASE + String(repoPath).split('/').map(encodeURIComponent).join('/');
+// ===== 媒体源：多个 jsDelivr 边缘节点 + 本站 Pages 兜底，下载时并发择优 =====
+// 国内访问 jsDelivr 各边缘节点速度差异大，同时发起请求、最先返回响应的胜出（Happy Eyeballs 思路），
+// 其余候选立即 abort，既快又不浪费流量。
+const REPO_GH = 'teecatt/teecatt.github.io';
+const REPO_REF = 'master';
+const CDN_BASES = [
+  { name: 'jsDelivr',        base: 'https://cdn.jsdelivr.net/gh/' },
+  { name: 'jsDelivr-Fastly', base: 'https://fastly.jsdelivr.net/gh/' },
+  { name: 'jsDelivr-Gcore',  base: 'https://gcore.jsdelivr.net/gh/' },
+  { name: 'jsDelivr-CF',     base: 'https://testingcf.jsdelivr.net/gh/' },
+];
+function _cdnUrlFor(base, repoPath){
+  return base + REPO_GH + '@' + REPO_REF + '/' + String(repoPath).split('/').map(encodeURIComponent).join('/');
 }
-// midi_player 内的相对路径 -> [CDN, 本地] 候选源
+function cdnUrl(repoPath){
+  return _cdnUrlFor(CDN_BASES[0].base, repoPath);
+}
+// midi_player 内的相对路径 -> [CDN 各节点..., 本站 Pages] 候选源（Pages 为相对路径，同源兜底）
 function _mediaUrls(relPath){
   const clean = String(relPath).replace(/^\.\//, '');
-  return [cdnUrl('midi_player/' + clean), clean];
+  const repoPath = 'midi_player/' + clean;
+  const urls = CDN_BASES.map(b => _cdnUrlFor(b.base, repoPath));
+  urls.push(clean);
+  return urls;
 }
-// 依次尝试候选源，流式下载并回报百分比（0-100）；label 用于日志（如 谱面[xx.mid]）
+// 从 URL 推断可读来源名（用于日志/状态区）
+function _sourceLabel(url){
+  const u = String(url);
+  if(u.indexOf('://') < 0) return 'Pages';
+  for(const b of CDN_BASES){ if(u.indexOf(b.base) === 0) return b.name; }
+  try{ return new URL(u).hostname; }catch(e){ return '备用源'; }
+}
+// Promise.any 兼容封装：返回最先成功的结果；全部失败时抛出含 errors 数组的对象
+function _promiseAny(ps){
+  if(typeof Promise.any === 'function') return Promise.any(ps);
+  return new Promise((resolve, reject) => {
+    let pending = ps.length; const errs = [];
+    if(!pending) return reject(new Error('无可用源'));
+    ps.forEach((p, i) => Promise.resolve(p).then(resolve, e => { errs[i] = e; if(--pending === 0) reject({ errors: errs }); }));
+  });
+}
+// 并发择优：同时请求所有候选源，最先成功返回响应的胜出，其余候选 abort
+async function _raceFetch(urls){
+  const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+  if(!list.length) throw new Error('无可用源');
+  const hasAbort = (typeof AbortController !== 'undefined');
+  const controllers = list.map(() => hasAbort ? new AbortController() : null);
+  const attempts = list.map((url, i) => (async () => {
+    const resp = await fetch(url, controllers[i] ? { signal: controllers[i].signal } : undefined);
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    return { resp, i, url };
+  })());
+  let winner;
+  try{
+    winner = await _promiseAny(attempts);
+  }catch(agg){
+    const errs = (agg && agg.errors) || [];
+    const first = errs.find(e => e);
+    throw (first instanceof Error) ? first : new Error('全部源下载失败');
+  }
+  controllers.forEach((c, i) => { if(c && i !== winner.i){ try{ c.abort(); }catch(e){} } });
+  return { resp: winner.resp, url: winner.url, index: winner.i, list };
+}
+// 流式读取响应为 Blob 并回报百分比
+async function _readBlobWithProgress(resp, onProgress){
+  const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
+  if(!resp.body || !total || !resp.body.getReader){
+    const blob = new Blob([await resp.arrayBuffer()]);
+    if(onProgress) onProgress(100);
+    return blob;
+  }
+  const reader = resp.body.getReader();
+  const chunks = []; let received = 0;
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    chunks.push(value); received += value.length;
+    if(onProgress) onProgress(received / total * 100);
+  }
+  const blob = new Blob(chunks);
+  if(onProgress) onProgress(100);
+  return blob;
+}
+// 并发择优下载：胜出源流式读取，若读取中途失败则按顺序回退其余候选
 async function _fetchBlobWithProgress(urls, onProgress, label, quiet){
+  const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+  const winner = await _raceFetch(list);
+  const order = [winner.index, ...list.map((_, i) => i).filter(i => i !== winner.index)];
   let lastErr;
-  for(let i = 0; i < urls.length; i++){
-    const src = (i === 0) ? 'jsDelivr' : 'Pages';
+  for(const idx of order){
     try{
-      const resp = await fetch(urls[i]);
-      if(!resp.ok) throw new Error('HTTP ' + resp.status);
-      const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
-      let blob;
-      if(!resp.body || !total || !resp.body.getReader){
-        blob = new Blob([await resp.arrayBuffer()]);
-        if(onProgress) onProgress(100);
-      } else {
-        const reader = resp.body.getReader();
-        const chunks = []; let received = 0;
-        while(true){
-          const {done, value} = await reader.read();
-          if(done) break;
-          chunks.push(value); received += value.length;
-          if(onProgress) onProgress(received / total * 100);
-        }
-        blob = new Blob(chunks);
-        if(onProgress) onProgress(100);
-      }
-      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + src + '下载成功!');
+      let resp;
+      if(idx === winner.index){ resp = winner.resp; }
+      else { resp = await fetch(list[idx]); if(!resp.ok) throw new Error('HTTP ' + resp.status); }
+      const blob = await _readBlobWithProgress(resp, onProgress);
+      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + _sourceLabel(list[idx]) + '下载成功!');
       return blob;
     }catch(e){
       lastErr = e; if(onProgress) onProgress(0);
-      const next = urls[i + 1] ? ('，尝试从' + ((i + 1 === 1) ? 'Pages' : '备用源') + '直取…') : '';
-      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + src + '下载失败' + next);
+      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + _sourceLabel(list[idx]) + '下载失败');
     }
   }
   throw lastErr || new Error('下载失败');
@@ -1491,18 +1550,16 @@ const SoundfontLoader = {
         }
       }catch(e){}
     }
-    let resp = null, lastErr = null, source = null;
-    for(let i = 0; i < urls.length; i++){
-      const src = (i === 0) ? 'jsDelivr' : 'Pages';
-      try{
-        const r = await fetch(urls[i], {mode: 'cors'});
-        if(r.ok){ resp = r; source = src; break; }
-        lastErr = new Error('下载失败 HTTP ' + r.status);
-      }catch(e){ lastErr = e; }
-      const next = urls[i + 1] ? ('，尝试从' + ((i + 1 === 1) ? 'Pages' : '备用源') + '直取…') : '';
-      console.warn('[AudioDebug][WARN] ' + _timbreLabel(name) + '从' + src + '下载失败' + next);
+    // 并发择优：同时请求所有候选源，最先返回响应的胜出
+    let resp = null, source = null;
+    try{
+      const winner = await _raceFetch(urls);
+      resp = winner.resp;
+      source = _sourceLabel(winner.url);
+    }catch(e){
+      console.warn('[AudioDebug][WARN] ' + _timbreLabel(name) + '全部源下载失败：' + (e && e.message ? e.message : e));
+      throw e;
     }
-    if(!resp) throw lastErr || new Error('下载失败');
     const _total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
     let text;
     if(resp.body && resp.body.getReader && _total){
