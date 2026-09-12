@@ -426,7 +426,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ## 9.10 谱面管理面板（下拉浮层）
 
-- **统一样式**：`manageModal` 为 `.drop-panel.manage-panel`，从「管理谱面」按钮向下展开、最大高度 **65vh**（较 75% 上收 10%）；列表正文 `.manage-row .name` 为 **11px**，标题 `.manage-head h3` 稍大一号 **14px**（`.manage-empty` 也 12px）；**行距收紧**（行 `padding:2px 8px;margin-bottom:1px`、分节 `margin:6px 0 2px`、标题 `margin-bottom:8px`）以贴合设置面板的紧凑度；背景与设置/调试/配色/选谱面板共享同一透明度与模糊（`_panelTargets` 含 `manageModal`）。已移除独立卡片与「透明 / 模糊」滑块。
+- **统一样式**：`manageModal` 为 `.drop-panel.manage-panel`，从「管理谱面」按钮向下展开、最大高度 **65vh**（较 75% 上收 10%）；列表正文 `.manage-row .name` 为 **11px**，标题 `.manage-head h3` 稍大一号 **14px**（`.manage-empty` 也 12px）；**行距收紧**（行 `padding:2px 8px;margin-bottom:1px`、分节 `margin:6px 0 2px`、标题 `margin-bottom:8px`）以贴合设置面板的紧凑度；背景与设置/调试/配色/选谱面板共享同一透明度与模糊（`_panelTargets` 含 `manageModal`）。已移除独立卡片与「透明 / 模糊」滑块。**点击行即可切换到该谱面播放**：用户上传谱直接切歌；内置谱先查 `AssetCache.has()`，已下载则切换（若曾被标记删除先恢复）；未下载则 `_probeMediaSize()` 探测体积并弹窗「大小约 xxKB，是否立即下载并播放？」，确认后下载并切歌。操作按钮点击不会触发行播放。
 - **点击外部收起**：统一由 `closeAllDropPanels()`（document 捕获 pointerdown，排除 `.drop-panel` 与 `.drop-trigger`）处理。
 - **就地删除 / 重下**：行内只有名称 + 右侧垃圾桶/下载图标（无「内置 / 已删除 / 上传」文字标签）。点击后图标就地变为**加载中**（下载时若服务端给出 `content-length` 则显示百分比），完成后原地切换为另一图标，**不再重建并重新弹出整个面板**；`deleteBuiltinSong` / `redownloadBuiltinSong` 仅做操作并刷新选谱下拉。
 - **删除即真正清理空间**（Rush E3 除外）：`deleteBuiltinSong` 会遍历 Cache API 删除该谱面所有缓存键（按文件名匹配，兼容 CDN/Pages 键名），并释放其配置的默认音色缓存（若不再被其它未删除的内置谱使用且非当前音色），日志输出释放的 MB 数。删除状态存于 `deletedBuiltin`。**Rush E3 为演示谱面**：删除仅标记（`_SOFT_DELETE`），不删缓存，重置后自动恢复；其余谱面删除后不随重置恢复。
@@ -449,7 +449,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.12 调试面板（独立浮层）
 
 - 控制行内新增圆形 `.ctl-btn.primary` 调试按钮（`debugToggleBtn`，图标 `carbon:debug`），位于**配色按钮左侧**；点击 `toggleDebugPanel()` 切换 `.debug-panel.open`，面板从控制行**向下展开**（统一 `.drop-panel`，绝对定位），浮在渲染区之上，**不改变渲染区高度**。
-- 面板顶部工具行为：**启用调试开关（左）……重置所有选项按钮（右上角，红色警示样式，含文字「重置所有选项」+ `fluent:arrow-reset-20-regular` 图标，`resetAllSettings()` 清除全部设置项（`panelTransparency` / `panelBlur` / `dbgAutoOpen` / `debugEnabled` / `menuBtnPos` / `paletteCustom` / `paletteV2`）后刷新，但**不触碰用户数据**：`deletedBuiltin`、IndexedDB 用户谱面、资产缓存均保留）**。工具栏右侧另有红色「清空日志」按钮（`confirmClearDebug()` 二次确认）与红色「重置所有选项」按钮（`confirmResetAll()` 二次确认）。第二行为日志操作按钮：**渲染降级自动弹出开关（最左，每次开启调试默认打开）→ 复制 → 下载日志 → 置顶 → 置底**（圆形 SVG 图标）。面板高度通过 `_syncDebugPanelHeight()` 设为浏览器高度的 65%（`65vh`，较 75% 上收 10%）。工具栏与操作按钮包在 `.dbg-header` 里固定不滚动，终端 `.dbg-log` 占据下方所有剩余空间并作为**唯一滚动容器**（`flex:1; min-height:0; overflow-y:auto`），面板本身 `overflow:hidden`。`_appendDebug` 的自动跟随、置顶/置底按钮（`scrollDebugTop/Bottom`）都操作终端（`_debugPanelScrollEl()` 返回 `#debugTerminalContent`）。因性能问题自动展开时用 `requestAnimationFrame` 等布局完成后再滚到最新。关闭调试时面板自动缩小。**透明 / 模糊滑块已移除**（只在设置面板保留）。
+- 面板顶部工具行为：**启用调试开关（左）……重置所有选项按钮（右上角，红色警示样式，含文字「重置所有选项」+ `fluent:arrow-reset-20-regular` 图标，`resetAllSettings()` 清除全部设置项（`panelTransparency` / `panelBlur` / `dbgAutoOpen` / `debugEnabled` / `menuBtnPos` / `paletteCustom` / `paletteV2`）后刷新，但**不触碰用户数据**：`deletedBuiltin`、IndexedDB 用户谱面、资产缓存均保留）**。工具栏右侧两个红色按钮**右对齐**：先「重置所有选项」(`confirmResetAll()` 二次确认)、后「清空日志」(`confirmClearDebug()` 二次确认)，窄屏自动缩小字号与按钮。第二行为日志操作按钮：**渲染降级自动弹出开关（最左，每次开启调试默认打开）→ 复制 → 下载日志 → 置顶 → 置底**（圆形 SVG 图标），后四个图标按钮整体**右对齐**（`#debugCopyBtn{margin-left:auto}`）。面板高度通过 `_syncDebugPanelHeight()` 设为浏览器高度的 65%（`65vh`，较 75% 上收 10%）。工具栏与操作按钮包在 `.dbg-header` 里固定不滚动，终端 `.dbg-log` 占据下方所有剩余空间并作为**唯一滚动容器**（`flex:1; min-height:0; overflow-y:auto`），面板本身 `overflow:hidden`。`_appendDebug` 的自动跟随、置顶/置底按钮（`scrollDebugTop/Bottom`）都操作终端（`_debugPanelScrollEl()` 返回 `#debugTerminalContent`）。因性能问题自动展开时用 `requestAnimationFrame` 等布局完成后再滚到最新。关闭调试时面板自动缩小。**透明 / 模糊滑块已移除**（只在设置面板保留）。
 - **开启调试即降耗**：每次勾选「启用调试」自动把透明度设为 **20%**（较暗）、模糊 **0%** 并提示。
 - 调试总开关默认开启；关闭后 `body.dbg-off` 隐藏 `.dbg-body`、停止采集与监控。
 - 面板背景与设置 / 配色 / 选谱 / 管理面板共享同一透明度与模糊（见 9.7、9.9）。
@@ -804,6 +804,7 @@ midi_player/
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
 | 调试面板滚动 | 日志区不再单独滚动，整个调试面板作为唯一滚动容器；滚动日志即滚动面板，避免日志滑到边界后底部仍被裁掉需二次滑动；自动跟随与置顶/置底改为滚动面板 | `36904c1` |
 | 调试终端滚动修正 | 终端 `.dbg-log` 恢复为唯一滚动容器；`_debugPanelScrollEl` 改回返回终端，修复置顶/置底按钮无效与自动展开不滚到最新；自动展开改用 requestAnimationFrame 等布局完成 | `397c5fc` |
+| 谱面行点击播放+工具栏对齐 | 调试工具栏「重置/清空」右对齐、窄屏自动缩小；下方四个图标按钮右对齐；谱面管理行可点击切换播放（仅已下载），未下载弹窗提示大小并可下载后播放 | `_pending_` |
 | 面板交互与确认弹窗 | 上传/播放/重播/全屏等非下拉触发按钮不再关闭已打开面板；调试与谱面列表底部阈值上收 10%（65vh）；清空日志按钮上移至工具栏与重置并列并标红；清空/重置均加二次确认弹窗；调试面板展开且开启时任意按钮点击后终端滚到最新；「降级自动展开」更名「渲染降级自动弹出」 | `427bddc` |
 | 综合整改 | 全屏悬浮按钮 z-index 修复；73 键型（F1-F7）；键型左 25→右 88；调试面板高度 75vh、终端 flex 填充、dbg-header 固定；关闭调试面板缩小；透明度默认 40%+百分比显示；Rush E3 软删除；重置恢复演示谱面+下载缺失默认资源 | `7999c5b` |
 | 第二行按钮布局修正 | 宽屏保持默认32px按钮+左/右分组对齐（`.ctl-group`+`.ctl-spacer`）；窄屏（≤600px）隐藏spacer、按钮按需缩小（24–32px）；修复SVG选择器适配新结构 | `b7f82f4` |

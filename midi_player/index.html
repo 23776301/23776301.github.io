@@ -134,6 +134,8 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
   .ctl-spacer{display:none}
   .control-row > .ctl-group{flex:1 1 0;justify-content:space-between}
   .control-row > .ctl-group > .ctl-btn{width:auto;min-width:24px;flex:1 1 0 !important;max-width:32px}
+  .dbg-toolbar .dbg-reset-btn{padding:2px 5px;font-size:10px;gap:3px}
+  .dbg-toolbar .dbg-reset-btn svg{width:12px;height:12px}
 }
 .ctl-btn{
   width:32px;height:32px;flex-shrink:0;padding:0;border-radius:50%;
@@ -169,7 +171,8 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 #manageList{overflow-y:auto;flex:1;min-height:0}
 .manage-section{color:var(--dim);font-size:11px;margin:6px 0 2px}
 .manage-empty{color:var(--dim);text-align:center;padding:12px;font-size:12px}
-.manage-row{display:flex;align-items:center;gap:6px;padding:2px 8px;border-radius:4px;margin-bottom:1px;background:rgba(255,255,255,.04)}
+.manage-row{display:flex;align-items:center;gap:6px;padding:2px 8px;border-radius:4px;margin-bottom:1px;background:rgba(255,255,255,.04);cursor:pointer}
+.manage-row:hover{background:rgba(255,255,255,.1)}
 .manage-row .name{flex:1;font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .manage-row .tag{font-size:10px;color:var(--dim)}
 .icon-btn{background:none;border:none;color:var(--dim);cursor:pointer;padding:4px;display:inline-flex;align-items:center;border-radius:6px}
@@ -197,7 +200,9 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .dbg-actions button{background:#333;color:#fff;border:none;width:26px;height:26px;padding:0;cursor:pointer;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
 .dbg-actions button svg{width:14px;height:14px}
 .dbg-actions button:hover{background:#444}
-.dbg-reset-btn{margin-left:auto;display:inline-flex;align-items:center;gap:5px;background:#7f1d1d;color:#fff;border:1px solid #b91c1c;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;opacity:1;backdrop-filter:none;-webkit-backdrop-filter:none}
+.dbg-reset-btn{display:inline-flex;align-items:center;gap:5px;background:#7f1d1d;color:#fff;border:1px solid #b91c1c;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;opacity:1;backdrop-filter:none;-webkit-backdrop-filter:none;flex:0 1 auto;min-width:0;white-space:nowrap}
+.dbg-toolbar .dbg-reset-btn:first-of-type{margin-left:auto}
+.dbg-actions #debugCopyBtn{margin-left:auto}
 .dbg-reset-btn:hover{background:#991b1b;color:#fff}
 .dbg-reset-btn:active{background:#6b1616}
 .dbg-reset-btn svg{width:14px;height:14px}
@@ -411,8 +416,8 @@ select:focus{border-color:var(--accent)}
             <div class="dbg-header">
               <div class="dbg-toolbar">
                 <label class="switch"><input id="dbgEnabled" type="checkbox" checked onchange="onDebugEnabledChange()"><span class="track"><span class="knob"></span></span>启用调试</label>
-                <button class="dbg-reset-btn" id="debugClearBtn" onclick="confirmClearDebug()" title="清空日志"><span>清空日志</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg></button>
                 <button class="dbg-reset-btn" id="debugResetBtn" onclick="confirmResetAll()" title="重置所有设置"><span>重置所有选项</span><svg viewBox="0 0 20 20" fill="currentColor"><path d="M5.854 2.646a.5.5 0 0 1 0 .708L4.207 5H11a6 6 0 1 1-6 6a.5.5 0 0 1 1 0a5 5 0 1 0 5-5H4.207l1.647 1.646a.5.5 0 1 1-.708.708l-2.5-2.5a.5.5 0 0 1 0-.708l2.5-2.5a.5.5 0 0 1 .708 0"/></svg></button>
+                <button class="dbg-reset-btn" id="debugClearBtn" onclick="confirmClearDebug()" title="清空日志"><span>清空日志</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg></button>
               </div>
               <div class="dbg-off-hint">调试已关闭，无日志采集与监控。</div>
               <div class="dbg-body">
@@ -1245,6 +1250,14 @@ const AssetCache = {
     } catch(e) {
       return fetch(url);
     }
+  },
+  // 仅查缓存（不发起网络请求）：用于判断谱面是否已下载
+  async has(url) {
+    try{
+      const cache = await caches.open(this.cacheName);
+      const cached = await cache.match(this._abs(url), {ignoreSearch: true});
+      return !!cached;
+    }catch(e){ return false; }
   },
   // 列表等需要"每次最新"的资源：始终走网络，命中后更新缓存，避免旧列表残留
   async fetchFresh(url) {
@@ -2402,6 +2415,33 @@ async function fetchMedia(relPath, onProgress, quiet){
   const blob = await _fetchWithProgress(relPath, onProgress, quiet);
   return new Response(blob);
 }
+// 探测未下载谱面的体积（HEAD 优先，失败回退 GET Range），用于下载前提示
+async function _probeMediaSize(relPath){
+  const urls = _mediaUrls(relPath);
+  for(const u of urls){
+    try{
+      const r = await fetch(u, {method: 'HEAD', mode: 'cors'});
+      if(r && r.ok){
+        const len = parseInt((r.headers && r.headers.get) ? (r.headers.get('content-length') || '0') : '0', 10);
+        if(len > 0) return len;
+      }
+    }catch(e){}
+  }
+  return 0;
+}
+// 切换到指定谱面并播放（key 形如 builtin:xxx / user:xxx）
+async function _switchToSong(key){
+  const sel = document.getElementById('songSel');
+  let opt = sel ? [...sel.options].find(o => o.value === key) : null;
+  if(sel && !opt){
+    opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = _songDisplayName(String(key).replace(/^(builtin:|user:)/, ''));
+    sel.appendChild(opt);
+  }
+  if(sel) sel.value = key;
+  await onSongChange(key);
+}
 
 async function loadSongList(){
   const sel = document.getElementById('songSel');
@@ -2506,7 +2546,48 @@ function _makeManageRow(name, kind, file, isDeleted){
     _btnIcon(btn, TRASH_ICON, 'del', '删除', () => _onDeleteBuiltin(file, btn));
   }
   row.appendChild(btn);
+  // 点击行（非操作按钮）切换到该谱面播放；未下载则弹窗询问是否下载并播放
+  row.addEventListener('click', (e) => {
+    if(e.target && e.target.closest && e.target.closest('button')) return;
+    _onManageRowClick(name, kind, file, isDeleted);
+  });
   return row;
+}
+async function _onManageRowClick(name, kind, file, isDeleted){
+  try{
+    if(kind === 'user'){
+      closeManageModal();
+      await _switchToSong('user:' + name);
+      return;
+    }
+    const cached = await AssetCache.has(file);
+    if(cached){
+      // 若曾被标记删除，先恢复（软删除时缓存仍在）
+      const set = getDeletedBuiltin();
+      if(set.has(file)){ set.delete(file); saveDeletedBuiltin(set); await loadSongList(); }
+      closeManageModal();
+      await _switchToSong('builtin:' + file);
+      return;
+    }
+    // 未下载：探测大小并弹窗确认
+    const size = await _probeMediaSize(file);
+    const sizeTxt = size > 0 ? ('大小约 ' + Math.round(size / 1024) + 'KB，') : '';
+    _showConfirm('谱面[' + name + '] ' + sizeTxt + '是否立即下载并播放？', async () => {
+      try{
+        setStatus('谱面[' + name + '] 下载中…');
+        await _fetchWithProgress(file, (p) => setStatus('谱面[' + name + '] 下载 ' + Math.round(p) + '%'));
+        const set = getDeletedBuiltin();
+        if(set.has(file)){ set.delete(file); saveDeletedBuiltin(set); }
+        await loadSongList();
+        closeManageModal();
+        await _switchToSong('builtin:' + file);
+      }catch(e){
+        setStatus('谱面[' + name + '] 下载失败');
+      }
+    });
+  }catch(e){
+    setStatus('谱面加载失败：' + (e && e.message ? e.message : e));
+  }
 }
 async function _onDeleteUser(name, btn, row){
   _btnLoading(btn);
