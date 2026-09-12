@@ -54,14 +54,14 @@
 
 - 音频文件上传（点击顶部区域选择，或拖入）。
 - 播放/暂停、进度条拖拽 seek、音量、循环。
-- 自动加载演示音频 `demo.ogg`（多个 jsDelivr 边缘节点**并发完整下载竞速**，最先完成者胜出，其余立即中止并清理不完整分片，全部失败回退本站 Pages）。
+- 自动加载演示音频 `demo.ogg`（多个 jsDelivr 边缘节点**并发完整下载竞速**，最先完成者胜出，其余立即中止并清理不完整分片，全部失败回退本站 Pages；可在终端顶部「完整竞速」开关关闭，改用首字节竞速）。
 
 ### 2.3 其它
 
-- **多元素叠加**：可同时添加多个效果，按 `y` 排序绘制，支持选中/拖动/删除。
+- **多元素叠加**：可同时添加多个效果，按 `y` 排序绘制，支持选中/删除（位置只能在属性面板用 X/Y 设置，画布上不允许拖动移动）。
 - 画布比例预设：16:9（1280×720）、9:16、1:1、4:5、4:3。
 - 画布缩放（0.1×–2×）与「适配」按钮（`fitCanvas()` 优先按**宽度贴合左右控件边界**等比缩放，高度超出由绘制区滚动）。
-- 画布内点击选中元素、拖动移动；选中时显示虚线框与四角手柄，可拖角自由（非等比）缩放，触摸端支持两指夹捏等比缩放。
+- 画布内点击选中元素（**不允许拖动移动**，位置在属性面板 X/Y 设置）；选中时显示虚线框与四角手柄，可拖角自由（非等比）缩放，触摸端支持两指夹捏等比缩放。
 - 背景：纯色 / 线性渐变 / 径向渐变 / 图片（模糊 + 暗化）。
 - 配色：纯色 / 渐变 / 彩虹，渐变支持多色增删排序。
 - **刷新即恢复默认**：不做配置持久化（`saveConfig` 为空实现，`loadConfig` 会清除历史键），每次刷新元素回到默认居中（x/y=50）、画板比例回到 16:9，属性面板默认不展开。
@@ -256,11 +256,12 @@ index.html
 - **元素库**：左侧面板按分类列出效果缩略图，点击即追加一个新元素。
 - **属性面板**：**左侧**（与元素/背景面板一致，PC 端同占左侧槽位、打开时隐藏元素面板），移动端与其它面板一样**从左侧滑出**；分组展示参数。
 - **画布**：Pointer Events 统一鼠标/触摸——`pointerdown` 命中检测并 `setPointerCapture`，`pointermove` 更新，`pointerup`/`pointercancel` 结束；画布设置 `touch-action:none` 防止触摸滚动。
-- **移动**：拖动元素本体，按 `worldPoint()` 逆缩放换算，缩放下位置依然准确。
+- **移动**：**已禁用画布拖动移动**；`pointerdown` 命中元素只做选中，位置必须通过属性面板的「位置 X / 位置 Y」滑条设置（按百分比、以元素中心计）。
 - **四角缩放**：悬停四角显示 `nwse/nesw-resize` 光标，拖动对应角可**自由非等比**改变宽高（对角固定，宽高限制 2%–100%），类似 Windows 窗口缩放。
 - **两指夹捏**：触摸端双指按距离比**等比**缩放选中元素（长宽同比）。
 - **选中反馈**：选中元素绘制虚线框与四角手柄；点击空白处取消选中。
 - **元素库/背景**：底部「背景」工具页配置画布背景。
+- **性能面板**：图标栏「属性」右侧的「性能」按钮，设置画布**分辨率**（宽/高，范围 100×100 ~ 4320×2160）与**帧率**（FPS，范围 30 ~ 240），并预置 360p/480p/720p/1080p/2K/4K 分辨率与 30/60/90/120/144/240 帧率；超出范围时面板内报错且不生效，帧率超过浏览器实测上限时自动取上限（`_detectMaxFps()` 采样 rAF 间隔估算）。`render()` 按 `CFG.fps` 节流。
 - **缩放**：工具栏 `− / + / ⛶ 适配`，标签实时显示百分比；`fitCanvas()` 以「宽度贴合左右控件边界」为优先（`zoom = 可用宽度 / 画布宽度`），不再被高度限制；属性面板开合会重新适配。
 
 ---
@@ -300,7 +301,8 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 ### 12.1 性能
 
 - **每帧只取样一次频谱**：`getByteFrequencyData`/`getByteTimeDomainData` 移入 `render()`，所有元素复用。
-- **拖动元素不重建面板**：`pointermove` 只同步 X/Y 控件，`pointerup` 才调用 `renderProps()`，避免逐帧 `innerHTML` 重建与事件重绑。
+- **拖角缩放不重建面板**：`pointermove` 只同步 X/Y/W/H 控件，`pointerup` 才调用 `renderProps()`，避免逐帧 `innerHTML` 重建与事件重绑。
+- **帧率节流**：`render()` 以 `CFG.fps` 为目标节流（受浏览器刷新率上限约束），降低高刷屏下的无谓绘制。
 - **颜色 LUT**：渐变模式按颜色数组缓存 256 级查表（`gradientLUT`），避免逐柱逐帧解析 hex。
 - **背景模糊去重**：`bgBlur > 0` 时只绘制一次模糊图。
 - **进度条节流**：`updateSeekUI()` 100ms 节流，不再每帧写 DOM。
@@ -334,11 +336,12 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 
 ## 附：缓存
 
-`AssetCache` 使用 Cache API，缓存名 `music-viz-assets-v1`，以绝对路径为键、`ignoreSearch` 提高命中率；缓存失败时回退到普通 `fetch`。目前仅用于演示音频 `demo.ogg`：`fetchDemo()` 先查缓存；未命中则由 `_raceDownloadDemo()` 同时向 4 个 jsDelivr 边缘节点（`cdn` / `fastly` / `gcore` / `testingcf`，均 `gh/teecatt/teecatt.github.io@master/music_visualization/demo.ogg`）+ 本地 `demo.ogg` 发起**完整下载**，`Promise.any` 取最先完整下载完成者，随后 `AbortController.abort()` 中止其余镜像并丢弃其不完整分片（`_downloadBlobDemo` 中止时把分片数组置 null）；终端日志实时显示竞速进度（领先镜像 + 速度）、胜出镜像（大小/耗时/平均速度）与清理信息。命中后写回缓存（CORS 可用且不消耗 Pages 带宽）。
+`AssetCache` 使用 Cache API，缓存名 `music-viz-assets-v1`，以绝对路径为键、`ignoreSearch` 提高命中率；缓存失败时回退到普通 `fetch`。目前仅用于演示音频 `demo.ogg`：`fetchDemo()` 先查缓存；未命中时按终端顶部「完整竞速」开关选择：开（默认）走 `_raceDownloadDemo()`，关则走 `_raceFirstByteDemo()`（同时请求、首个响应头胜出后再读 Blob）。`_raceDownloadDemo()` 同时向 4 个 jsDelivr 边缘节点（`cdn` / `fastly` / `gcore` / `testingcf`，均 `gh/teecatt/teecatt.github.io@master/music_visualization/demo.ogg`）+ 本地 `demo.ogg` 发起**完整下载**，`Promise.any` 取最先完整下载完成者，随后 `AbortController.abort()` 中止其余镜像并丢弃其不完整分片（`_downloadBlobDemo` 中止时把分片数组置 null）；终端日志实时显示竞速进度（领先镜像 + 速度）、胜出镜像（大小/耗时/平均速度）与清理信息。命中后写回缓存（CORS 可用且不消耗 Pages 带宽）。
 
 ### 布局：绘制区 / 进度条 / 终端
 
 - `.canvas-area` 为纵向 flex：`.canvas-toolbar` → `.canvas-stage`（绘制区，按宽度等比缩放）→ `.player-bar`（进度条，紧挨绘制区下方）→ `.log-toolbar` → `.log-bar`（终端，`flex:1` 向下延伸到浏览器底部）。
 - `.canvas-stage` 为 `flex:0 1 auto; min-height:0; overflow:auto`：空间足够时高度贴合缩放后的画布，空间不足时收缩并滚动，保证进度条与终端始终可见、终端到底。
-- 属性面板 `.props` 默认 `display:none`（PC 与移动端一致），点「属性」按钮加 `.open` 展开，再点收起；PC 端在**左侧**占宽（`.props{border-right; order:1}`，画布区 `order:2`），打开时给元素面板加 `.hidden` 隐藏之，`fitCanvas()` 会重新按新宽度适配。
-- **移动端所有面板从左侧滑出**（不再从底部弹出）：`.library,.props` 统一 `position:fixed; top:40px; bottom:0; left:0; width:82vw; transform:translateX(-100%); transition:transform .3s`，`.mobile-open`/`.open` 时 `translateX(0)`；`#mobilePreview`「收起面板」总是收起所有面板（不再有再点还原逻辑）。
+- 属性面板 `.props` 与性能面板 `.props.perf` 默认 `display:none`（PC 与移动端一致），点「属性」/「性能」按钮加 `.open` 展开，再点收起；PC 端在**左侧**占宽（`.props{border-right; order:1}`，画布区 `order:2`），打开时给元素面板加 `.hidden` 隐藏之，`fitCanvas()` 会重新按新宽度适配。
+- **移动端所有面板从左侧滑出，最多占浏览器宽度 2/3**：`.library,.props` 统一 `position:fixed; top:40px; bottom:0; left:0; width:66.6667vw; transform:translateX(-100%); transition:transform .3s`，`.mobile-open`/`.open` 时 `translateX(0)`。
+- **已移除「收起面板」按钮**：移动端面板展开时，右侧 1/3 为透明遮罩 `.panel-backdrop.show`（`left:66.6667vw`），点击遮罩只收起面板、不做任何其它响应。
