@@ -439,8 +439,8 @@ select:focus{border-color:var(--accent)}
             </div>
             <div class="row">
               <label>钢琴高度</label>
-              <input type="range" id="pianoHeightSlider" min="5" max="50" step="1" value="16" oninput="onPianoHeightChange()">
-              <span class="val" id="pianoHeightVal">16%</span>
+              <input type="range" id="pianoHeightSlider" min="5" max="50" step="1" value="25" oninput="onPianoHeightChange()">
+              <span class="val" id="pianoHeightVal">25%</span>
             </div>
             <div class="row">
               <label>宽度缩放</label>
@@ -2606,7 +2606,7 @@ let rafId = null;
 const activeKeySet = new Set();
 let loopMode = 'list'; // 'list' 列表循环 | 'one' 单曲循环
 let playMode = 'appreciate';   // 'appreciate' 欣赏模式（自动发声） | 'perform' 演奏模式（需点击琴键发声）
-let pianoHeightPct = 16;       // 钢琴（键盘区）高度占绘制区比例，范围 5-50
+let pianoHeightPct = 16;       // 钢琴（键盘区）高度占绘制区比例，范围 5-50（首帧由横竖屏默认值决定）
 let pianoWidthScale = 1;       // 钢琴宽度缩放（菜单滑块），1x-4x；缩放后渲染区与音符轨道同步变化
 let viewOffsetX = 0;           // 钢琴水平偏移（canvas 设备像素），由偏移滑块控制
 const PIANO_MIN_SCALE = 1;
@@ -2620,18 +2620,44 @@ function onPlayModeChange(){
   if(label) label.textContent = (playMode === 'appreciate') ? '欣赏模式' : '音游模式';
   if(playMode === 'perform') SoundfontLoader.stopAll(); // 演奏模式：停止自动排程的音符
 }
-// 钢琴高度（键盘区占绘制区比例）调节
-function _setPianoHeightPct(v){
-  pianoHeightPct = Math.max(5, Math.min(50, v));
+// 横竖屏两套默认钢琴高度：竖屏（移动端）15%，横屏（PC / 全屏旋转）25%
+const PIANO_HEIGHT_DEFAULT = { portrait: 15, landscape: 25 };
+// 用户手动改过的值，按方向分别记忆；null 表示该方向仍用默认值
+const _pianoHeightOverride = { portrait: null, landscape: null };
+let _pianoOrientation = null; // 'portrait' | 'landscape'
+// 判断渲染区方向：高 > 宽为竖屏，否则横屏（宽度不小于高度）
+function _pianoLayoutOrientation(){
+  const r = canvas.getBoundingClientRect();
+  return (r.height > r.width) ? 'portrait' : 'landscape';
+}
+function _syncPianoHeightUI(){
   const s = document.getElementById('pianoHeightSlider');
   if(s) s.value = pianoHeightPct;
   const val = document.getElementById('pianoHeightVal');
   if(val) val.textContent = Math.round(pianoHeightPct) + '%';
+}
+// 在 resizeCanvas 开头调用：方向变化时套用该方向的值（用户手动改过则用其值，否则用默认）
+function _syncPianoHeightForOrientation(){
+  const o = _pianoLayoutOrientation();
+  if(o === _pianoOrientation) return;
+  _pianoOrientation = o;
+  const v = (_pianoHeightOverride[o] != null) ? _pianoHeightOverride[o] : PIANO_HEIGHT_DEFAULT[o];
+  pianoHeightPct = Math.max(5, Math.min(50, v));
+  _syncPianoHeightUI();
+}
+// 钢琴高度（键盘区占绘制区比例）调节；fromUser=true 时按当前方向记忆用户值
+function _setPianoHeightPct(v, fromUser){
+  pianoHeightPct = Math.max(5, Math.min(50, v));
+  if(fromUser && _pianoOrientation) _pianoHeightOverride[_pianoOrientation] = pianoHeightPct;
+  _syncPianoHeightUI();
   try{ resizeCanvas(); }catch(e){}
 }
 function onPianoHeightChange(){
   const s = document.getElementById('pianoHeightSlider');
-  _setPianoHeightPct(s ? (parseFloat(s.value) || 16) : 16);
+  const fallback = (_pianoOrientation && _pianoHeightOverride[_pianoOrientation] != null)
+    ? _pianoHeightOverride[_pianoOrientation]
+    : (PIANO_HEIGHT_DEFAULT[_pianoOrientation] || 25);
+  _setPianoHeightPct(s ? (parseFloat(s.value) || fallback) : fallback, true);
 }
 
 // 播放控制图标（Feather 线性风格；currentColor 使其自动融入任意主题配色）
@@ -3418,6 +3444,8 @@ _fsBindButton('fsSettingsBtn', () => toggleMenu());
 _fsShowControls();
 
 function resizeCanvas(){
+  // 横竖屏切换时套用对应方向的默认钢琴高度（用户手动改过则用其值）
+  _syncPianoHeightForOrientation();
   const r = canvas.getBoundingClientRect();
   canvas.width = Math.max(320, Math.floor(r.width * devicePixelRatio));
   canvas.height = Math.max(320, Math.floor(r.height * devicePixelRatio));
