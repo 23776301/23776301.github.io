@@ -157,7 +157,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 #paletteToggleIcon{transition:transform .2s}
 
 /* 谱面管理面板：统一下拉浮层 */
-.manage-panel{display:none;flex-direction:column;max-height:75vh}
+.manage-panel{display:none;flex-direction:column;max-height:65vh}
 .manage-panel.open{display:flex}
 .manage-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .manage-head h3{margin:0;font-size:14px;color:var(--text);flex:1}
@@ -411,18 +411,18 @@ select:focus{border-color:var(--accent)}
             <div class="dbg-header">
               <div class="dbg-toolbar">
                 <label class="switch"><input id="dbgEnabled" type="checkbox" checked onchange="onDebugEnabledChange()"><span class="track"><span class="knob"></span></span>启用调试</label>
-                <button class="dbg-reset-btn" id="debugResetBtn" onclick="resetAllSettings()" title="重置所有设置"><span>重置所有选项</span><svg viewBox="0 0 20 20" fill="currentColor"><path d="M5.854 2.646a.5.5 0 0 1 0 .708L4.207 5H11a6 6 0 1 1-6 6a.5.5 0 0 1 1 0a5 5 0 1 0 5-5H4.207l1.647 1.646a.5.5 0 1 1-.708.708l-2.5-2.5a.5.5 0 0 1 0-.708l2.5-2.5a.5.5 0 0 1 .708 0"/></svg></button>
+                <button class="dbg-reset-btn" id="debugClearBtn" onclick="confirmClearDebug()" title="清空日志"><span>清空日志</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg></button>
+                <button class="dbg-reset-btn" id="debugResetBtn" onclick="confirmResetAll()" title="重置所有设置"><span>重置所有选项</span><svg viewBox="0 0 20 20" fill="currentColor"><path d="M5.854 2.646a.5.5 0 0 1 0 .708L4.207 5H11a6 6 0 1 1-6 6a.5.5 0 0 1 1 0a5 5 0 1 0 5-5H4.207l1.647 1.646a.5.5 0 1 1-.708.708l-2.5-2.5a.5.5 0 0 1 0-.708l2.5-2.5a.5.5 0 0 1 .708 0"/></svg></button>
               </div>
               <div class="dbg-off-hint">调试已关闭，无日志采集与监控。</div>
               <div class="dbg-body">
                 <div class="dbg-actions">
                   <label class="switch">
                     <input id="dbgAutoOpen" type="checkbox" checked onchange="onDbgAutoOpenChange()">
-                    <span class="track"><span class="knob"></span></span>降级自动展开
+                    <span class="track"><span class="knob"></span></span>渲染降级自动弹出
                   </label>
                   <button class="dbg-icon-btn" id="debugCopyBtn" onclick="copyDebugTerminal()" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                   <button class="dbg-icon-btn" onclick="downloadDebugLog()" title="下载日志"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m4-5l5 5l5-5m-5 5V3"/></svg></button>
-                  <button class="dbg-icon-btn" onclick="clearDebugTerminal()" title="清空"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg></button>
                   <button class="dbg-icon-btn" onclick="scrollDebugTop()" title="顶部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15l-6-6l-6 6"/></svg></button>
                   <button class="dbg-icon-btn" onclick="scrollDebugBottom()" title="底部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9l6 6l6-6"/></svg></button>
                 </div>
@@ -596,7 +596,7 @@ const _origLog = console.log.bind(console);
 const _origWarn = console.warn.bind(console);
 const _origError = console.error.bind(console);
 let _debugContentEl = null;
-let debugEnabled = true; // 调试总开关：关闭后无日志采集、无监控、无降级自动展开
+let debugEnabled = true; // 调试总开关：关闭后无日志采集、无监控、无渲染降级自动弹出
 
 // 将 console 参数安全转为字符串：对象走 JSON，循环引用等异常时回退 String
 // 音色 id -> 界面显示名（如 clavinet -> 古钢琴），用于日志与状态区
@@ -724,7 +724,7 @@ function onDebugEnabledChange(){
     if(tp) tp.value = '20';
     if(bl) bl.value = '0';
     applyPanelAppearance();
-    // 降级自动展开默认打开
+    // 渲染降级自动弹出默认打开
     const auto = document.getElementById('dbgAutoOpen');
     if(auto && !auto.checked){ auto.checked = true; onDbgAutoOpenChange(); }
     setStatus('为减少性能影响，已设透明度 20%、模糊 0%');
@@ -788,6 +788,8 @@ function closeAllDropPanels(except){
 document.addEventListener('pointerdown', (e) => {
   const t = e.target;
   if(t && t.closest && (t.closest('.drop-panel') || t.closest('.drop-trigger') || t.closest('.csel') || t.closest('.csel-pop'))) return;
+  // 上传/播放控制/重播/全屏等非下拉触发按钮：不关闭已打开的面板
+  if(t && t.closest && t.closest('.ctl-btn') && !t.closest('.drop-trigger')) return;
   closeAllDropPanels();
 }, true);
 // 调试面板：从控制行下方展开（CSS absolute 定位）
@@ -802,12 +804,12 @@ function toggleDebugPanel(){
     else { p.style.maxHeight = ''; p.style.height = ''; }
   }
 }
-// 调试面板底边与设置面板对齐：按设置面板实际高度设置调试面板高度
+// 调试面板最大高度为视口 65%（底部阈值较 75% 上收 10%）
 function _syncDebugPanelHeight(){
   const dp = document.getElementById('debugPanel');
   if(!dp) return;
   const vh = window.innerHeight || 800;
-  const h = Math.round(vh * 0.75);
+  const h = Math.round(vh * 0.65);
   dp.style.maxHeight = h + 'px';
   dp.style.height = '';
 }
@@ -819,7 +821,7 @@ function onDbgAutoOpenChange(){
   dbgAutoOpen = !!(cb && cb.checked);
   try{ localStorage.setItem('dbgAutoOpen', dbgAutoOpen ? '1' : '0'); }catch(e){}
 }
-// 降级时自动展开调试面板并滚到日志底部
+// 渲染降级时自动弹出调试面板并滚到日志底部
 function autoOpenDebugPanel(){
   if(!debugEnabled || !dbgAutoOpen) return;
   const panel = document.getElementById('debugPanel');
@@ -832,6 +834,38 @@ function clearDebugTerminal() {
   const el = document.getElementById('debugTerminalContent');
   if(el) el.innerHTML = '';
 }
+// ===== 二次确认弹窗 =====
+let _confirmCb = null;
+function _showConfirm(msg, cb){
+  const m = document.getElementById('confirmModal');
+  const t = document.getElementById('confirmMsg');
+  if(t) t.textContent = msg;
+  _confirmCb = cb;
+  if(m) m.style.display = 'flex';
+}
+function closeConfirm(){
+  const m = document.getElementById('confirmModal');
+  if(m) m.style.display = 'none';
+  _confirmCb = null;
+}
+function confirmOk(){
+  const cb = _confirmCb;
+  closeConfirm();
+  if(cb) cb();
+}
+function confirmClearDebug(){ _showConfirm('确定要清空所有调试日志吗？', clearDebugTerminal); }
+function confirmResetAll(){ _showConfirm('确定要重置所有设置吗？页面将刷新，缺失的默认音色与谱面会自动重新下载。', resetAllSettings); }
+// 调试面板展开且调试开启时：任意按钮点击后把终端滚到最新
+document.addEventListener('click', (e) => {
+  if(!debugEnabled) return;
+  const dp = document.getElementById('debugPanel');
+  if(!dp || !dp.classList.contains('open')) return;
+  const btn = e.target && e.target.closest ? e.target.closest('button') : null;
+  if(!btn) return;
+  const oc = btn.getAttribute('onclick') || '';
+  if(oc.indexOf('scrollDebugTop') >= 0) return; // 置顶按钮例外
+  setTimeout(() => { if(typeof scrollDebugBottom === 'function') scrollDebugBottom(); }, 0);
+});
 function scrollDebugTop(){
   const p = _debugPanelScrollEl();
   if(p) p.scrollTop = 0;
@@ -4016,6 +4050,15 @@ updatePaletteToggleIcon();  // 配色栏默认展开，同步收起/展开按钮
 applyPanelAppearance();     // 统一菜单/调试/选谱/管理面板的透明度与模糊（含动态创建的 .csel-pop）
 </script>
 <!-- 自定义配色弹窗 -->
+<div id="confirmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:20001;align-items:center;justify-content:center">
+  <div style="background:#1a1a2e;border-radius:12px;padding:18px;width:86%;max-width:340px;box-shadow:0 14px 44px rgba(0,0,0,.55)">
+    <div id="confirmMsg" style="color:#fff;font-size:14px;line-height:1.6;margin-bottom:16px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="closeConfirm()">取消</button>
+      <button class="btn" id="confirmOkBtn" onclick="confirmOk()" style="background:#7f1d1d;border-color:#b91c1c;color:#fff">确定</button>
+    </div>
+  </div>
+</div>
 <div id="paletteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:20000;align-items:center;justify-content:center">
   <div style="background:#1a1a2e;border-radius:12px;padding:18px;width:92%;max-width:440px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
