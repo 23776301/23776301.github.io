@@ -173,26 +173,29 @@ MIDI不载声响，是二进制的乐思底稿。
 | 方案 | 白键（轻→重） | 黑键（轻→重） | 主题色 |
 | --- | --- | --- | --- |
 | A 纯紫 | 全部 `#8b5cf6`（无力度变化） | 全部 `#8b5cf6` | 紫 `#8b5cf6` |
-| B 青蓝 × 琥珀红 | `#22d3ee → #8b5cf6` | `#fde68a → #ef4444` | 哔哩哔哩浅粉 `#fb7299` |
-| C 青绿 × 品红 | `#5eead4 → #3b82f6` | `#f9a8d4 → #be185d` | QQ音乐绿 `#31c27c` |
+| B 青蓝 × 琥珀红 | `#22d3ee → #8b5cf6` | `#fde68a → #ef4444` | 红 `#ef4444` |
+| C 青绿 × 品红 | `#5eead4 → #3b82f6` | `#f9a8d4 → #be185d` | 哔哩哔哩浅粉 `#fb7299` |
 
 - 力度分级：`ci = Math.min(4, Math.floor(velocity * 5))`，共 5 档。
 - 默认方案为 B，选择保存在 `localStorage.paletteV2`。
-- **主题色**由 `PALETTE_THEME = { A:'#8b5cf6', B:'#fb7299', C:'#31c27c' }` 定义，`setPalette()` 时经 `applyTheme()` 写入 `:root` 的 `--accent` 及半透明变体 `--accent-a18` / `--accent-a28`，并更新 `_themeAccentRgba`。应用于：按钮（`.ctl-btn.primary` / `.btn.primary` 等）、钢琴键按下遮罩（Canvas `ctx.fillStyle = _themeAccentRgba`）、滑动开关（`.switch input:checked + .track`）、滑块（`accent-color` / thumb）以及选中的下拉项与配色目标。
+- **主题色**由 `PALETTE_THEME = { A:'#8b5cf6', B:'#ef4444', C:'#fb7299' }` 定义，`setPalette()` 时经 `applyTheme()` 写入 `:root` 的 `--accent` 及半透明变体 `--accent-a18` / `--accent-a28`，并更新 `_themeAccentRgba`。应用于：按钮（`.ctl-btn.primary` / `.btn.primary` 等）、钢琴键按下遮罩（Canvas `ctx.fillStyle = _themeAccentRgba`）、滑动开关（`.switch input:checked + .track`）、滑块（`accent-color` / thumb）以及选中的下拉项与配色目标。
 
-## 3.2 自定义方案（四端插值）
+## 3.2 自定义方案（四端插值 + 主题色，实时生效）
 
 - 自定义色由四个端点 + 主题色构成：`paletteEditColors = { wl, wh, bl, bh, theme }`（白键最轻/最重、黑键最轻/最重、主题色）。
 - `buildCustomPalette(wl, wh, bl, bh)` 对每个端点做线性插值（`ramp` + `lerp`），生成 5 级色阶。
-- `PALETTE_TARGET_LABELS` 提供五个目标按钮：白键最轻 / 白键最重 / 黑键最轻 / 黑键最重 / **主题色**（主题色占满整行）。
-- 取色时若当前目标为主题色，立即 `applyTheme()` 实时预览；关闭弹窗（取消）则回退到打开前的主题色。
+- 弹窗顶部右侧为**主题色**按钮（与标题「自定义配色」平齐），点击即把编辑目标切到主题色；`PALETTE_TARGET_LABELS` 提供五个目标名称。
+- 弹窗用**黑白键力度图**（`renderPaletteEndpoints`）替代原四个目标按钮：上下两条渐变色带（白键/黑键），每带左右两个圆点即四个端点（轻/重），点击圆点选择目标；选中圆点放大并加白边高亮。
+- 取色板顶部预置常用品牌色（`PALETTE_PRESETS`）：哔哩粉 `#fb7299`、网抑红 `#c20c0c`、小书红 `#ff2442`、Q音绿 `#31c27c`、酷安绿 `#11aa66`、钉钉蓝 `#0089ff`、美团黄 `#ffc300`；点按即把当前目标色设为该色并实时应用。
+- **实时生效**：任何取色/预置色都经 `_applyCustomLive()` 立即重建 `PALETTES.custom`、`applyTheme()` 并持久化；因此弹窗**没有**叉号、取消、保存按钮，点遮罩空白处即可关闭。
+- 取色板上的圆点滑块（`_positionBoardMarker`）由 `_hexToHsl` 计算当前目标色的色相/明度并定位，点预置色或手动取色都会同步移动。
 - 自定义结果保存为 `localStorage.paletteCustom`（含 `theme`），启动时 `loadCustomPalette()` 恢复并注册 `PALETTES.custom`。
 
 ## 3.3 全彩取色板
 
 - `drawColorBoard()` 用 `createImageData` 逐像素绘制 HSL 色板：**x 轴 = 色相 0–360°，y 轴 = 明度 1 → 0**，饱和度为 1。
 - `_pickColorAt(e)` 通过 Pointer Events + `setPointerCapture` 把点击位置映射回色相/明度，写入当前选中的端点。
-- `hslToRgb` / `hslToHex` 负责色彩空间转换。
+- `hslToRgb` / `hslToHex` 负责色彩空间转换；`_hexToHsl` 为反向转换，用于定位滑块圆点。
 
 ## 3.4 色带 Swatch
 
@@ -202,7 +205,7 @@ MIDI不载声响，是二进制的乐思底稿。
 
 ## 3.5 持久化与高亮
 
-- 当前方案、自定义色、面板位置等均存 `localStorage`，无服务端。
+- 当前方案、自定义色、面板位置等均存 `localStorage`，无服务端；自定义配色改动即时写入 `paletteCustom`。
 - 按键高亮使用当前主题色 `_themeAccentRgba`（`rgba(主题色,0.7)`），随配色方案/自定义主题变化。
 
 # 四、图标系统与视觉设计（Feather 线性图标）
@@ -806,6 +809,7 @@ midi_player/
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
 | 调试面板滚动 | 日志区不再单独滚动，整个调试面板作为唯一滚动容器；滚动日志即滚动面板，避免日志滑到边界后底部仍被裁掉需二次滑动；自动跟随与置顶/置底改为滚动面板 | `36904c1` |
 | 调试终端滚动修正 | 终端 `.dbg-log` 恢复为唯一滚动容器；`_debugPanelScrollEl` 改回返回终端，修复置顶/置底按钮无效与自动展开不滚到最新；自动展开改用 requestAnimationFrame 等布局完成 | `397c5fc` |
+| 配色弹窗重构 | 主题色 B 回退为红 `#ef4444`、C 改为哔哩哔哩浅粉 `#fb7299`；自定义弹窗字号缩小/布局紧凑；四个目标按钮改为黑白键力度图（左右端点可点）；主题色置顶与标题平齐；删除叉号与取消/保存按钮，改为实时生效；取色板顶部新增 7 个品牌预置色，点按自动定位滑块 | `_pending_` |
 | 主题色取值 | B 主题色改为哔哩哔哩浅粉 `#fb7299`；C 改为 QQ音乐绿 `#31c27c` | `a889589` |
 | 主题色支持 | 自定义配色弹窗新增「主题色」目标（整行）；A/B/C 主题色分别为紫/红/绿；`applyTheme()` 写入 `--accent` 及半透明变体，应用于按钮、钢琴键按下遮罩、滑动开关、滑块、下拉选中项；自定义主题色取色实时预览、取消回退 | `2d833e1` |
 | 谱面行点击播放+工具栏对齐 | 调试工具栏「重置/清空」右对齐、窄屏自动缩小；下方四个图标按钮右对齐；谱面管理行可点击切换播放（仅已下载），未下载弹窗提示大小并可下载后播放 | `5b78f21` |
