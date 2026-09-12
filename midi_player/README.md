@@ -499,7 +499,9 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 | --- | --- | --- |
 | `midi_player/soundfonts/` | 56 个 `*-ogg.js` | **≈ 132.6 MB** |
 | `midi_player/midi/` | 9 个（含 `list.json`） | ≈ 2.9 MB |
-| `midi_player/index.html` | 1 | ≈ 105 KB |
+| `midi_player/index.html` | 1 | ≈ 29 KB（骨架 + 关键 CSS + 竞速加载器） |
+| `midi_player/app.css` | 1 | ≈ 25 KB |
+| `midi_player/app.js` | 1 | ≈ 176 KB |
 
 - 单个音色文件约 2–4.5 MB（如 `lead_7_fifths-ogg.js` 4.5 MB、`violin-ogg.js` 3.6 MB）。
 - 默认加载：`Rush E 3.mid`（2.6 MB）+ 默认音色 `clavinet`（2.6 MB）≈ **5.2 MB**；若再后台预加载 `acoustic_grand_piano`（2.6 MB）与 `electric_piano_2`（2.3 MB），首次会话网络开销约 **10 MB**。
@@ -508,7 +510,9 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 | 资源 | 原始 | gzip 传输 | 说明 |
 | --- | --- | --- | --- |
-| `index.html` | 111 KB | **34 KB** | 文本，压缩 3.3× |
+| `index.html` | 29 KB | **8.6 KB** | 文本（重代码已外置），压缩约 3.4× |
+| `app.js` | 176 KB | **53 KB** | 文本，压缩约 3.3× |
+| `app.css` | 25 KB | **7 KB** | 文本，压缩约 3.6× |
 | `soundfonts/clavinet-ogg.js` | 2.67 MB | **1.73 MB** | base64 文本，压缩约 1.35× |
 | `midi/Rush E 3.mid` | 2.70 MB | 2.70 MB | 二进制，几乎不可压 |
 | `*.ogg` | 1.58 MB | 1.58 MB | 二进制，几乎不可压 |
@@ -736,7 +740,9 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ```
 midi_player/
-├── index.html                 # 播放器单页应用
+├── index.html                 # 页面骨架 + 关键 CSS + 并发 CDN 竞速加载器
+├── app.css                    # 全部样式
+├── app.js                     # 全部逻辑
 ├── README.md                  # 本文档
 ├── midi/
 │   ├── list.json              # 内置谱面列表（name / file）
@@ -873,3 +879,4 @@ midi_player/
 | 73 键音域修正 | 73 键由越界 E2–E8（40–112）改为标准 E1–E7（28–100），缩放 1.209×、偏移 44.49% 正常（原偏移被钳到 100%） | `31a2a1d` |
 | 移动端按钮网格 | 第一行与第二行统一网格：左右间距 = 上下间距 = 6px，10 个圆形按钮 `aspect-ratio:1` 等比缩放（修复椭圆拉伸），第二行 8 个恰好填满整宽且第一行最左/最右与第二行对齐 | `31a2a1d` |
 | 门户描述 | 主页 MIDI 播放器卡片描述新增「多种键型钢琴 / 音游模式 / CDN竞速」 | `b898f8b` |
+| 重代码外置 | 内联 CSS/JS 拆为 `app.css`/`app.js`；`index.html` 仅留骨架 + 关键 CSS + 竞速加载器（4 个 jsDelivr 边缘 + 同源兜底并发全量下载，最先完成者注入）；loading 转圈 + `sourceURL` 保断点 | `_pending_` |

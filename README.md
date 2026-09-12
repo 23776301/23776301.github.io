@@ -20,8 +20,8 @@
 ├── data/
 │   ├── catalog.json        # 资源库数据
 │   └── links.json          # 外部链接数据
-├── music_visualization/    # 音频可视化页面
-├── midi_player/            # MIDI 播放器页面
+├── music_visualization/    # 音频可视化页面（index.html + app.css + app.js）
+├── midi_player/            # MIDI 播放器页面（index.html + app.css + app.js）
 │   ├── index.html
 │   └── midi/               # MIDI 谱子目录
 │       ├── list.json       # 谱子列表配置
