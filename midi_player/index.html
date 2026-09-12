@@ -1592,6 +1592,8 @@ const SoundfontLoader = {
     }
     this.loaded[name] = { raw: raw, buffers: {}, ready: true };
     this.cachedNames.add(name);
+    // 后台/前台下载完成：刷新设置面板音色列表的下载/删除状态
+    if(typeof _onTimbreCached === 'function'){ try{ _onTimbreCached(name); }catch(e){} }
     // 每个音色每次会话只打一条来源：缓存命中 vs 网络下载（含后台预取）
     console.log('[AudioDebug][INFO] ' + _timbreLabel(name) +
       (res.fromCache ? '从缓存加载成功!' : '从' + (res.source || '网络') + '下载成功!'));
@@ -2121,6 +2123,8 @@ try{
   initCustomSelect(document.getElementById('songSel'), {search: true});
 }catch(e){ console.warn('[AudioDebug] 自定义下拉初始化失败', e); }
 try{ SoundfontLoader.refreshCachedNames(); }catch(e){}
+// 音色下载完成后刷新音色下拉列表的下载/删除按钮状态（由 SoundfontLoader._doLoad 调用）
+function _onTimbreCached(){ try{ if(_timbreSelect) _timbreSelect.refresh(); }catch(e){} }
 
 // opts.auto=true：谱面配置的音色，允许自动下载（不受"未下载不可切换"限制）
 // 谱面默认音色自动切换：默认音色本地不存在时，先回滚合成钢琴并后台下载；
@@ -2308,8 +2312,14 @@ let userGestureSeen = false;
       if(hint) hint.textContent = '当前音色：' + label + ' ✓ 就绪';
       if(startedWithFallback) showToast('音色[' + timbreDisplayName(timbreName) + ']已就绪，已切换');
       startPlaybackOnce();
-      // 默认只预取「三角钢琴」「电钢琴2」（+ 默认曲目的古钢琴），其余音色仅在用户
-      // 主动下载、或切到配置了该音色的谱面时才下载（用 _doLoad 避免切换 current）
+      // 按序后台预取其余默认资源：Sound of Silence → 三角钢琴 → 电钢琴2
+      // （Rush E3 + 古钢琴已就绪；每项完成都会刷新对应面板状态）
+      try{
+        await fetchMedia('midi/The Sound of Silence.mid', null, true);
+        refreshManageRowState('midi/The Sound of Silence.mid');
+      }catch(e){}
+      // 默认只预取「三角钢琴」「电钢琴2」，其余音色仅在用户主动下载、或切到配置了
+      // 该音色的谱面时才下载（用 _doLoad 避免切换 current）
       const PRELOAD = ['acoustic_grand_piano', 'electric_piano_2'].filter(n => n !== timbreName);
       for(const name of PRELOAD){
         try{ await SoundfontLoader._doLoad(name, null); }catch(e){}
@@ -2334,15 +2344,14 @@ let userGestureSeen = false;
     console.log('[AudioDebug][INFO] 默认谱面已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
     midiBuf = buf;
     parseAndPlayMidi(buf, DEFAULT_SONG);
+    refreshManageRowState('midi/' + DEFAULT_SONG); // 下载完成，更新管理面板该行状态
     if(timbreReady) startPlaybackOnce();
     else startWithFallback();
   }).catch(e => {
     if(hint) hint.textContent = 'MIDI加载失败：' + e.message;
   });
 
-  // 仅再后台预取 The Sound of Silence（缓存优先、静默）；其余内置谱默认不下载，选到时才按需加载
-  fetchMedia('midi/The Sound of Silence.mid', null, true).catch(() => {});
-
+  // 其余内置谱默认不下载，选到时才按需加载；默认资源在 loadDefaultTimbre 内按序预取
   loadDefaultTimbre();
 })();
 
@@ -2607,9 +2616,10 @@ function _btnIcon(btn, icon, cls, title, handler){
   btn.title = title;
   btn.onclick = handler;
 }
-function _makeManageRow(name, kind, file, isDeleted){
+function _makeManageRow(name, kind, file, isDeleted, cached){
   const row = document.createElement('div');
   row.className = 'manage-row';
+  if(file) row.dataset.file = file;
   const nm = document.createElement('span');
   nm.className = 'name';
   nm.textContent = name;
@@ -2617,8 +2627,10 @@ function _makeManageRow(name, kind, file, isDeleted){
   const btn = document.createElement('button');
   if(kind === 'user'){
     _btnIcon(btn, TRASH_ICON, 'del', '删除', () => _onDeleteUser(name, btn, row));
-  } else if(isDeleted){
-    _btnIcon(btn, DOWNLOAD_ICON, 'dl', '重新下载', () => _onRedownloadBuiltin(file, btn));
+  } else if(isDeleted || !cached){
+    // 未下载（或已标记删除）显示下载图标；已缓存才显示删除
+    const title = isDeleted ? '重新下载' : '下载';
+    _btnIcon(btn, DOWNLOAD_ICON, 'dl', title, () => (isDeleted ? _onRedownloadBuiltin(file, btn) : _onDownloadBuiltin(file, btn)));
   } else {
     _btnIcon(btn, TRASH_ICON, 'del', '删除', () => _onDeleteBuiltin(file, btn));
   }
@@ -2686,6 +2698,36 @@ async function _onRedownloadBuiltin(file, btn){
   await redownloadBuiltinSong(file, (p) => _btnLoading(btn, p));
   _btnIcon(btn, TRASH_ICON, 'del', '删除', () => _onDeleteBuiltin(file, btn));
 }
+// 未下载的内置谱：点击下载（不播放），完成后就地把下载图标换成删除图标
+async function _onDownloadBuiltin(file, btn){
+  _btnLoading(btn, 0);
+  try{
+    await _fetchWithProgress(file, (p) => _btnLoading(btn, p));
+  }catch(e){
+    _btnIcon(btn, DOWNLOAD_ICON, 'dl', '下载', () => _onDownloadBuiltin(file, btn));
+    setStatus('谱面[' + _songDisplayName(file.split('/').pop()) + ']下载失败');
+    return;
+  }
+  _btnIcon(btn, TRASH_ICON, 'del', '删除', () => _onDeleteBuiltin(file, btn));
+  await loadSongList();
+}
+// 后台自动下载完成后，实时刷新已打开的谱面管理行状态（面板未打开时为空操作）
+async function refreshManageRowState(file){
+  const rows = document.querySelectorAll('#manageList .manage-row');
+  let row = null;
+  for(const r of rows){ if(r.dataset && r.dataset.file === file){ row = r; break; } }
+  if(!row) return;
+  const btn = row.querySelector('button');
+  if(!btn) return;
+  const deleted = getDeletedBuiltin();
+  const cached = await AssetCache.has(file);
+  if(deleted.has(file) || !cached){
+    const title = deleted.has(file) ? '重新下载' : '下载';
+    _btnIcon(btn, DOWNLOAD_ICON, 'dl', title, () => (deleted.has(file) ? _onRedownloadBuiltin(file, btn) : _onDownloadBuiltin(file, btn)));
+  } else {
+    _btnIcon(btn, TRASH_ICON, 'del', '删除', () => _onDeleteBuiltin(file, btn));
+  }
+}
 
 // 谱面管理：二次点击收起
 function toggleManageModal(){
@@ -2748,7 +2790,11 @@ async function openManageModal(){
     header.className = 'manage-section';
     header.textContent = '内置谱面';
     frag.appendChild(header);
-    builtin.forEach(s => frag.appendChild(_makeManageRow(s.name, 'builtin', s.file, deleted.has(s.file))));
+    // 初始状态按真实缓存判断：未下载显示「下载」，已下载显示「删除」
+    for(const s of builtin){
+      const cached = await AssetCache.has(s.file);
+      frag.appendChild(_makeManageRow(s.name, 'builtin', s.file, deleted.has(s.file), cached));
+    }
   }catch(e){}
   list.textContent = '';
   list.appendChild(frag);

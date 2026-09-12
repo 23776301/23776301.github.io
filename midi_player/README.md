@@ -441,12 +441,14 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **统一样式**：`manageModal` 为 `.drop-panel.manage-panel`，从「管理谱面」按钮向下展开、最大高度 **65vh**（较 75% 上收 10%）；列表正文 `.manage-row .name` 为 **11px**，标题 `.manage-head h3` 稍大一号 **14px**（`.manage-empty` 也 12px）；**行距收紧**（行 `padding:2px 8px;margin-bottom:1px`、分节 `margin:6px 0 2px`、标题 `margin-bottom:8px`）以贴合设置面板的紧凑度；背景与设置/调试/配色/选谱面板共享同一透明度与模糊（`_panelTargets` 含 `manageModal`）。已移除独立卡片与「透明 / 模糊」滑块。**点击行即可切换到该谱面播放**：用户上传谱直接切歌；内置谱先查 `AssetCache.has()`，已下载则切换（若曾被标记删除先恢复）；未下载则 `_probeMediaSize()` 探测体积并弹窗「大小约 xxKB，是否立即下载并播放？」，确认后下载并切歌。**下载 / 删除按钮属「管理动作」，不算直接点击谱面**：行点击监听用 `e.composedPath()`（派发时快照）判断事件是否来自 `BUTTON`，因为按钮处理器会调用 `_btnLoading` 替换 `innerHTML`，导致 `e.target` 脱离文档、`closest('button')` 失效（旧实现会误触发行点击的下载询问弹窗）。
 - **点击外部收起**：统一由 `closeAllDropPanels()`（document 捕获 pointerdown，排除 `.drop-panel` 与 `.drop-trigger`）处理。
-- **就地删除 / 重下**：行内只有名称 + 右侧垃圾桶/下载图标（无「内置 / 已删除 / 上传」文字标签）。点击后图标就地变为**加载中**（下载时若服务端给出 `content-length` 则显示百分比），完成后原地切换为另一图标，**不再重建并重新弹出整个面板**；`deleteBuiltinSong` / `redownloadBuiltinSong` 仅做操作并刷新选谱下拉。
+- **初始状态按真实缓存判断**：打开面板时对每个内置谱 `await AssetCache.has(file)`，**未下载显示下载图标、已缓存才显示垃圾桶**（旧实现只看是否被标记删除，导致未下载也显示垃圾桶）。`_makeManageRow(name, kind, file, isDeleted, cached)` 增加 `cached` 参数，行带 `data-file` 便于定位。
+- **就地下载 / 删除 / 重下**：行内只有名称 + 右侧垃圾桶/下载图标（无「内置 / 已删除 / 上传」文字标签）。未下载点击下载图标执行 `_onDownloadBuiltin`（`_fetchWithProgress`，就地显示百分比，完成后换成垃圾桶，不播放）；已下载点击垃圾桶执行 `_onDeleteBuiltin`；被标记删除的点击下载执行 `_onRedownloadBuiltin`。点击后图标就地变为**加载中**（下载时若服务端给出 `content-length` 则显示百分比），完成后原地切换为另一图标，**不再重建并重新弹出整个面板**；`deleteBuiltinSong` / `redownloadBuiltinSong` 仅做操作并刷新选谱下拉。
+- **后台下载实时刷新**：`refreshManageRowState(file)` 按 `data-file` 找到当前打开面板中的对应行，重新查缓存并切换图标；**哪个下载完就更新哪个的状态**（面板未打开时为空操作，打开时会按真实缓存重建）。
 - **删除即真正清理空间**（Rush E3 除外）：`deleteBuiltinSong` 会遍历 Cache API 删除该谱面所有缓存键（按文件名匹配，兼容 CDN/Pages 键名），并释放其配置的默认音色缓存（若不再被其它未删除的内置谱使用且非当前音色），日志输出释放的 MB 数。删除状态存于 `deletedBuiltin`。**Rush E3 为演示谱面**：删除仅标记（`_SOFT_DELETE`），不删缓存，重置后自动恢复；其余谱面删除后不随重置恢复。
 - **内置谱列表刷新**：`_getBuiltinList()` 每次会话先读旧缓存列表，再用 `AssetCache.fetchFresh('midi/list.json')`（`cache:'no-store'`）联网刷新，失败回退旧缓存；内存缓存避免同一次会话重复拉取。这样老用户也能拿到更新后的内置谱表。
 - **废弃内置谱转入「我的上传」**：对比新旧列表，若某内置谱「之前存在、后来废弃」且用户本地缓存过（且未主动删除），`_migrateDeprecatedBuiltins()` 会把缓存中的字节复制为 IndexedDB 用户谱，归入「我的上传」分类；**绝不主动删除用户缓存中的任何谱面**（原资产缓存保留）。若用户没缓存过该废弃谱，则不主动下载、也不新增记录。
-- **默认预取**：启动仅并行加载 `Rush E 3`（默认播放）并后台预取 `The Sound of Silence`（两者均走 `_fetchWithProgress` → **jsDelivr**，不再走 Pages）；并发测试谱不默认下载，选到时才按需加载。
-- **音色列表按需下载**：音色下拉每一项右侧有垃圾桶 / 下载按钮（复用 `.icon-btn`，与谱面管理一致）。已缓存显示垃圾桶（正在使用的音色不可删），未缓存显示下载按钮、点击后就地显示百分比；**未完成下载的音色不允许切换**（`canChoose` 拦截并提示）。`SoundfontLoader.cachedNames` 由 `refreshCachedNames()` 扫描缓存重建，删除用 `deleteCached()`。已删除「当前音色：xx 已就绪」文字提示。下载/删除完成后**只重绘该行按钮**（`render()`），不再重建整个列表，避免列表滚动位置乱跳；`buildList()` 也会保存/恢复 `scrollTop`。
+- **默认预取（按序 + 实时更新状态）**：启动并行加载 `Rush E 3`（默认播放，走 jsDelivr）；`loadDefaultTimbre` 就绪后**按序**预取其余默认资源 `The Sound of Silence` → `acoustic_grand_piano`（三角钢琴）→ `electric_piano_2`（电钢琴2），每项完成后调用 `refreshManageRowState` / `_onTimbreCached` 刷新对应面板状态。其余内置谱与音色默认不下载，选到时才按需加载。
+- **音色列表按需下载**：音色下拉每一项右侧有垃圾桶 / 下载按钮（复用 `.icon-btn`，与谱面管理一致）。已缓存显示垃圾桶（正在使用的音色不可删），未缓存显示下载按钮、点击后就地显示百分比；**未完成下载的音色不允许切换**（`canChoose` 拦截并提示）。`SoundfontLoader.cachedNames` 由 `refreshCachedNames()` 扫描缓存重建，删除用 `deleteCached()`。已删除「当前音色：xx 已就绪」文字提示。下载/删除完成后**只重绘该行按钮**（`render()`），不再重建整个列表，避免列表滚动位置乱跳；`buildList()` 也会保存/恢复 `scrollTop`。后台自动下载的音色（三角钢琴 / 电钢琴2）完成时，`SoundfontLoader._doLoad` 调用 `_onTimbreCached()` → `_timbreSelect.refresh()`，**下完哪个就更新哪个的状态**。
 
 ## 9.11 全屏悬浮控件
 
@@ -818,6 +820,7 @@ midi_player/
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
 | 调试面板滚动 | 日志区不再单独滚动，整个调试面板作为唯一滚动容器；滚动日志即滚动面板，避免日志滑到边界后底部仍被裁掉需二次滑动；自动跟随与置顶/置底改为滚动面板 | `36904c1` |
 | 调试终端滚动修正 | 终端 `.dbg-log` 恢复为唯一滚动容器；`_debugPanelScrollEl` 改回返回终端，修复置顶/置底按钮无效与自动展开不滚到最新；自动展开改用 requestAnimationFrame 等布局完成 | `397c5fc` |
+| 谱面状态与实时更新 | 谱面管理初始按真实缓存显示（未下载=下载图标）；新增 `_onDownloadBuiltin` 与 `refreshManageRowState`；默认资源按序预取（Rush E3→古钢琴→Sound of Silence→三角钢琴→电钢琴2），每项下载完成实时刷新对应行/音色状态 | `_pending_` |
 | 复制反馈矢量勾 | 调试面板复制按钮反馈由 `copied✓` 文字改为 lucide `copy-check` 矢量勾；修复反馈后图标不恢复的问题（改存 `innerHTML` 并在 1.2s 后还原） | `2b5dfc8` |
 | 下拉按钮旋转动画 | 谱面管理/设置/配色/调试四个按钮图标统一为「收起旋转 180°、展开转回」并加过渡动画；由 `syncDropToggleIcons()` 集中同步，打开其他面板或点击面板外收起时也会播放动画 | `885263d` |
 | 亮度/提示/管理动作 | 取色面板「明度」改为「亮度」；A/B/C 下方加小字「无操作2s自动收起配色面板」；谱面管理的下载/删除按钮不再误触发「未下载谱面」询问弹窗（用 `composedPath` 判断按钮来源） | `_pending_` |
