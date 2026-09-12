@@ -745,6 +745,40 @@ function _appendDebug(msg, type) {
   }
 }
 
+// ===== 公共 CDN 竞速日志能力（任何功能都可调用）=====
+// 竞速进度每 0.5s 打印一行，且「覆盖上一条」竞速日志，避免刷屏。
+let _raceLogEl = null;
+function _raceLogClear(){
+  if(_raceLogEl && _raceLogEl.parentNode){ try{ _raceLogEl.parentNode.removeChild(_raceLogEl); }catch(e){} }
+  _raceLogEl = null;
+}
+function _raceLog(text){
+  if(!debugEnabled) return;
+  const term = document.getElementById('debugTerminalContent');
+  if(!term) return;
+  const line = '[' + new Date().toLocaleTimeString() + '] ' + text;
+  if(_raceLogEl && _raceLogEl.parentNode === term){
+    _raceLogEl.textContent = line; // 原地覆盖上一条竞速日志
+  } else {
+    _raceLogEl = document.createElement('div');
+    _raceLogEl.style.color = _debugColor('log', text);
+    _raceLogEl.style.wordBreak = 'break-all';
+    _raceLogEl.textContent = line;
+    const panel = _debugPanelScrollEl();
+    const atBottom = panel ? (panel.scrollHeight - panel.scrollTop - panel.clientHeight < 40) : true;
+    term.appendChild(_raceLogEl);
+    while(term.childElementCount > 300){ term.removeChild(term.firstChild); }
+    if(atBottom && panel) panel.scrollTop = panel.scrollHeight;
+  }
+}
+// 字节数格式化：3.6MB / 520KB / 800B
+function _fmtSize(n){
+  n = Number(n) || 0;
+  if(n >= 1024*1024) return (n/1024/1024).toFixed(1) + 'MB';
+  if(n >= 1024) return (n/1024).toFixed(0) + 'KB';
+  return n + 'B';
+}
+
 console.log = function(...args) {
   _origLog(...args);
   if(!debugEnabled) return;
@@ -1461,14 +1495,14 @@ async function _readBlobWithProgress(resp, onProgress){
   if(onProgress) onProgress(100);
   return blob;
 }
-// 单源：完整下载为 Blob（流式回报百分比；中止/失败时丢弃已收分片）
+// 单源：完整下载为 Blob（流式回报 (received, total)；中止/失败时丢弃已收分片）
 async function _downloadBlobFrom(url, onProgress, signal){
   const resp = await fetch(url, signal ? { signal } : undefined);
   if(!resp.ok) throw new Error('HTTP ' + resp.status);
   const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
   if(!resp.body || !total || !resp.body.getReader){
     const blob = new Blob([await resp.arrayBuffer()]);
-    if(onProgress) onProgress(100);
+    if(onProgress) onProgress(blob.size, total > 0 ? total : blob.size);
     return blob;
   }
   const reader = resp.body.getReader();
@@ -1478,37 +1512,66 @@ async function _downloadBlobFrom(url, onProgress, signal){
       const {done, value} = await reader.read();
       if(done) break;
       chunks.push(value); received += value.length;
-      if(onProgress) onProgress(received / total * 100);
+      if(onProgress) onProgress(received, total);
     }
   }catch(e){
     chunks = null; // 中止/失败：清理该镜像的不完整分片
     throw e;
   }
-  if(onProgress) onProgress(100);
+  if(onProgress) onProgress(received, total > 0 ? total : received);
   return new Blob(chunks);
 }
-// 完整下载竞速：所有镜像同时完整下载，最先完成者胜出；其余立即 abort 并丢弃不完整分片
+// 完整下载竞速（公共能力，任何资源下载均可调用）：
+// 所有镜像同时完整下载，最先完成者胜出；其余立即 abort 并丢弃不完整分片。
+// 竞速进度每 0.5s 用 _raceLog 覆盖上一行输出，形如：
+//   cdn竞速领先: [Pages], 3.6MB/7.2MB ~ 27%, 平均17KB/s
 async function _raceDownloadFull(list, onProgress){
   if(!list.length) throw new Error('无可用源');
   const hasAbort = (typeof AbortController !== 'undefined');
   const controllers = list.map(() => hasAbort ? new AbortController() : null);
-  const progresses = list.map(() => 0);
-  const report = () => { if(onProgress) onProgress(Math.max.apply(null, progresses)); };
+  const states = list.map(url => ({ src: _sourceLabel(url), received: 0, total: 0, failed: false }));
+  const t0 = performance.now();
+  let lastLog = 0, bestPct = 0, done = false;
+  const report = () => {
+    if(done) return;
+    const now = performance.now();
+    if(now - lastLog < 500) return; // 每 0.5s 一次
+    lastLog = now;
+    let lead = null;
+    for(const s of states){ if(!s.failed && (!lead || s.received > lead.received)) lead = s; }
+    if(!lead || lead.received <= 0) return;
+    const elapsed = Math.max((now - t0) / 1000, 0.001);
+    const speed = lead.received / elapsed / 1024;
+    const pctTxt = lead.total > 0 ? (lead.received / lead.total * 100).toFixed(0) + '%' : '?';
+    _raceLog('cdn竞速领先: [' + lead.src + '], ' + _fmtSize(lead.received) + '/' +
+      (lead.total > 0 ? _fmtSize(lead.total) : '?') + ' ~ ' + pctTxt + ', 平均' + speed.toFixed(0) + 'KB/s');
+  };
   const attempts = list.map((url, i) => _downloadBlobFrom(
     url,
-    (p) => { progresses[i] = p; report(); },
+    (received, total) => {
+      states[i].received = received; states[i].total = total;
+      if(total > 0){
+        const pct = received / total * 100;
+        if(pct > bestPct){ bestPct = pct; if(onProgress) onProgress(bestPct); }
+      }
+      report();
+    },
     controllers[i] ? controllers[i].signal : null
-  ).then(blob => ({ blob, i, url })));
+  ).then(blob => ({ blob, i, url }), err => { states[i].failed = true; throw err; }));
   let winner;
   try{
     winner = await _promiseAny(attempts);
   }catch(agg){
+    done = true; _raceLogClear();
     const errs = (agg && agg.errors) || [];
     const first = errs.find(e => e);
     throw (first instanceof Error) ? first : new Error('全部源下载失败');
   }
+  done = true;
   // 胜出：暂停其余镜像的下载并清理其不完整分片
   controllers.forEach((c, i) => { if(c && i !== winner.i){ try{ c.abort(); }catch(e){} } });
+  if(onProgress) onProgress(100);
+  _raceLogClear(); // 竞速结束，清掉竞速日志行
   return { blob: winner.blob, url: winner.url, index: winner.i };
 }
 // 首字节竞速（开关关闭时）：胜出源流式读取，若读取中途失败则按顺序回退其余候选
@@ -2468,18 +2531,14 @@ let userGestureSeen = false;
       if(hint) hint.textContent = '当前音色：' + label + ' ✓ 就绪';
       if(startedWithFallback) showToast('音色[' + timbreDisplayName(timbreName) + ']已就绪，已切换');
       startPlaybackOnce();
-      // 按序后台预取其余默认资源：Sound of Silence → 三角钢琴 → 电钢琴2
-      // （Rush E3 + 古钢琴已就绪；每项完成都会刷新对应面板状态）
+      // 后台预取其余默认谱面：Sound of Silence（使用合成钢琴，无需下载音色）
+      // （Rush E3 + 古钢琴已就绪；完成会刷新管理面板该行状态）
       try{
         await fetchMedia('midi/The Sound of Silence.mid', null, true);
         refreshManageRowState('midi/The Sound of Silence.mid');
       }catch(e){}
-      // 默认只预取「三角钢琴」「电钢琴2」，其余音色仅在用户主动下载、或切到配置了
-      // 该音色的谱面时才下载（用 _doLoad 避免切换 current）
-      const PRELOAD = ['acoustic_grand_piano', 'electric_piano_2'].filter(n => n !== timbreName);
-      for(const name of PRELOAD){
-        try{ await SoundfontLoader._doLoad(name, null); }catch(e){}
-      }
+      // 默认下载的音色只保留「古钢琴」（Rush E3 使用）；其余音色仅在用户主动下载、
+      // 或切到配置了该音色的谱面时才下载。
     }catch(e){
       timbreFailed = true;
       console.warn('[AudioDebug] 默认音色加载失败 name=' + timbreName + ' 错误=' + (e && e.message ? e.message : e));
@@ -2492,7 +2551,7 @@ let userGestureSeen = false;
 
   // 并行启动：谱面与音色同时开始加载（谱面走缓存优先）
   console.log('[AudioDebug][INFO] 默认加载谱面与音色：' + _songLabel('midi/' + DEFAULT_SONG) + ' / ' +
-    ['clavinet', 'acoustic_grand_piano', 'electric_piano_2'].map(_timbreLabel).join(' / '));
+    ['clavinet'].map(_timbreLabel).join(' / '));
   fetchMedia('midi/' + DEFAULT_SONG, (p) => {
     if(p < 100) setStatus('谱面[' + _songDisplayName(DEFAULT_SONG) + ']下载 ' + Math.round(p) + '%');
   })
@@ -2905,7 +2964,7 @@ async function resetAllSettings(){
   }catch(e){}
   // 下载缺失的默认音色与谱面（静默，不阻塞重载）
   try{
-    const NEED_TIMBRES = ['clavinet', 'acoustic_grand_piano', 'electric_piano_2'];
+    const NEED_TIMBRES = ['clavinet'];
     for(const t of NEED_TIMBRES){
       if(!SoundfontLoader.cachedNames.has(t))
         SoundfontLoader.load(t, null, {switchCurrent:false}).catch(()=>{});
