@@ -887,3 +887,4 @@ midi_player/
 | 谱面压缩传输 | 内置谱面提供 `.mid.br`/`.mid.gz` 预压缩变体；`_fetchMediaBlob` 按能力 `brotli → gzip → 原文` 选择，`_decompressBuffer` 客户端解压，`_looksLikeMidi` 校验 `MThd` 头；解压后按原路径入 Cache API；一套代码兼容 GitHub Pages 与 Cloudflare Pages。`Rush E 3.mid` 2.70 MB → 95 KB | `48e632b` |
 | 加载器同源优先 | 修复 jsDelivr 各边缘缓存不一致导致入口代码陈旧的问题：`index.html` 加载器改为**同源优先**（`cache:'no-cache'` 强制校验），同源失败才回退 jsDelivr；谱面下载日志补上 `.br`/`.gz` 扩展名；启动时打印支持的压缩格式 | `fe22dc0` |
 | 首屏样式内联 | 移除阻塞渲染的 Google Fonts 外链（大陆不可达，首绘被卡数秒）；`app.css` 全量内联进 `index.html`（`<style id="appCss">`）并删除该文件；加载器不再取 CSS，解析完**立即显示已样式化布局**，仅异步加载 `app.js`（同源优先 → jsDelivr）。内联后 gzip 反而省 631 B，且省一次请求 / 一个 RTT | `f7ef7d4` |
+| UI 组件归档 | 将 10 圆钮网格、配色面板、调试面板抽取为顶层 `ui-kit/`（纯 CSS `ui-kit.css` + 演示页 + 复用指南），类名保持不变便于对照 | `a30f821` |
