@@ -307,10 +307,11 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **音频图**：`AudioContext → masterGain → outputAnalyser → destination`，`masterGain` 负责总音量，`outputAnalyser`（FFT 2048）用于静音探测。
 - **音色加载**：Soundfont 以 `*-ogg.js` 形式提供，内部是 base64 音频；`_doLoad` 下载/读缓存后用 `new Function` 求值取数据，再经 `atob → Uint8Array → decodeAudioData` 得到 `AudioBuffer`。
-- **媒体源（多 CDN 并发择优 + Pages 兜底）**：音色、内置谱面、可视化示例音频同时向多个 jsDelivr 边缘节点（`cdn.jsdelivr.net` / `fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `testingcf.jsdelivr.net`，均 `gh/teecatt/teecatt.github.io@master/...`）发起请求，全部失败才回退本站相对路径（同源 Pages）。GitHub Release 资产不发送 CORS 头，浏览器 `fetch` 无法读取，故未采用。
-- **完整下载竞速（公共能力，默认开，设置面板可关）**：`_raceDownloadFull()` 让所有镜像**同时完整下载**同一资源，`Promise.any` 取**最先完整下载完成**的源；胜出后立即 `AbortController.abort()` 暂停其余镜像并丢弃其不完整分片（`_downloadBlobFrom` 在中止/失败时把分片数组置 null）。所有资源下载（MIDI、音色）都走这个公共函数。关闭开关后改用 `_fetchByFirstByte()`（`_raceFetch` 只竞速首字节，胜出源再流式读取）。开关状态存于 `localStorage.raceFull`，默认 `true`。
-- **谱面压缩传输（`.br` / `.gz` + 客户端解压）**：内置谱面在仓库内同时提供 `.mid.br`（brotli）与 `.mid.gz`（gzip）。`_fetchMediaBlob()` 按浏览器能力从优到劣选择：原生 `DecompressionStream('brotli')` → 原生 `DecompressionStream('gzip')` → 不压缩原文（旧浏览器）。解压用 `_decompressBuffer()`（写入与读取并发，避免背压死锁），并以 `_looksLikeMidi()` 校验 `MThd` 文件头、兼容 CDN 可能已自动解码的情况。解压后的谱面按原路径写入 Cache API，回访不再下载也不再解压。**一套代码同时适配 GitHub Pages 与 Cloudflare Pages，迁移托管无需改动**。`Rush E 3.mid` 2.70 MB → br **95 KB** / gz **315 KB**。
-- **竞速日志（覆盖式）**：竞速进行中由公共 `_raceLog()` **每 0.5s 打印一行并原地覆盖上一条**（避免刷屏），形如 `cdn竞速领先: [Pages], 3.6MB/7.2MB ~ 27%, 平均17KB/s`（来源标签、已收/总量、百分比、平均速度，`_fmtSize` 自适应 MB/KB/B）；竞速结束调用 `_raceLogClear()` 删除该行。任何功能都可调用 `_raceDownloadFull()` / `_raceLog()`。
+- **媒体源（同源单源）**：迁移 Cloudflare Pages 后，音色、内置谱面等资源直接走**同源相对路径**（`_mediaUrls()` 仅返回同源 URL），GitHub Pages 与 Cloudflare Pages 双端一致。已移除多 jsDelivr 镜像竞速：多源同时下载会互相抢占带宽、浪费流量，与「冷启动独占带宽」目标相悖。
+- **下载入口**：`_fetchBlobWithProgress()` 单源流式下载并回报 0–100 百分比；底层 `_downloadBlobFrom()` 完整下载为 Blob，中止/失败时丢弃已收分片。
+- **冷启动优先级管线**（`COLD_START` + `coldStart()`）：进页面后**按优先级顺序、独占带宽**下载，避免并发抢占：**P0** 独占下载默认谱面（`Rush E 3.mid` 的 brotli 变体）；**P0 完成立即用合成钢琴起播**，同时进入 **P1** 独占下载默认音色（古钢琴 `clavinet`），此期间不下载其它任何资源；**P2** 古钢琴就绪后，才下载 `mandatorySheets` / `mandatoryTimbres` 配置的预配置必下谱面与音色（默认 `The Sound of Silence`）。音色下载并预解码完成后只切 `current`，不打断正在发声的 voice。
+- **谱面压缩传输（`.br` / `.gz` + 客户端解压）**：内置谱面在仓库内同时提供 `.mid.br`（brotli）与 `.mid.gz`（gzip）。`_fetchMediaBlob()` 按浏览器能力从优到劣选择：原生 `DecompressionStream('brotli')` → 原生 `DecompressionStream('gzip')` → 不压缩原文（旧浏览器）。解压用 `_decompressBuffer()`（写入与读取并发，避免背压死锁），并以 `_looksLikeMidi()` 校验 `MThd` 文件头、兼容服务端可能已自动解码的情况。解压后的谱面按原路径写入 Cache API，回访不再下载也不再解压。**一套代码同时适配 GitHub Pages 与 Cloudflare Pages，迁移托管无需改动**。`Rush E 3.mid` 2.70 MB → br **95 KB** / gz **315 KB**。
+- **依赖本地化**：`@tonejs/midi@2.0.28` 的 `Midi.js` 已内置于 `vendor/Midi.js`，不再依赖 jsDelivr；入口 `app.js` 仍同源优先加载。
 - **预解码**：`predecodeAll` 按每批 8 个解码 88 个音，避免一次性解码阻塞主线程与音频时间线。
 - **合成回退**：`__synth__` 分支用 3 个振荡器（triangle + 2×sine）叠加，指数包络收尾；仅在音色加载失败或 buffer 缺失时使用。
 - **增益**：`timbreGain` 对个别音色（三角钢琴、古钢琴）单独设增益，其余默认 3.0。
@@ -452,7 +453,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **删除即真正清理空间**（Rush E3 除外）：`deleteBuiltinSong` 会遍历 Cache API 删除该谱面所有缓存键（按文件名匹配，兼容 CDN/Pages 键名），并释放其配置的默认音色缓存（若不再被其它未删除的内置谱使用且非当前音色），日志输出释放的 MB 数。删除状态存于 `deletedBuiltin`。**Rush E3 为演示谱面**：删除仅标记（`_SOFT_DELETE`），不删缓存，重置后自动恢复；其余谱面删除后不随重置恢复。
 - **内置谱列表刷新**：`_getBuiltinList()` 每次会话先读旧缓存列表，再用 `AssetCache.fetchFresh('midi/list.json')`（`cache:'no-store'`）联网刷新，失败回退旧缓存；内存缓存避免同一次会话重复拉取。这样老用户也能拿到更新后的内置谱表。
 - **废弃内置谱转入「我的上传」**：对比新旧列表，若某内置谱「之前存在、后来废弃」且用户本地缓存过（且未主动删除），`_migrateDeprecatedBuiltins()` 会把缓存中的字节复制为 IndexedDB 用户谱，归入「我的上传」分类；**绝不主动删除用户缓存中的任何谱面**（原资产缓存保留）。若用户没缓存过该废弃谱，则不主动下载、也不新增记录。
-- **默认预取（按序 + 实时更新状态）**：启动并行加载 `Rush E 3`（默认播放）；`loadDefaultTimbre` 就绪后后台预取 `The Sound of Silence`（使用合成钢琴）。**默认下载的音色只保留古钢琴 `clavinet`**（Rush E3 使用）；三角钢琴、电钢琴2 等其余音色不再默认下载，仅在用户主动下载或切到配置了该音色的谱面时才下载。每项完成后调用 `refreshManageRowState` / `_onTimbreCached` 刷新对应面板状态。
+- **默认冷启动（顺序独占 + 实时更新状态）**：由 `COLD_START` 配置驱动三段式管线——P0 独占下载 `Rush E 3`（brotli 变体）并立即用合成钢琴起播；P1 起播同时独占下载古钢琴 `clavinet`；P2 古钢琴就绪后下载 `mandatorySheets`（默认 `The Sound of Silence`）与 `mandatoryTimbres`。**默认下载的音色只保留古钢琴**；三角钢琴、电钢琴2 等其余音色不再默认下载，仅在用户主动下载或切到配置了该音色的谱面时才下载。每项完成后调用 `refreshManageRowState` / `_onTimbreCached` 刷新对应面板状态。
 - **音色列表按需下载**：音色下拉每一项右侧有垃圾桶 / 下载按钮（复用 `.icon-btn`，与谱面管理一致）。已缓存显示垃圾桶（正在使用的音色不可删），未缓存显示下载按钮、点击后就地显示百分比；**未完成下载的音色不允许切换**（`canChoose` 拦截并提示）。`SoundfontLoader.cachedNames` 由 `refreshCachedNames()` 扫描缓存重建，删除用 `deleteCached()`。已删除「当前音色：xx 已就绪」文字提示。下载/删除完成后**只重绘该行按钮**（`render()`），不再重建整个列表，避免列表滚动位置乱跳；`buildList()` 也会保存/恢复 `scrollTop`。后台自动下载的音色（如谱面默认音色）完成时，`SoundfontLoader._doLoad` 调用 `_onTimbreCached()` → `_timbreSelect.refresh()`，**下完哪个就更新哪个的状态**。
 
 ## 9.11 全屏悬浮控件
@@ -480,7 +481,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - 自定义下拉（音色 / 谱面）弹层 `.csel-pop` 为 `position:fixed` 且挂到 `body`，直接遮挡渲染区；其背景/模糊同样纳入统一面板外观（`_panelTargets`）。
 - **不自动聚焦搜索框**：`open()` 不再调用 `search.focus()`，点击音色 / 谱面列表不会唤醒输入法；用户可手动点搜索框。
 - **全屏可弹出**：`.csel-pop` 默认挂在 `document.body`，而全屏只渲染全屏元素，故 `open()` 时若处于全屏则把弹层挂到全屏元素（`.visual-panel`）内，保证全屏状态下音色/谱面列表能正常显示。
-- **状态区**：进度条上方的 `.time-row` 中间新增 `#statusText`。**仅 INFO 日志（`type==='log'`）** 镜像到此处，**去掉时间戳与 `[AudioDebug]` 前缀**，只保留精确信息，名称用中括号包裹，如 `音色[古钢琴]从jsDelivr下载成功!`、`谱面[Rush E 3.mid]从jsDelivr-Fastly下载成功!`、`音色[古钢琴]下载 42%`；性能告警（warn）不再刷入状态区。下载/进度/完成的通用提示（如「乐谱下载完成！」）已删除，避免覆盖精确信息。原顶部浮层 Toast 已移除。
+- **状态区**：进度条上方的 `.time-row` 中间新增 `#statusText`。**仅 INFO 日志（`type==='log'`）** 镜像到此处，**去掉时间戳与 `[AudioDebug]` 前缀**，只保留精确信息，名称用中括号包裹，如 `音色[古钢琴]下载成功!`、`谱面[Rush E 3.mid]下载成功!`、`音色[古钢琴]下载 42%`；性能告警（warn）不再刷入状态区。下载/进度/完成的通用提示（如「乐谱下载完成！」）已删除，避免覆盖精确信息。原顶部浮层 Toast 已移除。
 - `viewport` 设 `interactive-widget=overlays-content`，并在 `visualViewport.resize` 中判断键盘高度差（`height < innerHeight-120`）时**跳过画布重算**，使软键盘 / 选谱弹层弹出时渲染区高度不变、由弹层直接遮挡。
 
 # 十、部署、流量与缓存策略（GitHub Pages）
@@ -557,7 +558,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 1. **精简仓库音色集**：只保留实际用到的音色，或提供「钢琴精简包」；132 MB 中大部分是长尾音色。
 2. **按需预加载 + 省流量模式**：读取 `navigator.connection.saveData` / `effectiveType`，在移动网络或省流量模式下跳过后台预加载。
-3. **音色外置（已实现）**：Soundfont / 内置谱面 / 示例音频改由 **多个 jsDelivr 边缘节点** 提供（`_mediaUrls` 生成候选源，`_raceFetch` 并发择优、胜出者流式下载、其余 abort，失败按序回退），全部失败回退本站 Pages；缓存 key 仍用本站绝对路径以兼容旧缓存。
+3. **音色外置（已实现）**：Soundfont / 内置谱面 / 示例音频由**同源**（`_mediaUrls`）提供，Cloudflare Pages 与 GitHub Pages 双端一致；缓存 key 用本站绝对路径以兼容旧缓存。早期多 jsDelivr 镜像竞速已移除（多源抢占带宽）。
 4. **缓存已解码的 AudioBuffer**：把 `decodeAudioData` 结果存入 IndexedDB，跳过每次会话的 base64 解码与解码等待（当前解码在 `predecodeAll` 中完成）。
 5. **文件名哈希 + 长缓存**：对静态资源使用内容哈希命名并配合 `immutable` 语义，配合 `ignoreSearch` 精确失效。
 6. **资源提示**：对 CDN/音色目录加 `preconnect`/`prefetch`，缩短首字节时间。
@@ -594,7 +595,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - 降级/恢复文案：`最近 2s出现N次性能问题，分别是丢帧、积压、停摆、时间戳，触发渲染降级` / `性能问题已缓解，恢复完整渲染。`
 - **详细日志不打印 `[AudioDebug]` 前缀**：调试信息本就只含音频调试，`_appendDebug` 统一剥掉 `[AudioDebug]`（保留 `[INFO]`/`[WARN]`/`[OK]` 等级）；状态区镜像再去掉等级前缀，只留正文。
 - **统一资源标签**：下载/加载/删除等日志用「显示名（中文）-[原始文件名]」，如 `音色[古钢琴]-[clavinet]`、`谱面[Rush E 3]-[Rush E 3.mid]`（`_timbreLabel` / `_songLabel` / `_songId`）。
-- **媒体来源日志以缓存为准**：谱面统一走 `fetchMedia`（Cache API 优先），命中缓存打印 `从缓存加载成功!`，未命中才走 `_fetchWithProgress`（jsDelivr→Pages）并打印 `从jsDelivr/Pages下载成功!`；后台预取（The Sound of Silence）静默且同样缓存优先。修复了默认谱面/预取直接调用网络路径、导致每次都误报「从 jsDelivr 下载」的问题。音色 `_doLoad` 同样缓存优先，且不再因 `onProgress` 为空而隐藏来源日志（后台预取也会打印）。
+- **媒体来源日志以缓存为准**：谱面统一走 `fetchMedia`（Cache API 优先），命中缓存打印 `从缓存加载成功!`，未命中才走同源 `_fetchWithProgress` 并打印 `下载成功!`；后台预取（The Sound of Silence）静默且同样缓存优先。音色 `_doLoad` 同样缓存优先，且不再因 `onProgress` 为空而隐藏来源日志（后台预取也会打印）。
 - **告警分级**：`AudioContext状态变化` 由 warn 降为 INFO；页面隐藏时的静音/停摆不告警（见上）。
 - **主动暂停/切后台不误报**：页面隐藏时音频被浏览器挂起属正常（自动暂停），停摆与输出静音判定均加 `!document.hidden` 门控；`visibilitychange` 冻结/恢复时把 `lastLoudTime` 拉到现在并 `resetClocks()`，避免恢复后误报「静音 Ns / 长时间停摆」。`stopAll` 统计文案统一为「停止了 N 个 note」。
 - **重置所有选项**（二次确认弹窗）：清空全部设置项并刷新；恢复 Rush E3 演示谱面标记（从 `deletedBuiltin` 移除）；自动检查并下载缺失的默认音色与谱面。The Sound of Silence 如重置前被删除，重置后自动启动下载。
@@ -765,6 +766,14 @@ midi_player/
 # 附录 C：版本与变更记录（CHANGELOG）
 
 > 按主题归档，commit 为短 SHA。完整历史见仓库提交记录。
+
+## 2026-09 冷启动管线与同源化
+
+| 主题 | 摘要 | 代表 commit |
+| --- | --- | --- |
+| 同源化 | 移除多 jsDelivr 镜像并发择优与「完整下载竞速」开关（含 `_raceFetch`/`_raceDownloadFull`/`_raceLog`/`raceFullSw`）；`_mediaUrls` 仅返回同源 URL，`_fetchBlobWithProgress` 单源流式下载并回报百分比 | `_pending_` |
+| 冷启动管线 | `COLD_START` 三段式**顺序独占**下载：P0 独占下载 Rush E3 brotli 谱 → 完成即用合成钢琴起播 + P1 独占下载古钢琴 → P2 下载预配置必下音色与谱 | `_pending_` |
+| 依赖本地化 | `@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`，去除 jsDelivr 依赖与相关 preconnect/dns-prefetch | `_pending_` |
 
 ## 2026-09 首版与性能攻坚
 

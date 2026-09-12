@@ -4,14 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=overlays-content">
 <title>MIDI 播放器 · 88键可视化</title>
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
-<link rel="preconnect" href="https://fastly.jsdelivr.net" crossorigin>
-<link rel="dns-prefetch" href="https://fastly.jsdelivr.net">
-<link rel="preconnect" href="https://gcore.jsdelivr.net" crossorigin>
-<link rel="dns-prefetch" href="https://gcore.jsdelivr.net">
-<link rel="preconnect" href="https://testingcf.jsdelivr.net" crossorigin>
-<link rel="dns-prefetch" href="https://testingcf.jsdelivr.net">
 <style>html,body{background:#0d0d14;color:#e6edf3}body{visibility:hidden}#appLoading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;visibility:visible;z-index:99999}#appLoading::after{content:'';width:34px;height:34px;border:3px solid rgba(230,237,243,.22);border-top-color:#e6edf3;border-radius:50%;animation:appspin .8s linear infinite}@keyframes appspin{to{transform:rotate(360deg)}}</style>
 <script>
 /* 首屏主题色：在样式之后、渲染之前同步应用已保存的配色，避免「先紫后红」闪烁 */
@@ -597,13 +589,6 @@ select:focus{border-color:var(--accent)}
               <span class="val" id="keyboardPresetVal">88键</span>
             </div>
             <div class="row">
-              <label title="开：所有镜像同时完整下载，最快完成者胜出；关：仅竞速首字节响应">完整下载竞速</label>
-              <label class="switch" style="margin-left:auto">
-                <input id="raceFullSw" type="checkbox" checked onchange="onRaceFullChange()">
-                <span class="track"><span class="knob"></span></span>
-              </label>
-            </div>
-            <div class="row">
               <label>音色选择</label>
               <select id="timbreSel" onchange="onTimbreChange()">
                 <option value="__synth__">合成钢琴</option>
@@ -715,7 +700,7 @@ select:focus{border-color:var(--accent)}
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js"></script>
+<script src="vendor/Midi.js"></script>
 
 <script id="appLoader">
 (function(){

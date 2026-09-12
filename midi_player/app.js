@@ -85,40 +85,6 @@ function _appendDebug(msg, type) {
   }
 }
 
-// ===== 公共 CDN 竞速日志能力（任何功能都可调用）=====
-// 竞速进度每 0.5s 打印一行，且「覆盖上一条」竞速日志，避免刷屏。
-let _raceLogEl = null;
-function _raceLogClear(){
-  if(_raceLogEl && _raceLogEl.parentNode){ try{ _raceLogEl.parentNode.removeChild(_raceLogEl); }catch(e){} }
-  _raceLogEl = null;
-}
-function _raceLog(text){
-  if(!debugEnabled) return;
-  const term = document.getElementById('debugTerminalContent');
-  if(!term) return;
-  const line = '[' + new Date().toLocaleTimeString() + '] ' + text;
-  if(_raceLogEl && _raceLogEl.parentNode === term){
-    _raceLogEl.textContent = line; // 原地覆盖上一条竞速日志
-  } else {
-    _raceLogEl = document.createElement('div');
-    _raceLogEl.style.color = _debugColor('log', text);
-    _raceLogEl.style.wordBreak = 'break-all';
-    _raceLogEl.textContent = line;
-    const panel = _debugPanelScrollEl();
-    const atBottom = panel ? (panel.scrollHeight - panel.scrollTop - panel.clientHeight < 40) : true;
-    term.appendChild(_raceLogEl);
-    while(term.childElementCount > 300){ term.removeChild(term.firstChild); }
-    if(atBottom && panel) panel.scrollTop = panel.scrollHeight;
-  }
-}
-// 字节数格式化：3.6MB / 520KB / 800B
-function _fmtSize(n){
-  n = Number(n) || 0;
-  if(n >= 1024*1024) return (n/1024/1024).toFixed(1) + 'MB';
-  if(n >= 1024) return (n/1024).toFixed(0) + 'KB';
-  return n + 'B';
-}
-
 console.log = function(...args) {
   _origLog(...args);
   if(!debugEnabled) return;
@@ -739,103 +705,13 @@ try{
   }
 }catch(e){}
 
-// ===== 媒体源：多个 jsDelivr 边缘节点 + 本站 Pages 兜底，下载时并发择优 =====
-// 国内访问 jsDelivr 各边缘节点速度差异大，同时发起请求、最先返回响应的胜出（Happy Eyeballs 思路），
-// 其余候选立即 abort，既快又不浪费流量。
-const REPO_GH = 'teecatt/teecatt.github.io';
-const REPO_REF = 'master';
-const CDN_BASES = [
-  { name: 'jsDelivr',        base: 'https://cdn.jsdelivr.net/gh/' },
-  { name: 'jsDelivr-Fastly', base: 'https://fastly.jsdelivr.net/gh/' },
-  { name: 'jsDelivr-Gcore',  base: 'https://gcore.jsdelivr.net/gh/' },
-  { name: 'jsDelivr-CF',     base: 'https://testingcf.jsdelivr.net/gh/' },
-];
-function _cdnUrlFor(base, repoPath){
-  return base + REPO_GH + '@' + REPO_REF + '/' + String(repoPath).split('/').map(encodeURIComponent).join('/');
-}
-function cdnUrl(repoPath){
-  return _cdnUrlFor(CDN_BASES[0].base, repoPath);
-}
-// midi_player 内的相对路径 -> [CDN 各节点..., 本站 Pages] 候选源（Pages 为相对路径，同源兜底）
+// ===== 媒体源：同源（Cloudflare Pages / GitHub Pages 双端一致）=====
+// 迁移 Cloudflare 后，同源即可获得低延迟与完整压缩支持；不再并发多个 jsDelivr 镜像竞速，
+// 避免多源同时下载抢占带宽、浪费流量。所有资源默认单源顺序下载。
+// midi_player 内的相对路径 -> 同源 URL
 function _mediaUrls(relPath){
   const clean = String(relPath).replace(/^\.\//, '');
-  const repoPath = 'midi_player/' + clean;
-  const urls = CDN_BASES.map(b => _cdnUrlFor(b.base, repoPath));
-  urls.push(clean);
-  return urls;
-}
-// 从 URL 推断可读来源名（用于日志/状态区）
-function _sourceLabel(url){
-  const u = String(url);
-  if(u.indexOf('://') < 0) return 'Pages';
-  for(const b of CDN_BASES){ if(u.indexOf(b.base) === 0) return b.name; }
-  try{ return new URL(u).hostname; }catch(e){ return '备用源'; }
-}
-// 完整下载竞速开关（默认开）：开=所有镜像同时完整下载、最快完成者胜出；
-// 关=仅竞速首字节响应，胜出源再流式读取。
-let raceFullDownload = true;
-// 恢复开关状态（默认开）
-try{
-  const _rf = localStorage.getItem('raceFull');
-  if(_rf !== null) raceFullDownload = _rf === '1';
-  const _rfEl = document.getElementById('raceFullSw');
-  if(_rfEl) _rfEl.checked = raceFullDownload;
-}catch(e){}
-function onRaceFullChange(){
-  const cb = document.getElementById('raceFullSw');
-  raceFullDownload = !!(cb && cb.checked);
-  try{ localStorage.setItem('raceFull', raceFullDownload ? '1' : '0'); }catch(e){}
-}
-// Promise.any 兼容封装：返回最先成功的结果；全部失败时抛出含 errors 数组的对象
-function _promiseAny(ps){
-  if(typeof Promise.any === 'function') return Promise.any(ps);
-  return new Promise((resolve, reject) => {
-    let pending = ps.length; const errs = [];
-    if(!pending) return reject(new Error('无可用源'));
-    ps.forEach((p, i) => Promise.resolve(p).then(resolve, e => { errs[i] = e; if(--pending === 0) reject({ errors: errs }); }));
-  });
-}
-// 并发择优：同时请求所有候选源，最先成功返回响应的胜出，其余候选 abort
-async function _raceFetch(urls){
-  const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
-  if(!list.length) throw new Error('无可用源');
-  const hasAbort = (typeof AbortController !== 'undefined');
-  const controllers = list.map(() => hasAbort ? new AbortController() : null);
-  const attempts = list.map((url, i) => (async () => {
-    const resp = await fetch(url, controllers[i] ? { signal: controllers[i].signal } : undefined);
-    if(!resp.ok) throw new Error('HTTP ' + resp.status);
-    return { resp, i, url };
-  })());
-  let winner;
-  try{
-    winner = await _promiseAny(attempts);
-  }catch(agg){
-    const errs = (agg && agg.errors) || [];
-    const first = errs.find(e => e);
-    throw (first instanceof Error) ? first : new Error('全部源下载失败');
-  }
-  controllers.forEach((c, i) => { if(c && i !== winner.i){ try{ c.abort(); }catch(e){} } });
-  return { resp: winner.resp, url: winner.url, index: winner.i, list };
-}
-// 流式读取响应为 Blob 并回报百分比（首字节竞速模式用）
-async function _readBlobWithProgress(resp, onProgress){
-  const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
-  if(!resp.body || !total || !resp.body.getReader){
-    const blob = new Blob([await resp.arrayBuffer()]);
-    if(onProgress) onProgress(100);
-    return blob;
-  }
-  const reader = resp.body.getReader();
-  const chunks = []; let received = 0;
-  while(true){
-    const {done, value} = await reader.read();
-    if(done) break;
-    chunks.push(value); received += value.length;
-    if(onProgress) onProgress(received / total * 100);
-  }
-  const blob = new Blob(chunks);
-  if(onProgress) onProgress(100);
-  return blob;
+  return [clean];
 }
 // 单源：完整下载为 Blob（流式回报 (received, total)；中止/失败时丢弃已收分片）
 async function _downloadBlobFrom(url, onProgress, signal){
@@ -857,99 +733,26 @@ async function _downloadBlobFrom(url, onProgress, signal){
       if(onProgress) onProgress(received, total);
     }
   }catch(e){
-    chunks = null; // 中止/失败：清理该镜像的不完整分片
+    chunks = null; // 中止/失败：清理不完整分片
     throw e;
   }
   if(onProgress) onProgress(received, total > 0 ? total : received);
   return new Blob(chunks);
 }
-// 完整下载竞速（公共能力，任何资源下载均可调用）：
-// 所有镜像同时完整下载，最先完成者胜出；其余立即 abort 并丢弃不完整分片。
-// 竞速进度每 0.5s 用 _raceLog 覆盖上一行输出，形如：
-//   cdn竞速领先: [Pages], 3.6MB/7.2MB ~ 27%, 平均17KB/s
-async function _raceDownloadFull(list, onProgress){
-  if(!list.length) throw new Error('无可用源');
-  const hasAbort = (typeof AbortController !== 'undefined');
-  const controllers = list.map(() => hasAbort ? new AbortController() : null);
-  const states = list.map(url => ({ src: _sourceLabel(url), received: 0, total: 0, failed: false }));
-  const t0 = performance.now();
-  let lastLog = 0, bestPct = 0, done = false;
-  const report = () => {
-    if(done) return;
-    const now = performance.now();
-    if(now - lastLog < 500) return; // 每 0.5s 一次
-    lastLog = now;
-    let lead = null;
-    for(const s of states){ if(!s.failed && (!lead || s.received > lead.received)) lead = s; }
-    if(!lead || lead.received <= 0) return;
-    const elapsed = Math.max((now - t0) / 1000, 0.001);
-    const speed = lead.received / elapsed / 1024;
-    const pctTxt = lead.total > 0 ? (lead.received / lead.total * 100).toFixed(0) + '%' : '?';
-    _raceLog('cdn竞速领先: [' + lead.src + '], ' + _fmtSize(lead.received) + '/' +
-      (lead.total > 0 ? _fmtSize(lead.total) : '?') + ' ~ ' + pctTxt + ', 平均' + speed.toFixed(0) + 'KB/s');
-  };
-  const attempts = list.map((url, i) => _downloadBlobFrom(
-    url,
-    (received, total) => {
-      states[i].received = received; states[i].total = total;
-      if(total > 0){
-        const pct = received / total * 100;
-        if(pct > bestPct){ bestPct = pct; if(onProgress) onProgress(bestPct); }
-      }
-      report();
-    },
-    controllers[i] ? controllers[i].signal : null
-  ).then(blob => ({ blob, i, url }), err => { states[i].failed = true; throw err; }));
-  let winner;
-  try{
-    winner = await _promiseAny(attempts);
-  }catch(agg){
-    done = true; _raceLogClear();
-    const errs = (agg && agg.errors) || [];
-    const first = errs.find(e => e);
-    throw (first instanceof Error) ? first : new Error('全部源下载失败');
-  }
-  done = true;
-  // 胜出：暂停其余镜像的下载并清理其不完整分片
-  controllers.forEach((c, i) => { if(c && i !== winner.i){ try{ c.abort(); }catch(e){} } });
-  if(onProgress) onProgress(100);
-  _raceLogClear(); // 竞速结束，清掉竞速日志行
-  return { blob: winner.blob, url: winner.url, index: winner.i };
-}
-// 首字节竞速（开关关闭时）：胜出源流式读取，若读取中途失败则按顺序回退其余候选
-async function _fetchByFirstByte(list, onProgress, label, quiet){
-  const winner = await _raceFetch(list);
-  const order = [winner.index, ...list.map((_, i) => i).filter(i => i !== winner.index)];
-  let lastErr;
-  for(const idx of order){
-    try{
-      let resp;
-      if(idx === winner.index){ resp = winner.resp; }
-      else { resp = await fetch(list[idx]); if(!resp.ok) throw new Error('HTTP ' + resp.status); }
-      const blob = await _readBlobWithProgress(resp, onProgress);
-      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + _sourceLabel(list[idx]) + '下载成功!');
-      return blob;
-    }catch(e){
-      lastErr = e; if(onProgress) onProgress(0);
-      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + _sourceLabel(list[idx]) + '下载失败');
-    }
-  }
-  throw lastErr || new Error('下载失败');
-}
-// 下载入口：默认「完整下载竞速」，可在设置面板关闭改用「首字节竞速」
+// 下载入口：同源流式下载并回报进度（onProgress 收到 0..100 百分比）
 async function _fetchBlobWithProgress(urls, onProgress, label, quiet){
   const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
-  if(raceFullDownload){
-    try{
-      const res = await _raceDownloadFull(list, onProgress);
-      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + _sourceLabel(res.url) + '下载成功!');
-      return res.blob;
-    }catch(e){
-      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '全部镜像下载失败：' + (e && e.message ? e.message : e));
-      throw e;
+  if(!list.length) throw new Error('无可用源');
+  let bestPct = 0;
+  const blob = await _downloadBlobFrom(list[0], (received, total) => {
+    if(total > 0){
+      const pct = received / total * 100;
+      if(pct > bestPct){ bestPct = pct; if(onProgress) onProgress(bestPct); }
     }
-  }
-  return _fetchByFirstByte(list, onProgress, label, quiet);
+  }, null);
+  if(onProgress) onProgress(100);
+  if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '下载成功!');
+  return blob;
 }
 
 // ===== 谱面压缩传输：优先取 .br / .gz，客户端解压 =====
@@ -1101,44 +904,19 @@ const SoundfontLoader = {
         }
       }catch(e){}
     }
-    // 并发择优：默认完整下载竞速，开关关闭时改首字节竞速
+    // 同源顺序下载音色文本（进度 0..1）
     const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
-    let text, source;
-    if(raceFullDownload){
-      try{
-        const res = await _raceDownloadFull(list, (p) => { if(onProgress) onProgress(p / 100); });
-        text = await res.blob.text();
-        source = _sourceLabel(res.url);
-        if(onProgress) onProgress(1);
-      }catch(e){
-        console.warn('[AudioDebug][WARN] ' + _timbreLabel(name) + '全部镜像下载失败：' + (e && e.message ? e.message : e));
-        throw e;
-      }
-    } else {
-      let resp = null;
-      try{
-        const winner = await _raceFetch(list);
-        resp = winner.resp;
-        source = _sourceLabel(winner.url);
-      }catch(e){
-        console.warn('[AudioDebug][WARN] ' + _timbreLabel(name) + '全部源下载失败：' + (e && e.message ? e.message : e));
-        throw e;
-      }
-      const _total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
-      if(resp.body && resp.body.getReader && _total){
-        const reader = resp.body.getReader();
-        const chunks = []; let received = 0;
-        while(true){
-          const {done, value} = await reader.read();
-          if(done) break;
-          chunks.push(value); received += value.length;
-          if(onProgress) onProgress(received / _total);
-        }
-        text = await new Blob(chunks).text();
-      } else {
-        text = await resp.text();
-        if(onProgress) onProgress(1);
-      }
+    const source = '同源';
+    let text;
+    try{
+      const blob = await _fetchBlobWithProgress(list, (p) => {
+        if(onProgress) onProgress(p / 100);
+      }, _timbreLabel(name), true);
+      text = await blob.text();
+      if(onProgress) onProgress(1);
+    }catch(e){
+      console.warn('[AudioDebug][WARN] ' + _timbreLabel(name) + '下载失败：' + (e && e.message ? e.message : e));
+      throw e;
     }
     if(!this._isSoundfontText(text, name)){
       throw new Error('音色文件内容异常（非JS，可能被截断或网络返回错误页）: ' +
@@ -1856,8 +1634,19 @@ let userGestureSeen = false;
     document.addEventListener(ev, mark, {capture: true, passive: true}));
 })();
 
-// 并行加载默认谱面与默认音色：谱面就绪即可播放；音色未就绪先用合成钢琴抢跑，
-// 音色下载并预解码完成后无缝切回（不打断正在发声的音符）
+// ===== 冷启动优先级管线 =====
+// 进页面后按优先级「独占带宽、顺序下载」，避免并发抢占带宽：
+//   P0  默认谱面（Rush E3，brotli 压缩）—— 独占下载；完成后立即用合成钢琴起播
+//   P1  默认音色（古钢琴）—— 与 P0 起播同时开始独占下载；期间不下载其它任何资源
+//   P2  预配置的内置必下音色与谱面 —— 古钢琴就绪后才开始
+// 迁移 Cloudflare 后同源即可获得低延迟与压缩，不再需要多镜像竞速。
+const COLD_START = {
+  sheet: 'midi/Rush E 3.mid',                         // P0：优先独占下载的默认谱面
+  timbre: 'clavinet',                                  // P1：默认谱面就绪后独占下载的音色（古钢琴）
+  mandatorySheets: ['midi/The Sound of Silence.mid'],  // P2：预配置必下谱面
+  mandatoryTimbres: [],                                // P2：预配置必下音色（古钢琴已在 P1 下载）
+};
+
 (function(){
   const hint = document.getElementById('timbreHint');
   let midiBuf = null;
@@ -1865,7 +1654,7 @@ let userGestureSeen = false;
   let timbreReady = false;          // 默认音色是否已加载并预解码完成
   let timbreFailed = false;         // 默认音色是否加载失败
   let startedWithFallback = false;  // 是否已用合成钢琴抢跑
-  const DEFAULT_SONG = 'Rush E 3.mid';
+  const DEFAULT_SONG = COLD_START.sheet.split('/').pop();
 
   // 轻量提示：显示在进度条上方的状态区（不再用遮挡点击的浮层）
   function showToast(msg){ setStatus(msg); }
@@ -1906,13 +1695,12 @@ let userGestureSeen = false;
     startPlaybackOnce();
   }
 
-  // 加载谱子对应的默认音色：先下载+预解码（不切 current），完成后再无缝切换
+  // P1：下载默认音色并预解码（不切 current），完成后无缝切换
   async function loadDefaultTimbre(){
-    const timbreName = songDefaultTimbre[DEFAULT_SONG];
+    const timbreName = COLD_START.timbre;
     if(!timbreName || timbreName === '__synth__'){
       timbreReady = true;
       if(hint) hint.textContent = '当前：合成钢琴';
-      startPlaybackOnce();
       return;
     }
     // 同步下拉菜单选中状态
@@ -1932,44 +1720,55 @@ let userGestureSeen = false;
       const label = (timbreSel && timbreSel.options[timbreSel.selectedIndex]) ? timbreSel.options[timbreSel.selectedIndex].text : timbreName;
       if(hint) hint.textContent = '当前音色：' + label + ' ✓ 就绪';
       if(startedWithFallback) showToast('音色[' + timbreDisplayName(timbreName) + ']已就绪，已切换');
-      startPlaybackOnce();
-      // 后台预取其余默认谱面：Sound of Silence（使用合成钢琴，无需下载音色）
-      // （Rush E3 + 古钢琴已就绪；完成会刷新管理面板该行状态）
-      try{
-        await fetchMedia('midi/The Sound of Silence.mid', null, true);
-        refreshManageRowState('midi/The Sound of Silence.mid');
-      }catch(e){}
-      // 默认下载的音色只保留「古钢琴」（Rush E3 使用）；其余音色仅在用户主动下载、
-      // 或切到配置了该音色的谱面时才下载。
     }catch(e){
       timbreFailed = true;
       console.warn('[AudioDebug] 默认音色加载失败 name=' + timbreName + ' 错误=' + (e && e.message ? e.message : e));
       SoundfontLoader.current = '__synth__';
       if(hint) hint.textContent = '当前：合成钢琴（音色加载失败）';
-      if(!autoPlayTriggered) showToast('音色[' + timbreDisplayName(timbreName) + ']加载失败，回退合成钢琴');
-      startPlaybackOnce();
+      showToast('音色[' + timbreDisplayName(timbreName) + ']加载失败，回退合成钢琴');
     }
   }
 
-  // 并行启动：谱面与音色同时开始加载（谱面走缓存优先）
-  console.log('[AudioDebug][INFO] 默认加载谱面与音色：' + _songLabel('midi/' + DEFAULT_SONG) + ' / ' +
-    ['clavinet'].map(_timbreLabel).join(' / '));
-  fetchMedia('midi/' + DEFAULT_SONG, (p) => {
-    if(p < 100) setStatus('谱面[' + _songDisplayName(DEFAULT_SONG) + ']下载 ' + Math.round(p) + '%');
-  })
-  .then(resp => resp.arrayBuffer()).then(buf => {
-    console.log('[AudioDebug][INFO] 默认谱面已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
-    midiBuf = buf;
-    parseAndPlayMidi(buf, DEFAULT_SONG);
-    refreshManageRowState('midi/' + DEFAULT_SONG); // 下载完成，更新管理面板该行状态
-    if(timbreReady) startPlaybackOnce();
-    else startWithFallback();
-  }).catch(e => {
-    if(hint) hint.textContent = 'MIDI加载失败：' + e.message;
-  });
+  // 顺序冷启动：P0 谱面 -> （起播合成钢琴 + P1 古钢琴）-> P2 预配置必下资源
+  (async function coldStart(){
+    // ---- P0：独占下载默认谱面 ----
+    console.log('[AudioDebug][INFO] 冷启动 P0：独占下载默认谱面 ' + _songLabel(COLD_START.sheet));
+    try{
+      const resp = await fetchMedia(COLD_START.sheet, (p) => {
+        if(p < 100) setStatus('谱面[' + _songDisplayName(DEFAULT_SONG) + ']下载 ' + Math.round(p) + '%');
+      });
+      const buf = await resp.arrayBuffer();
+      console.log('[AudioDebug][INFO] 默认谱面已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
+      midiBuf = buf;
+      parseAndPlayMidi(buf, DEFAULT_SONG);
+      refreshManageRowState(COLD_START.sheet); // 下载完成，更新管理面板该行状态
+      // P0 完成：立即用合成钢琴起播（不等音色）
+      startWithFallback();
+    }catch(e){
+      if(hint) hint.textContent = 'MIDI加载失败：' + e.message;
+      return; // 谱面失败则不继续下载音色
+    }
 
-  // 其余内置谱默认不下载，选到时才按需加载；默认资源在 loadDefaultTimbre 内按序预取
-  loadDefaultTimbre();
+    // ---- P1：起播的同时，独占下载默认音色 ----
+    console.log('[AudioDebug][INFO] 冷启动 P1：独占下载默认音色 ' + _timbreLabel(COLD_START.timbre));
+    await loadDefaultTimbre();
+
+    // ---- P2：古钢琴就绪后，再下载预配置的内置必下音色与谱面 ----
+    const sheets = COLD_START.mandatorySheets.filter(f => f !== COLD_START.sheet);
+    const timbres = COLD_START.mandatoryTimbres.filter(t => t !== COLD_START.timbre);
+    if(sheets.length || timbres.length){
+      console.log('[AudioDebug][INFO] 冷启动 P2：预配置必下资源（谱面 ' + sheets.length + ' / 音色 ' + timbres.length + '）');
+    }
+    for(const f of sheets){
+      try{
+        await fetchMedia(f, null, true);
+        refreshManageRowState(f);
+      }catch(e){}
+    }
+    for(const t of timbres){
+      try{ await SoundfontLoader.load(t, null, {switchCurrent:false}); }catch(e){}
+    }
+  })();
 })();
 
 // 加载谱子列表
@@ -2362,7 +2161,7 @@ function toggleManageModal(){
 async function resetAllSettings(){
   // 重置所有设置项 + 恢复演示谱面标记 + 下载缺失的默认资源
   const keys = ['panelTransparency', 'panelBlur', 'dbgAutoOpen', 'debugEnabled',
-                'menuBtnPos', 'paletteCustom', 'paletteV2', 'raceFull'];
+                'menuBtnPos', 'paletteCustom', 'paletteV2'];
   try{ keys.forEach(k => localStorage.removeItem(k)); }catch(e){}
   // 恢复演示谱面（Rush E3）标记：从「已删除」集合中移除
   try{
