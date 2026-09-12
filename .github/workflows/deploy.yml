@@ -32,6 +32,23 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v4
 
+  cloudflare:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage site files
+        run: |
+          mkdir -p /tmp/cf_dist
+          rsync -a --exclude='.git' ./ /tmp/cf_dist/
+      - name: Publish snapshot to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy /tmp/cf_dist --project-name=d2p --branch=master --commit-dirty=true
+
   cleanup:
     needs: deploy
     runs-on: ubuntu-latest

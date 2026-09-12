@@ -1,6 +1,6 @@
 # down2.top
 
-个人工具与资源门户，通过 GitHub Pages 部署，自定义域名 `down2.top`。
+个人工具与资源门户，同时部署到 GitHub Pages 与 Cloudflare Pages，自定义域名 `down2.top`。
 
 ## 站点结构
 
@@ -47,8 +47,18 @@
 - 外部链接：<https://down2.top/links/>
 - UI Kit：<https://down2.top/ui-kit/>
 
+## 部署
+
+push `master` 后，`.github/workflows/deploy.yml` 会自动：
+
+1. `deploy`：发布到 GitHub Pages（`teecatt.github.io`）
+2. `cloudflare`：将站点快照同步到 Cloudflare Pages 项目 `d2p`（生产分支 `master`，对应自定义域 `down2.top`）
+3. `cleanup`：清理旧的 push 触发 run / deployment
+
+`cloudflare` job 依赖仓库 Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。
+
 ## 技术要点
 
 - 纯静态页面，数据驱动
 - 暗色主题，移动端自适应
-- GitHub Pages 部署
+- GitHub Pages + Cloudflare Pages 双端部署
