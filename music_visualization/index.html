@@ -57,11 +57,10 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .lib-item .label{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:9px;color:var(--muted);background:linear-gradient(transparent,rgba(0,0,0,.7));padding:4px 2px 2px}
 
 .canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;min-height:0;order:2}
-.canvas-toolbar{height:40px;display:flex;align-items:center;padding:0 12px;gap:8px;border-bottom:1px solid var(--line);background:var(--panel);flex-shrink:0}
-.canvas-toolbar .tool-btn{background:transparent;border:1px solid transparent;color:var(--muted);padding:4px 8px;border-radius:5px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px}
-.canvas-toolbar .tool-btn:hover{background:var(--hover);color:var(--text)}
-.canvas-toolbar .tool-btn.active{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
 .canvas-stage{flex:0 1 auto;min-height:0;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:0;background:var(--panel)}
+/* 全屏绘制区 */
+.canvas-area:fullscreen,.canvas-area:-webkit-full-screen{background:var(--bg);padding:0}
+.canvas-area:fullscreen .canvas-stage,.canvas-area:-webkit-full-screen .canvas-stage{flex:1 1 auto;min-height:0}
 .stage-wrap{position:relative;box-shadow:none;border-radius:0;overflow:visible;flex-shrink:0;align-self:center}
 #mainCanvas{display:block;cursor:default;touch-action:none;transform-origin:0 0}
 
@@ -173,8 +172,6 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
   .panel-backdrop.show{display:block}
   .log-toolbar .log-switch-label{display:none}
   .canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
-  .canvas-toolbar{height:32px;padding:0 6px;flex-shrink:0}
-  .canvas-toolbar .tool-btn{padding:2px 5px;font-size:10px}
   .canvas-stage{overflow:auto;padding:0;background:var(--panel)}
   .stage-wrap{width:100%!important;height:auto!important}
   .stage-wrap canvas{width:100%!important;height:auto!important;transform:none!important}
@@ -264,6 +261,10 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 1 9-9"/><path d="m12 12 4.5-3.5"/><circle cx="12" cy="12" r="1.2"/></svg>
       <span>性能</span>
     </button>
+    <button class="ibtn" id="fsToggleBtn" title="全屏绘制区">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      <span>全屏</span>
+    </button>
   </div>
 
   <div class="library" id="library">
@@ -271,20 +272,6 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
   </div>
 
   <div class="canvas-area">
-    <div class="canvas-toolbar">
-      <button class="tool-btn" id="btnZoomOut">−</button>
-      <span id="zoomLabel" style="font-size:11px;color:var(--muted);min-width:40px;text-align:center">100%</span>
-      <button class="tool-btn" id="btnZoomIn">+</button>
-      <button class="tool-btn" id="btnFit">⛶ 适配</button>
-      <div style="flex:1"></div>
-      <select id="aspectSelect" title="画布比例/分辨率" style="background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:3px 8px;border-radius:5px;font-size:11px;cursor:pointer;outline:none">
-        <option value="16:9">16:9 · 1280×720</option>
-        <option value="9:16">9:16 · 720×1280</option>
-        <option value="1:1">1:1 · 1280×1280</option>
-        <option value="4:5">4:5 · 1024×1280</option>
-        <option value="4:3">4:3 · 1280×960</option>
-      </select>
-    </div>
     <div class="canvas-stage" id="canvasStage">
       <div class="stage-wrap" id="stageWrap">
         <canvas id="mainCanvas" width="1280" height="720"></canvas>
@@ -552,7 +539,7 @@ const stageWrap = document.getElementById('stageWrap');
 const canvasStage = document.getElementById('canvasStage');
 
 const CFG = {
-  canvas: { w:1280, h:720, aspect:'16:9', zoom:1, bgType:'solid', bgColor:'#000000',
+  canvas: { w:1280, h:720, zoom:1, bgType:'solid', bgColor:'#000000',
     gradColor1:'#00ced1', gradColor2:'#000000', gradStops:[0,25,50,75,100],
     gradAngle:360, gradRadius:640, bgImage:'', bgBlur:0, bgDarken:0 },
   elements: [], selectedId: null,
@@ -944,18 +931,22 @@ function _updateFps(now){
 }
 function _drawFps(){
   const fs = Math.max(10, Math.round(canvas.height * 0.035));
-  const txt = _fpsValue + ' FPS';
+  const lines = [_fpsValue + ' FPS', canvas.width + '×' + canvas.height];
   const pad = Math.round(fs * 0.4);
   const x = Math.round(fs * 0.6), y = Math.round(fs * 0.6);
+  const lh = Math.round(fs * 1.35);
   ctx.save();
   ctx.font = '600 ' + fs + 'px ui-monospace,Menlo,Consolas,monospace';
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
-  const w = ctx.measureText(txt).width;
+  let maxW = 0;
+  for(const t of lines){ maxW = Math.max(maxW, ctx.measureText(t).width); }
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.fillRect(x - pad, y - pad, w + pad * 2, fs + pad * 2);
+  ctx.fillRect(x - pad, y - pad, maxW + pad * 2, lh * lines.length + pad * 2 - (lh - fs));
   ctx.fillStyle = '#39d353';
-  ctx.fillText(txt, x, y);
+  ctx.fillText(lines[0], x, y);
+  ctx.fillStyle = '#e6edf3';
+  ctx.fillText(lines[1], x, y + lh);
   ctx.restore();
 }
 function render(){
@@ -1596,7 +1587,7 @@ function getHandleAt(wx,wy,p){
 }
 function selectElement(el){
   CFG.selectedId=el.id;
-  document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.ibtn[data-tool]').forEach(x=>x.classList.remove('active'));
   document.querySelector('.ibtn[data-tool="props"]')?.classList.add('active');
   _lastTool='props';
   renderProps();
@@ -1619,6 +1610,8 @@ function hitElementAt(mx,my){
 }
 
 canvas.addEventListener('pointerdown',e=>{
+  // 全屏：画布内元素不可被选中/点击
+  if(document.fullscreenElement||document.webkitFullscreenElement) return;
   const pt=canvasPos(e);
   _pointers.set(e.pointerId, pt);
   // 两指：等比缩放（长宽同比）
@@ -1659,6 +1652,7 @@ canvas.addEventListener('pointerdown',e=>{
 });
 
 canvas.addEventListener('pointermove',e=>{
+  if(document.fullscreenElement||document.webkitFullscreenElement){ canvas.style.cursor='default'; return; }
   if(_pointers.has(e.pointerId)) _pointers.set(e.pointerId, canvasPos(e));
   const pt=canvasPos(e);
 
@@ -1720,16 +1714,6 @@ canvas.addEventListener('pointerleave',()=>{ if(!_drag&&!_pinch) canvas.style.cu
 /* ============================================================
    画布比例 & 缩放
    ============================================================ */
-function setAspect(aspect){
-  CFG.canvas.aspect=aspect;
-  const [w,h]=aspect.split(':').map(Number);
-  const base=1280;
-  if(w>=h){ canvas.width=base; canvas.height=Math.round(base*h/w); }
-  else { canvas.height=base; canvas.width=Math.round(base*w/h); }
-  CFG.canvas.w=canvas.width; CFG.canvas.h=canvas.height;
-  fitCanvas();
-  scheduleSave();
-}
 // 直接按像素设置画布分辨率（性能面板）
 function setResolution(w,h){
   CFG.canvas.w=w; CFG.canvas.h=h;
@@ -1744,7 +1728,6 @@ function applyZoom(){
   canvas.style.transformOrigin='0 0';
   stageWrap.style.width=(canvas.width*z)+'px';
   stageWrap.style.height=(canvas.height*z)+'px';
-  document.getElementById('zoomLabel').textContent=Math.round(z*100)+'%';
 }
 function fitCanvas(){
   // 优先等比例缩放到「宽度贴合左右控件边界」；高度超出时由 .canvas-stage 滚动，
@@ -1763,7 +1746,6 @@ function fitCanvas(){
 document.getElementById('uploadZone').addEventListener('click',()=>document.getElementById('fileInput').click());
 document.getElementById('fileInput').addEventListener('change',e=>loadAudio(e.target.files[0]));
 document.getElementById('playBtn').addEventListener('click',togglePlay);
-document.getElementById('aspectSelect').addEventListener('change',e=>setAspect(e.target.value));
 document.getElementById('volSlider').addEventListener('input',e=>{CFG.volume=+e.target.value;if(CFG.audio)CFG.audio.volume=CFG.volume;});
 document.getElementById('loopBtn').addEventListener('click',function(){
   CFG.loop=!CFG.loop; this.classList.toggle('active',CFG.loop);
@@ -1812,7 +1794,7 @@ function _closeAllPanels(){
   if(lib) lib.classList.remove('mobile-open','hidden');
   if(propsPanel) propsPanel.classList.remove('open','mobile-open');
   if(perfPanel) perfPanel.classList.remove('open','mobile-open');
-  document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.ibtn[data-tool]').forEach(x=>x.classList.remove('active'));
   _lastTool=null;
   fitCanvas();
   _syncBackdrop();
@@ -1824,7 +1806,7 @@ document.querySelectorAll('.ibtn[data-tool]').forEach(b=>b.addEventListener('cli
   const tool=b.dataset.tool;
   const isActive=b.classList.contains('active');
   if(_panelTimer) clearTimeout(_panelTimer);
-  document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.ibtn[data-tool]').forEach(x=>x.classList.remove('active'));
   lib.classList.remove('mobile-open','hidden');
   propsPanel.classList.remove('open','mobile-open');
   perfPanel.classList.remove('open','mobile-open');
@@ -1861,36 +1843,32 @@ document.getElementById('panelBackdrop').addEventListener('click',e=>{
   e.stopPropagation();
   _closeAllPanels();
 });
-// 缩放按钮：点击+长按连续调整
-let zoomTimer=null, zoomInterval=null;
-function startZoom(dir){
-  const step=dir>0?0.05:-0.05;
-  CFG.canvas.zoom=Math.max(0.1,Math.min(2,CFG.canvas.zoom+step));
-  applyZoom();
-  zoomTimer=setTimeout(()=>{
-    zoomInterval=setInterval(()=>{
-      CFG.canvas.zoom=Math.max(0.1,Math.min(2,CFG.canvas.zoom+step*2));
-      applyZoom();
-    },30);
-  },300);
+// 全屏：全屏绘制区；全屏时画布元素不可选中/点击，双击任意位置退出
+let _isFullscreen=false;
+const _fsBtn=document.getElementById('fsToggleBtn');
+const _fsTarget=document.querySelector('.canvas-area');
+function _fsRequest(el, fn){ if(el && typeof el[fn]==='function'){ el[fn](); } }
+function _toggleFullscreen(){
+  if(!(document.fullscreenElement||document.webkitFullscreenElement)){
+    _fsRequest(_fsTarget,'requestFullscreen'); _fsRequest(_fsTarget,'webkitRequestFullscreen');
+  }else{
+    _fsRequest(document,'exitFullscreen'); _fsRequest(document,'webkitExitFullscreen');
+  }
 }
-function stopZoom(){
-  if(zoomTimer){clearTimeout(zoomTimer);zoomTimer=null;}
-  if(zoomInterval){clearInterval(zoomInterval);zoomInterval=null;}
+function _onFsChange(){
+  _isFullscreen=!!(document.fullscreenElement||document.webkitFullscreenElement);
+  if(_fsBtn) _fsBtn.classList.toggle('active',_isFullscreen);
+  if(_isFullscreen){ CFG.selectedId=null; renderProps(); } // 全屏不可选中元素
+  setTimeout(fitCanvas,60);
 }
-const zin=document.getElementById('btnZoomIn');
-const zout=document.getElementById('btnZoomOut');
-zin.addEventListener('mousedown',()=>startZoom(1));
-zin.addEventListener('mouseup',stopZoom);
-zin.addEventListener('mouseleave',stopZoom);
-zin.addEventListener('touchstart',e=>{e.preventDefault();startZoom(1);});
-zin.addEventListener('touchend',stopZoom);
-zout.addEventListener('mousedown',()=>startZoom(-1));
-zout.addEventListener('mouseup',stopZoom);
-zout.addEventListener('mouseleave',stopZoom);
-zout.addEventListener('touchstart',e=>{e.preventDefault();startZoom(-1);});
-zout.addEventListener('touchend',stopZoom);
-document.getElementById('btnFit').addEventListener('click',fitCanvas);
+if(_fsBtn) _fsBtn.addEventListener('click',_toggleFullscreen);
+document.addEventListener('fullscreenchange',_onFsChange);
+document.addEventListener('webkitfullscreenchange',_onFsChange);
+document.addEventListener('dblclick',()=>{
+  if(document.fullscreenElement||document.webkitFullscreenElement){
+    _fsRequest(document,'exitFullscreen'); _fsRequest(document,'webkitExitFullscreen');
+  }
+});
 window.addEventListener('keydown',e=>{
   if(e.code==='Space'&&!e.target.matches('input,select,textarea')){e.preventDefault();togglePlay();}
   if(e.code==='Delete'&&CFG.selectedId){removeElement(CFG.selectedId);}
@@ -1899,8 +1877,8 @@ window.addEventListener('keydown',e=>{
    初始化
    ============================================================ */
 const _restored = loadConfig(); // 恒为 false：每次刷新都恢复默认
-setAspect(CFG.canvas.aspect || '16:9');
-document.getElementById('aspectSelect').value = CFG.canvas.aspect || '16:9';
+// 默认分辨率 1280×720（改由性能面板设置，画布比例下拉/缩放按钮已移除）
+canvas.width=1280; canvas.height=720; CFG.canvas.w=1280; CFG.canvas.h=720;
 document.getElementById('volSlider').value = CFG.volume;
 document.getElementById('loopBtn').classList.toggle('active', CFG.loop);
 document.getElementById('loopBtn').innerHTML=CFG.loop?LIST_LOOP_ICON:NO_LOOP_ICON;
