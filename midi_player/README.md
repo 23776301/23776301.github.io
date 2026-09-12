@@ -449,7 +449,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.12 调试面板（独立浮层）
 
 - 控制行内新增圆形 `.ctl-btn.primary` 调试按钮（`debugToggleBtn`，图标 `carbon:debug`），位于**配色按钮左侧**；点击 `toggleDebugPanel()` 切换 `.debug-panel.open`，面板从控制行**向下展开**（统一 `.drop-panel`，绝对定位），浮在渲染区之上，**不改变渲染区高度**。
-- 面板顶部工具行为：**启用调试开关（左）……重置所有选项按钮（右上角，红色警示样式，含文字「重置所有选项」+ `fluent:arrow-reset-20-regular` 图标，`resetAllSettings()` 清除全部设置项（`panelTransparency` / `panelBlur` / `dbgAutoOpen` / `debugEnabled` / `menuBtnPos` / `paletteCustom` / `paletteV2`）后刷新，但**不触碰用户数据**：`deletedBuiltin`、IndexedDB 用户谱面、资产缓存均保留）**。第二行为日志操作按钮：**降级自动展开开关（最左，每次开启调试默认打开）→ 复制 → 下载日志 → 清空 → 置顶 → 置底**（圆形 SVG 图标）。**日志区不再单独滚动**（`.dbg-log` 改为 `min-height:200px; overflow:visible`），整个调试面板是唯一滚动容器：滚动日志区即滚动面板，滑到边界后面板会一起滚动，不会出现「日志已到底但底部仍被裁掉、还得去面板空白处再滑一次」的问题。`_appendDebug` 的自动跟随、置顶/置底按钮（`scrollDebugTop/Bottom`）都改为操作面板（`_debugPanelScrollEl()`）。面板高度通过 `_syncDebugPanelHeight()` 设为浏览器高度的 75%（`75vh`）。工具栏与操作按钮包在 `.dbg-header` 里固定不滚动，终端 `.dbg-log` 占据下方所有剩余空间（`flex:1; min-height:0; overflow-y:auto`），关闭调试时面板自动缩小。**透明 / 模糊滑块已移除**（只在设置面板保留）。
+- 面板顶部工具行为：**启用调试开关（左）……重置所有选项按钮（右上角，红色警示样式，含文字「重置所有选项」+ `fluent:arrow-reset-20-regular` 图标，`resetAllSettings()` 清除全部设置项（`panelTransparency` / `panelBlur` / `dbgAutoOpen` / `debugEnabled` / `menuBtnPos` / `paletteCustom` / `paletteV2`）后刷新，但**不触碰用户数据**：`deletedBuiltin`、IndexedDB 用户谱面、资产缓存均保留）**。第二行为日志操作按钮：**降级自动展开开关（最左，每次开启调试默认打开）→ 复制 → 下载日志 → 清空 → 置顶 → 置底**（圆形 SVG 图标）。面板高度通过 `_syncDebugPanelHeight()` 设为浏览器高度的 75%（`75vh`）。工具栏与操作按钮包在 `.dbg-header` 里固定不滚动，终端 `.dbg-log` 占据下方所有剩余空间并作为**唯一滚动容器**（`flex:1; min-height:0; overflow-y:auto`），面板本身 `overflow:hidden`。`_appendDebug` 的自动跟随、置顶/置底按钮（`scrollDebugTop/Bottom`）都操作终端（`_debugPanelScrollEl()` 返回 `#debugTerminalContent`）。因性能问题自动展开时用 `requestAnimationFrame` 等布局完成后再滚到最新。关闭调试时面板自动缩小。**透明 / 模糊滑块已移除**（只在设置面板保留）。
 - **开启调试即降耗**：每次勾选「启用调试」自动把透明度设为 **20%**（较暗）、模糊 **0%** 并提示。
 - 调试总开关默认开启；关闭后 `body.dbg-off` 隐藏 `.dbg-body`、停止采集与监控。
 - 面板背景与设置 / 配色 / 选谱 / 管理面板共享同一透明度与模糊（见 9.7、9.9）。
@@ -803,6 +803,7 @@ midi_player/
 | 面板与版型交互 | 谱面管理二次点击收起；删除设置/音色大标题、音色行加「音色选择」标签；键数版型改 6 档滑块并为六种标准音域配置默认缩放/偏移（首键对齐最左）；音色列表加垃圾桶/下载按钮+百分比、未下载不可切换、删除「已就绪」提示；调试面板自动展开开关移最左、最右加重置所有设置按钮、底边对齐设置面板；重播改 `hugeicons:replay` | `cbe84ee` |
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
 | 调试面板滚动 | 日志区不再单独滚动，整个调试面板作为唯一滚动容器；滚动日志即滚动面板，避免日志滑到边界后底部仍被裁掉需二次滑动；自动跟随与置顶/置底改为滚动面板 | `36904c1` |
+| 调试终端滚动修正 | 终端 `.dbg-log` 恢复为唯一滚动容器；`_debugPanelScrollEl` 改回返回终端，修复置顶/置底按钮无效与自动展开不滚到最新；自动展开改用 requestAnimationFrame 等布局完成 | `_pending_` |
 | 综合整改 | 全屏悬浮按钮 z-index 修复；73 键型（F1-F7）；键型左 25→右 88；调试面板高度 75vh、终端 flex 填充、dbg-header 固定；关闭调试面板缩小；透明度默认 40%+百分比显示；Rush E3 软删除；重置恢复演示谱面+下载缺失默认资源 | `7999c5b` |
 | 第二行按钮布局修正 | 宽屏保持默认32px按钮+左/右分组对齐（`.ctl-group`+`.ctl-spacer`）；窄屏（≤600px）隐藏spacer、按钮按需缩小（24–32px）；修复SVG选择器适配新结构 | `b7f82f4` |
 | 第二行按钮自适应 | `.control-row` 改 `nowrap + space-between`，8 个按钮 `flex:0 1 32px; aspect-ratio:1`、图标百分比缩放、间距 `clamp`；窄屏 / DPI 异常时按钮与图标等比缩小，恰好排满整行不溢出 | `31ba95b` |

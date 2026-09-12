@@ -644,8 +644,8 @@ function setStatus(text, sticky){
 }
 // 调试面板是唯一滚动容器（日志区不单独滚动）
 function _debugPanelScrollEl(){
-  const el = document.getElementById('debugTerminalContent');
-  return (el && el.closest && el.closest('.drop-panel')) || document.getElementById('debugPanel');
+  // 面板本身 overflow:hidden，真正的滚动容器是终端 .dbg-log
+  return document.getElementById('debugTerminalContent');
 }
 function _appendDebug(msg, type) {
   // 调试信息本就只有音频调试：详细日志不再打印 [AudioDebug] 前缀（保留 [INFO]/[WARN]/[OK] 等级）
@@ -824,7 +824,8 @@ function autoOpenDebugPanel(){
   if(!debugEnabled || !dbgAutoOpen) return;
   const panel = document.getElementById('debugPanel');
   if(panel){ closeAllDropPanels(panel); panel.classList.add('open'); _syncDebugPanelHeight(); }
-  setTimeout(() => { if(typeof scrollDebugBottom === 'function') scrollDebugBottom(); }, 0);
+  // 等一帧让面板完成布局，再滚到最新
+  requestAnimationFrame(() => { if(typeof scrollDebugBottom === 'function') scrollDebugBottom(); });
 }
 
 function clearDebugTerminal() {
