@@ -358,9 +358,46 @@ function logDownload(){
 function logScrollTop(){ if(_logBar) _logBar.scrollTop=0; }
 function logScrollBottom(){ if(_logBar) _logBar.scrollTop=_logBar.scrollHeight; }
 
-// 媒体源：优先 jsDelivr CDN（不消耗 GitHub Pages 流量），失败回退本站 Pages
-const CDN_REPO_BASE = 'https://cdn.jsdelivr.net/gh/teecatt/teecatt.github.io@master/';
-const DEMO_CDN_URL = CDN_REPO_BASE + 'music_visualization/demo.ogg';
+// 媒体源：多个 jsDelivr 边缘节点 + 本站 Pages 兜底，下载时并发择优
+const REPO_GH = 'teecatt/teecatt.github.io';
+const REPO_REF = 'master';
+const CDN_BASES = [
+  { name: 'jsDelivr',        base: 'https://cdn.jsdelivr.net/gh/' },
+  { name: 'jsDelivr-Fastly', base: 'https://fastly.jsdelivr.net/gh/' },
+  { name: 'jsDelivr-Gcore',  base: 'https://gcore.jsdelivr.net/gh/' },
+  { name: 'jsDelivr-CF',     base: 'https://testingcf.jsdelivr.net/gh/' },
+];
+const DEMO_URLS = CDN_BASES.map(b => b.base + REPO_GH + '@' + REPO_REF + '/music_visualization/demo.ogg');
+DEMO_URLS.push('demo.ogg');
+function _demoSourceLabel(url){
+  const u = String(url);
+  if(u.indexOf('://') < 0) return 'Pages';
+  for(const b of CDN_BASES){ if(u.indexOf(b.base) === 0) return b.name; }
+  try { return new URL(u).hostname; } catch(e) { return '备用源'; }
+}
+// 并发择优：同时请求所有候选源，最先成功返回响应的胜出，其余 abort
+async function _raceFetchDemo(urls){
+  const hasAbort = (typeof AbortController !== 'undefined');
+  const controllers = urls.map(() => hasAbort ? new AbortController() : null);
+  const attempts = urls.map((url, i) => (async () => {
+    const r = await fetch(url, controllers[i] ? { signal: controllers[i].signal } : undefined);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return { r, i };
+  })());
+  let winner;
+  try {
+    winner = await (typeof Promise.any === 'function' ? Promise.any(attempts) : new Promise((res, rej) => {
+      let n = urls.length; const errs = [];
+      attempts.forEach((p, i) => p.then(res, e => { errs[i] = e; if(--n === 0) rej({ errors: errs }); }));
+    }));
+  } catch(agg) {
+    const errs = (agg && agg.errors) || [];
+    const first = errs.find(e => e);
+    throw (first instanceof Error) ? first : new Error('全部源下载失败');
+  }
+  controllers.forEach((c, i) => { if(c && i !== winner.i){ try { c.abort(); } catch(e){} } });
+  return { r: winner.r, url: urls[winner.i] };
+}
 async function fetchDemo(){
   _log('demo.ogg: 开始加载...');
   const absUrl = AssetCache._abs('demo.ogg');
@@ -375,20 +412,12 @@ async function fetchDemo(){
     _log('demo.ogg: 缓存API不可用 (' + e.name + ': ' + e.message + ')', 'warn');
   }
   let blob = null;
-  for (const u of [DEMO_CDN_URL, 'demo.ogg']) {
-    _log('demo.ogg: 尝试 ' + u);
-    try {
-      const r = await fetch(u);
-      if (r.ok) {
-        blob = await r.blob();
-        _log('demo.ogg: 下载成功 ' + (blob.size/1024).toFixed(0) + 'KB via ' + u, 'ok');
-        break;
-      } else {
-        _log('demo.ogg: HTTP ' + r.status + ' ' + u, 'err');
-      }
-    } catch(e) {
-      _log('demo.ogg: 请求失败 ' + u + ' (' + e.message + ')', 'err');
-    }
+  try {
+    const { r, url } = await _raceFetchDemo(DEMO_URLS);
+    blob = await r.blob();
+    _log('demo.ogg: 下载成功 ' + (blob.size/1024).toFixed(0) + 'KB via ' + _demoSourceLabel(url), 'ok');
+  } catch(e) {
+    _log('demo.ogg: 请求失败 (' + e.message + ')', 'err');
   }
   if (!blob) { _log('demo.ogg: 所有源均失败', 'err'); throw new Error('demo.ogg 加载失败'); }
   try {
