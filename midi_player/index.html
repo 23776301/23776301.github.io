@@ -190,7 +190,9 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .dbg-toolbar label{display:flex;align-items:center;gap:4px;cursor:pointer}
 .dbg-toolbar input[type=range]{width:64px}
 .appearance-sliders{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.appearance-sliders .pct{min-width:2.5em;text-align:right;font-variant-numeric:tabular-nums}
 #playModeLabel{color:#fff}
+.dbg-header{flex:0 0 auto}
 .dbg-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
 .dbg-actions button{background:#333;color:#fff;border:none;width:26px;height:26px;padding:0;cursor:pointer;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
 .dbg-actions button svg{width:14px;height:14px}
@@ -200,9 +202,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .dbg-reset-btn:active{background:#6b1616}
 .dbg-reset-btn svg{width:14px;height:14px}
 .dbg-log{
-  /* 不再单独滚动：整个调试面板是唯一滚动容器，滚动日志区即滚动面板，
-     避免日志滑到边界后面板没跟上、底部内容仍被裁掉 */
-  min-height:200px;overflow:visible;padding:4px 8px;line-height:1.4;
+  flex:1;min-height:0;overflow-y:auto;padding:4px 8px;line-height:1.4;
   font-family:monospace;font-size:11px;
   background:rgba(0,0,0,.35);border:1px solid #333;border-radius:6px;
 }
@@ -356,8 +356,8 @@ select:focus{border-color:var(--accent)}
 .fs-overlay.faded .fs-settings{transform:translate(-30%,-30%)}
 .fs-overlay.faded .fs-exit{transform:translate(30%,-30%)}
 /* 调试面板：从控制行下方展开（absolute，不遮挡按钮） */
-.debug-panel{display:none}
-.debug-panel.open{display:block}
+.debug-panel{display:none;flex-direction:column;overflow:hidden}
+.debug-panel.open{display:flex}
 .file-info{font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6}
 .file-info b{color:var(--text)}
 .timbre-hint{font-size:11px;color:var(--dim);margin-top:4px;min-height:16px}
@@ -408,33 +408,35 @@ select:focus{border-color:var(--accent)}
             <div id="paletteSwatch" style="flex:1 1 0;min-width:0;max-width:340px;height:44px;position:relative;"></div>
           </div>
           <div class="debug-panel drop-panel" id="debugPanel">
-            <div class="dbg-toolbar">
-              <label class="switch"><input id="dbgEnabled" type="checkbox" checked onchange="onDebugEnabledChange()"><span class="track"><span class="knob"></span></span>启用调试</label>
-              <button class="dbg-reset-btn" id="debugResetBtn" onclick="resetAllSettings()" title="重置所有设置"><span>重置所有选项</span><svg viewBox="0 0 20 20" fill="currentColor"><path d="M5.854 2.646a.5.5 0 0 1 0 .708L4.207 5H11a6 6 0 1 1-6 6a.5.5 0 0 1 1 0a5 5 0 1 0 5-5H4.207l1.647 1.646a.5.5 0 1 1-.708.708l-2.5-2.5a.5.5 0 0 1 0-.708l2.5-2.5a.5.5 0 0 1 .708 0"/></svg></button>
-            </div>
-            <div class="dbg-off-hint">调试已关闭，无日志采集与监控。</div>
-            <div class="dbg-body">
-              <div class="dbg-actions">
-                <label class="switch">
-                  <input id="dbgAutoOpen" type="checkbox" checked onchange="onDbgAutoOpenChange()">
-                  <span class="track"><span class="knob"></span></span>降级自动展开
-                </label>
-                <button class="dbg-icon-btn" id="debugCopyBtn" onclick="copyDebugTerminal()" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-                <button class="dbg-icon-btn" onclick="downloadDebugLog()" title="下载日志"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m4-5l5 5l5-5m-5 5V3"/></svg></button>
-                <button class="dbg-icon-btn" onclick="clearDebugTerminal()" title="清空"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg></button>
-                <button class="dbg-icon-btn" onclick="scrollDebugTop()" title="顶部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15l-6-6l-6 6"/></svg></button>
-                <button class="dbg-icon-btn" onclick="scrollDebugBottom()" title="底部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9l6 6l6-6"/></svg></button>
+            <div class="dbg-header">
+              <div class="dbg-toolbar">
+                <label class="switch"><input id="dbgEnabled" type="checkbox" checked onchange="onDebugEnabledChange()"><span class="track"><span class="knob"></span></span>启用调试</label>
+                <button class="dbg-reset-btn" id="debugResetBtn" onclick="resetAllSettings()" title="重置所有设置"><span>重置所有选项</span><svg viewBox="0 0 20 20" fill="currentColor"><path d="M5.854 2.646a.5.5 0 0 1 0 .708L4.207 5H11a6 6 0 1 1-6 6a.5.5 0 0 1 1 0a5 5 0 1 0 5-5H4.207l1.647 1.646a.5.5 0 1 1-.708.708l-2.5-2.5a.5.5 0 0 1 0-.708l2.5-2.5a.5.5 0 0 1 .708 0"/></svg></button>
               </div>
-              <div id="debugTerminalContent" class="dbg-log"></div>
+              <div class="dbg-off-hint">调试已关闭，无日志采集与监控。</div>
+              <div class="dbg-body">
+                <div class="dbg-actions">
+                  <label class="switch">
+                    <input id="dbgAutoOpen" type="checkbox" checked onchange="onDbgAutoOpenChange()">
+                    <span class="track"><span class="knob"></span></span>降级自动展开
+                  </label>
+                  <button class="dbg-icon-btn" id="debugCopyBtn" onclick="copyDebugTerminal()" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                  <button class="dbg-icon-btn" onclick="downloadDebugLog()" title="下载日志"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m4-5l5 5l5-5m-5 5V3"/></svg></button>
+                  <button class="dbg-icon-btn" onclick="clearDebugTerminal()" title="清空"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg></button>
+                  <button class="dbg-icon-btn" onclick="scrollDebugTop()" title="顶部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15l-6-6l-6 6"/></svg></button>
+                  <button class="dbg-icon-btn" onclick="scrollDebugBottom()" title="底部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9l6 6l6-6"/></svg></button>
+                </div>
+              </div>
             </div>
+            <div id="debugTerminalContent" class="dbg-log"></div>
           </div>
           <!-- 左侧控制面板（仅设置项） -->
           <div class="panel control-panel drop-panel" id="controlPanel">
             <div class="dbg-section" id="appearanceSection">
               <div class="dbg-toolbar">
                 <div class="appearance-sliders">
-                  <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="25" oninput="applyPanelAppearance()"></label>
-                  <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="0" oninput="applyPanelAppearance()"></label>
+                  <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="40" oninput="applyPanelAppearance()"> <span class="pct" id="transparencyPct">40%</span></label>
+                  <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="0" oninput="applyPanelAppearance()"> <span class="pct" id="blurPct">0%</span></label>
                 </div>
                 <label class="switch" title="欣赏模式：音符自动发声；音游模式：需点击琴键发声" style="margin-left:auto">
                   <input id="playModeSw" type="checkbox" checked onchange="onPlayModeChange()">
@@ -470,7 +472,7 @@ select:focus{border-color:var(--accent)}
             </div>
             <div class="row">
               <label>键数版型</label>
-              <input type="range" id="keyboardPresetSlider" min="0" max="5" step="1" value="0" oninput="onKeyboardPresetChange()">
+              <input type="range" id="keyboardPresetSlider" min="0" max="6" step="1" value="6" oninput="onKeyboardPresetChange()">
               <span class="val" id="keyboardPresetVal">88键</span>
             </div>
 
@@ -727,6 +729,11 @@ function onDebugEnabledChange(){
     if(auto && !auto.checked){ auto.checked = true; onDbgAutoOpenChange(); }
     setStatus('为减少性能影响，已设透明度 20%、模糊 0%');
   }
+  const dp = document.getElementById('debugPanel');
+  if(dp && dp.classList.contains('open')){
+    if(debugEnabled) _syncDebugPanelHeight();
+    else { dp.style.maxHeight = ''; dp.style.height = ''; }
+  }
 }
 
 // 面板透明度 / 背景模糊：透明滑块 100 = 全透明（alpha 0），0 = 全黑
@@ -754,6 +761,10 @@ function _applyAllAppearance(transparency, blurPct){
   const setV = (id, v) => { const e = document.getElementById(id); if(e) e.value = v; };
   setV('panelTransparency', transparency);
   setV('panelBlur', blurPct);
+  const tpct = document.getElementById('transparencyPct');
+  if(tpct) tpct.textContent = Math.round(transparency) + '%';
+  const bpct = document.getElementById('blurPct');
+  if(bpct) bpct.textContent = Math.round(blurPct) + '%';
   try{
     localStorage.setItem('panelTransparency', String(transparency));
     localStorage.setItem('panelBlur', String(blurPct));
@@ -762,7 +773,7 @@ function _applyAllAppearance(transparency, blurPct){
 function applyPanelAppearance(){
   const tp = document.getElementById('panelTransparency');
   const bl = document.getElementById('panelBlur');
-  _applyAllAppearance(tp ? parseFloat(tp.value) : 25, bl ? parseFloat(bl.value) : 0);
+  _applyAllAppearance(tp ? parseFloat(tp.value) : 40, bl ? parseFloat(bl.value) : 0);
 }
 // ===== 统一下拉面板：从控制行下方展开，最大高度约渲染区 2/3 =====
 function _closeDropPanelsOnly(except){
@@ -786,18 +797,19 @@ function toggleDebugPanel(){
   const willOpen = !p.classList.contains('open');
   closeAllDropPanels(p);
   p.classList.toggle('open');
-  if(willOpen) _syncDebugPanelHeight();
+  if(willOpen){
+    if(debugEnabled) _syncDebugPanelHeight();
+    else { p.style.maxHeight = ''; p.style.height = ''; }
+  }
 }
 // 调试面板底边与设置面板对齐：按设置面板实际高度设置调试面板高度
 function _syncDebugPanelHeight(){
   const dp = document.getElementById('debugPanel');
-  const cp = document.getElementById('controlPanel');
-  if(!dp || !cp) return;
-  const wasOpen = cp.classList.contains('open');
-  if(!wasOpen){ cp.style.visibility = 'hidden'; cp.style.display = 'block'; }
-  const h = cp.offsetHeight;
-  if(!wasOpen){ cp.style.display = ''; cp.style.visibility = ''; }
-  if(h > 0){ dp.style.height = h + 'px'; dp.style.maxHeight = h + 'px'; }
+  if(!dp) return;
+  const vh = window.innerHeight || 800;
+  const h = Math.round(vh * 0.75);
+  dp.style.maxHeight = h + 'px';
+  dp.style.height = '';
 }
 
 // 性能降级时是否自动展开调试区（默认勾选）
@@ -2269,6 +2281,9 @@ function getDeletedBuiltin(){
 function saveDeletedBuiltin(set){
   try{ localStorage.setItem('deletedBuiltin', JSON.stringify([...set])); }catch(e){}
 }
+// 演示谱面：删除为虚假删除（只标识，不删缓存），重置后自动恢复
+const _SOFT_DELETE = new Set(['midi/Rush E 3.mid']);
+function _isSoftDeleted(file){ return _SOFT_DELETE.has(file); }
 
 // 内置谱列表：每次会话联网刷新（no-store），失败回退缓存；并检测被废弃的内置谱
 let _builtinListCache = null;
@@ -2481,13 +2496,27 @@ function toggleManageModal(){
   openManageModal();
 }
 // 重置所有设置：清空本站设置项并刷新
-function resetAllSettings(){
-  // 真正的重置：清空所有「设置项」（含调试总开关、配色、菜单按钮位置等）。
-  // 绝不触碰用户数据：deletedBuiltin（用户的删除结果）、IndexedDB 用户谱面、资产缓存均保留，
-  // 因此重置不会恢复用户删过的谱面，也不会删掉用户未主动删除的谱面。
+async function resetAllSettings(){
+  // 重置所有设置项 + 恢复演示谱面标记 + 下载缺失的默认资源
   const keys = ['panelTransparency', 'panelBlur', 'dbgAutoOpen', 'debugEnabled',
                 'menuBtnPos', 'paletteCustom', 'paletteV2'];
   try{ keys.forEach(k => localStorage.removeItem(k)); }catch(e){}
+  // 恢复演示谱面（Rush E3）标记：从「已删除」集合中移除
+  try{
+    const set = getDeletedBuiltin();
+    _SOFT_DELETE.forEach(f => set.delete(f));
+    saveDeletedBuiltin(set);
+  }catch(e){}
+  // 下载缺失的默认音色与谱面（静默，不阻塞重载）
+  try{
+    const NEED_TIMBRES = ['clavinet', 'acoustic_grand_piano', 'electric_piano_2'];
+    for(const t of NEED_TIMBRES){
+      if(!SoundfontLoader.cachedNames.has(t))
+        SoundfontLoader.load(t, null, {switchCurrent:false}).catch(()=>{});
+    }
+    fetchMedia('midi/Rush E 3.mid', null, true).catch(()=>{});
+    fetchMedia('midi/The Sound of Silence.mid', null, true).catch(()=>{});
+  }catch(e){}
   try{ location.reload(); }catch(e){}
 }
 async function openManageModal(){
@@ -2536,6 +2565,11 @@ async function deleteSong(name){
 }
 async function deleteBuiltinSong(file){
   const set = getDeletedBuiltin(); set.add(file); saveDeletedBuiltin(set);
+  if(_isSoftDeleted(file)){
+    console.log('[AudioDebug][INFO] ' + _songLabel(file) + ' 已标记删除（演示谱面，保留缓存）');
+    await loadSongList();
+    return;
+  }
   // 真正清理本地缓存：删除该谱面已下载的数据（含 CDN/Pages 两种键名，避免残留）
   let freed = 0;
   try{
@@ -3733,12 +3767,13 @@ function onPianoOffsetChange(){ _applyPianoViewFromSliders(); }
 // 默认缩放 = 52 / 该音域白键数（使该音域白键恰好铺满画布宽）
 // 默认偏移 = 把音域第一个键对齐到渲染区最左侧
 const KEYBOARD_PRESETS = [
-  { keys: 88, lo: 21, hi: 108, label: '88键' }, // A0–C8 全尺寸
-  { keys: 76, lo: 28, hi: 103, label: '76键' }, // E1–G7
-  { keys: 61, lo: 36, hi: 96,  label: '61键' }, // C2–C7
-  { keys: 49, lo: 36, hi: 84,  label: '49键' }, // C2–C6
-  { keys: 37, lo: 48, hi: 84,  label: '37键' }, // C3–C6
   { keys: 25, lo: 48, hi: 72,  label: '25键' }, // C3–C5
+  { keys: 37, lo: 48, hi: 84,  label: '37键' }, // C3–C6
+  { keys: 49, lo: 36, hi: 84,  label: '49键' }, // C2–C6
+  { keys: 61, lo: 36, hi: 96,  label: '61键' }, // C2–C7
+  { keys: 73, lo: 40, hi: 112, label: '73键' }, // F1–F7
+  { keys: 76, lo: 28, hi: 103, label: '76键' }, // E1–G7
+  { keys: 88, lo: 21, hi: 108, label: '88键' }, // A0–C8 全尺寸
 ];
 function _whiteCountInRange(lo, hi){
   let n = 0;
