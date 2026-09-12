@@ -157,8 +157,8 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 #paletteToggleIcon{transition:transform .2s}
 
 /* 谱面管理面板：统一下拉浮层 */
-.manage-panel{display:none}
-.manage-panel.open{display:block}
+.manage-panel{display:none;flex-direction:column;max-height:75vh}
+.manage-panel.open{display:flex}
 .manage-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .manage-head h3{margin:0;font-size:14px;color:var(--text);flex:1}
 .manage-appearance{display:flex;gap:10px;font-size:10px;color:var(--dim)}
@@ -166,12 +166,12 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .manage-appearance input[type=range]{width:64px}
 .manage-close{background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;line-height:1}
 .manage-close:hover{color:var(--text)}
-#manageList{overflow-y:auto;flex:1}
-.manage-section{color:var(--dim);font-size:12px;margin:8px 0 4px}
+#manageList{overflow-y:auto;flex:1;min-height:0}
+.manage-section{color:var(--dim);font-size:11px;margin:6px 0 2px}
 .manage-empty{color:var(--dim);text-align:center;padding:12px;font-size:12px}
-.manage-row{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:6px;margin-bottom:2px;background:rgba(255,255,255,.04)}
-.manage-row .name{flex:1;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.manage-row .tag{font-size:12px;color:var(--dim)}
+.manage-row{display:flex;align-items:center;gap:6px;padding:2px 8px;border-radius:4px;margin-bottom:1px;background:rgba(255,255,255,.04)}
+.manage-row .name{flex:1;font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.manage-row .tag{font-size:10px;color:var(--dim)}
 .icon-btn{background:none;border:none;color:var(--dim);cursor:pointer;padding:4px;display:inline-flex;align-items:center;border-radius:6px}
 .icon-btn:hover{color:var(--text);background:rgba(255,255,255,.08)}
 .icon-btn.del:hover{color:#ff6b6b}
