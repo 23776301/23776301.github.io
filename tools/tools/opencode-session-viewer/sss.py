@@ -8,6 +8,7 @@
   sss in <索引>           进入指定索引的会话 (opencode -s)
   sss <索引>              为指定索引的会话生成 HTML 审计报告
   sss audit <索引>        同上（生成 HTML 审计报告）
+  sss -d <索引>           删除指定索引的会话（-y 跳过确认）
 """
 import sqlite3
 import json
@@ -47,6 +48,7 @@ def usage():
     print("  sss in <索引>         进入指定索引的会话（opencode -s）")
     print("  sss <索引>            为指定索引的会话生成 HTML 审计报告")
     print("  sss audit <索引>      同上（生成 HTML 审计报告）")
+    print("  sss -d <索引>         删除指定索引的会话（-y 跳过确认）")
     print(f"{GRAY}索引从 0 开始，0 为最新会话；显示列表时最左侧 [n] 即为索引。{RESET}")
 
 
@@ -203,6 +205,49 @@ def cmd_audit(index):
     sys.exit(0)
 
 
+def delete_session(session_id):
+    """删除会话及其级联数据（message/part/todo/...），返回消息条数。"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys=ON")
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM message WHERE session_id = ?", (session_id,))
+    n_msgs = cursor.fetchone()[0]
+    cursor.execute("DELETE FROM session WHERE id = ?", (session_id,))
+    conn.commit()
+    conn.close()
+    return n_msgs
+
+
+def cmd_delete(index, assume_yes):
+    sessions = get_sessions(100)
+    if not (0 <= index < len(sessions)):
+        print(f"{RED}Error: index {index} out of range (0-{len(sessions)-1}){RESET}")
+        sys.exit(1)
+    session_id, title = sessions[index][0], sessions[index][1]
+    if not assume_yes:
+        try:
+            answer = input(f"{YELLOW}删除会话 [{index}] {title} "
+                           f"{GREEN}{session_id}{RESET}{YELLOW} ? [y/N] {RESET}")
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes"):
+            print(f"{GRAY}已取消。{RESET}")
+            return
+    signal.alarm(TIMEOUT)
+    n_msgs = delete_session(session_id)
+    signal.alarm(0)
+    html_path = os.path.join(os.path.expanduser("~/opencode-audit"), session_id + ".html")
+    removed = False
+    if os.path.exists(html_path):
+        try:
+            os.remove(html_path)
+            removed = True
+        except OSError:
+            pass
+    print(f"{YELLOW}[{index}] {title}{RESET} {GREEN}{session_id}{RESET}")
+    print(f"{GREEN}已删除{RESET}（{n_msgs} 条消息）" + ("，并移除审计报告" if removed else ""))
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -221,6 +266,14 @@ def main():
             cmd_audit(int(args[1]))
         else:
             print(f"{RED}错误: 用法: sss audit <索引>{RESET}")
+            usage()
+            sys.exit(1)
+    elif first in ("-d", "--delete", "delete"):
+        if len(args) >= 2 and args[1].lstrip("-").isdigit():
+            assume_yes = any(a in ("-y", "--yes", "-f", "--force") for a in args[2:])
+            cmd_delete(int(args[1]), assume_yes)
+        else:
+            print(f"{RED}错误: 用法: sss -d <索引> [-y]{RESET}")
             usage()
             sys.exit(1)
     elif first.lstrip("-").isdigit():
