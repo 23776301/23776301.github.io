@@ -185,6 +185,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 /* 配色面板：从控制行下方展开（absolute，不遮挡按钮） */
 .palette-row{display:none;align-items:center;gap:8px;flex-wrap:nowrap;min-width:230px}
 .palette-row.open{display:flex}
+.drop-trigger svg{transition:transform .2s}
 #paletteToggleIcon{transition:transform .2s}
 
 /* 谱面管理面板：统一下拉浮层 */
@@ -836,8 +837,25 @@ function applyPanelAppearance(){
   _applyAllAppearance(tp ? parseFloat(tp.value) : 40, bl ? parseFloat(bl.value) : 0);
 }
 // ===== 统一下拉面板：从控制行下方展开，最大高度约渲染区 2/3 =====
+// 四个下拉触发按钮：面板展开时图标顺时针旋转 180°，收起时逆时针转回（CSS 过渡）
+const DROP_TOGGLE_MAP = [
+  ['manageModal', '#manageBtn svg'],
+  ['controlPanel', '#settingsBtn svg'],
+  ['paletteRow', '#paletteToggleIcon'],
+  ['debugPanel', '#debugToggleBtn svg'],
+];
+function syncDropToggleIcons(){
+  DROP_TOGGLE_MAP.forEach(([pid, sel]) => {
+    const panel = document.getElementById(pid);
+    const icon = document.querySelector(sel);
+    if(!panel || !icon) return;
+    // 与配色面板一致：收起时旋转 180°，展开时转回
+    icon.style.transform = panel.classList.contains('open') ? '' : 'rotate(180deg)';
+  });
+}
 function _closeDropPanelsOnly(except){
   document.querySelectorAll('.drop-panel.open').forEach(p => { if(p !== except) p.classList.remove('open'); });
+  syncDropToggleIcons(); // 因打开其他面板 / 点击面板外而收起时，同步旋转图标
 }
 // 关闭所有下拉面板 + 选谱/音色下拉（互斥）
 function closeAllDropPanels(except){
@@ -859,6 +877,7 @@ function toggleDebugPanel(){
   const willOpen = !p.classList.contains('open');
   closeAllDropPanels(p);
   p.classList.toggle('open');
+  syncDropToggleIcons();
   if(willOpen){
     if(debugEnabled) _syncDebugPanelHeight();
     else { p.style.maxHeight = ''; p.style.height = ''; }
@@ -885,7 +904,7 @@ function onDbgAutoOpenChange(){
 function autoOpenDebugPanel(){
   if(!debugEnabled || !dbgAutoOpen) return;
   const panel = document.getElementById('debugPanel');
-  if(panel){ closeAllDropPanels(panel); panel.classList.add('open'); _syncDebugPanelHeight(); }
+  if(panel){ closeAllDropPanels(panel); panel.classList.add('open'); syncDropToggleIcons(); _syncDebugPanelHeight(); }
   // 等一帧让面板完成布局，再滚到最新
   requestAnimationFrame(() => { if(typeof scrollDebugBottom === 'function') scrollDebugBottom(); });
 }
@@ -2700,6 +2719,7 @@ async function openManageModal(){
   const list = document.getElementById('manageList');
   closeAllDropPanels(modal);
   modal.classList.add('open');
+  syncDropToggleIcons();
   applyPanelAppearance();
   const frag = document.createDocumentFragment();
   // 用户上传谱
@@ -2733,6 +2753,7 @@ async function openManageModal(){
 function closeManageModal(){
   const modal = document.getElementById('manageModal');
   if(modal) modal.classList.remove('open');
+  syncDropToggleIcons();
 }
 // 公开接口（供测试/外部调用）：只做操作 + 刷新选谱下拉，不重开管理面板
 async function deleteSong(name){
@@ -3092,6 +3113,7 @@ function toggleMenu(){
   if(!panel) return;
   closeAllDropPanels(panel);
   panel.classList.toggle('open');
+  syncDropToggleIcons();
 }
 
 // 菜单/调试按钮组：二者都可拖动，捆绑一起移动；轻点各自触发对应功能
@@ -3549,6 +3571,7 @@ function updatePaletteToggleIcon(){
   icon.style.transform = collapsed ? 'rotate(180deg)' : '';
   const btn = document.getElementById('paletteToggleBtn');
   if(btn) btn.title = collapsed ? '展开配色面板' : '收起配色面板';
+  syncDropToggleIcons();
 }
 function setPaletteRowCollapsed(collapsed){
   const row = _paletteRow();
