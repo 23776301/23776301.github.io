@@ -309,6 +309,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **音色加载**：Soundfont 以 `*-ogg.js` 形式提供，内部是 base64 音频；`_doLoad` 下载/读缓存后用 `new Function` 求值取数据，再经 `atob → Uint8Array → decodeAudioData` 得到 `AudioBuffer`。
 - **媒体源（多 CDN 并发择优 + Pages 兜底）**：音色、内置谱面、可视化示例音频同时向多个 jsDelivr 边缘节点（`cdn.jsdelivr.net` / `fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `testingcf.jsdelivr.net`，均 `gh/teecatt/teecatt.github.io@master/...`）发起请求，全部失败才回退本站相对路径（同源 Pages）。GitHub Release 资产不发送 CORS 头，浏览器 `fetch` 无法读取，故未采用。
 - **完整下载竞速（公共能力，默认开，设置面板可关）**：`_raceDownloadFull()` 让所有镜像**同时完整下载**同一资源，`Promise.any` 取**最先完整下载完成**的源；胜出后立即 `AbortController.abort()` 暂停其余镜像并丢弃其不完整分片（`_downloadBlobFrom` 在中止/失败时把分片数组置 null）。所有资源下载（MIDI、音色）都走这个公共函数。关闭开关后改用 `_fetchByFirstByte()`（`_raceFetch` 只竞速首字节，胜出源再流式读取）。开关状态存于 `localStorage.raceFull`，默认 `true`。
+- **谱面压缩传输（`.br` / `.gz` + 客户端解压）**：内置谱面在仓库内同时提供 `.mid.br`（brotli）与 `.mid.gz`（gzip）。`_fetchMediaBlob()` 按浏览器能力从优到劣选择：原生 `DecompressionStream('brotli')` → 原生 `DecompressionStream('gzip')` → 不压缩原文（旧浏览器）。解压用 `_decompressBuffer()`（写入与读取并发，避免背压死锁），并以 `_looksLikeMidi()` 校验 `MThd` 文件头、兼容 CDN 可能已自动解码的情况。解压后的谱面按原路径写入 Cache API，回访不再下载也不再解压。**一套代码同时适配 GitHub Pages 与 Cloudflare Pages，迁移托管无需改动**。`Rush E 3.mid` 2.70 MB → br **95 KB** / gz **315 KB**。
 - **竞速日志（覆盖式）**：竞速进行中由公共 `_raceLog()` **每 0.5s 打印一行并原地覆盖上一条**（避免刷屏），形如 `cdn竞速领先: [Pages], 3.6MB/7.2MB ~ 27%, 平均17KB/s`（来源标签、已收/总量、百分比、平均速度，`_fmtSize` 自适应 MB/KB/B）；竞速结束调用 `_raceLogClear()` 删除该行。任何功能都可调用 `_raceDownloadFull()` / `_raceLog()`。
 - **预解码**：`predecodeAll` 按每批 8 个解码 88 个音，避免一次性解码阻塞主线程与音频时间线。
 - **合成回退**：`__synth__` 分支用 3 个振荡器（triangle + 2×sine）叠加，指数包络收尾；仅在音色加载失败或 buffer 缺失时使用。
@@ -498,7 +499,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 | 目录 | 文件数 | 体积 |
 | --- | --- | --- |
 | `midi_player/soundfonts/` | 56 个 `*-ogg.js` | **≈ 132.6 MB** |
-| `midi_player/midi/` | 9 个（含 `list.json`） | ≈ 2.9 MB |
+| `midi_player/midi/` | 25 个（8 谱面 + 8 `.br` + 8 `.gz` + `list.json`） | ≈ 3.4 MB |
 | `midi_player/index.html` | 1 | ≈ 29 KB（骨架 + 关键 CSS + 竞速加载器） |
 | `midi_player/app.css` | 1 | ≈ 25 KB |
 | `midi_player/app.js` | 1 | ≈ 176 KB |
@@ -514,7 +515,9 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 | `app.js` | 176 KB | **53 KB** | 文本，压缩约 3.3× |
 | `app.css` | 25 KB | **7 KB** | 文本，压缩约 3.6× |
 | `soundfonts/clavinet-ogg.js` | 2.67 MB | **1.73 MB** | base64 文本，压缩约 1.35× |
-| `midi/Rush E 3.mid` | 2.70 MB | 2.70 MB | 二进制，几乎不可压 |
+| `midi/Rush E 3.mid` | 2.70 MB | 2.70 MB | 二进制；Pages 不压，故提供预压缩变体 |
+| `midi/Rush E 3.mid.br` | **95 KB** | 95 KB | 客户端 brotli 解压（实际传输量） |
+| `midi/Rush E 3.mid.gz` | **315 KB** | 315 KB | 客户端 gzip 解压（旧浏览器回退） |
 | `*.ogg` | 1.58 MB | 1.58 MB | 二进制，几乎不可压 |
 
 - **HTML 快只是因为小且压得狠**，音色慢的根因是体积（2.67 MB），默认谱面本身也有 2.7 MB，二者量级相同。
@@ -746,7 +749,8 @@ midi_player/
 ├── README.md                  # 本文档
 ├── midi/
 │   ├── list.json              # 内置谱面列表（name / file）
-│   └── *.mid                  # 内置 MIDI 谱面
+│   ├── *.mid                  # 内置 MIDI 谱面
+│   └── *.mid.br / *.mid.gz    # 预压缩谱面（客户端 DecompressionStream 解压）
 └── soundfonts/
     └── <timbre>-ogg.js        # Soundfont 音色数据（56 个，约 132 MB）
 ```
@@ -880,3 +884,4 @@ midi_player/
 | 移动端按钮网格 | 第一行与第二行统一网格：左右间距 = 上下间距 = 6px，10 个圆形按钮 `aspect-ratio:1` 等比缩放（修复椭圆拉伸），第二行 8 个恰好填满整宽且第一行最左/最右与第二行对齐 | `31a2a1d` |
 | 门户描述 | 主页 MIDI 播放器卡片描述新增「多种键型钢琴 / 音游模式 / CDN竞速」 | `b898f8b` |
 | 重代码外置 | 内联 CSS/JS 拆为 `app.css`/`app.js`；`index.html` 仅留骨架 + 关键 CSS + 竞速加载器（4 个 jsDelivr 边缘 + 同源兜底并发全量下载，最先完成者注入）；loading 转圈 + `sourceURL` 保断点 | `89a34a2` |
+| 谱面压缩传输 | 内置谱面提供 `.mid.br`/`.mid.gz` 预压缩变体；`_fetchMediaBlob` 按能力 `brotli → gzip → 原文` 选择，`_decompressBuffer` 客户端解压，`_looksLikeMidi` 校验 `MThd` 头；解压后按原路径入 Cache API；一套代码兼容 GitHub Pages 与 Cloudflare Pages。`Rush E 3.mid` 2.70 MB → 95 KB | `_pending_` |

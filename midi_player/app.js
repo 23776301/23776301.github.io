@@ -952,6 +952,60 @@ async function _fetchBlobWithProgress(urls, onProgress, label, quiet){
   return _fetchByFirstByte(list, onProgress, label, quiet);
 }
 
+// ===== 谱面压缩传输：优先取 .br / .gz，客户端解压 =====
+// 一套代码同时适配 GitHub Pages（只能客户端解）与 Cloudflare Pages（同源静态文件），迁移托管无需改动。
+// 按浏览器能力从优到劣选择：原生 brotli -> 原生 gzip -> 不压缩原文（旧浏览器）。
+const _DECOMPRESS_FORMATS = (function(){
+  const out = [];
+  if(typeof DecompressionStream === 'undefined') return out;
+  for(const pair of [['br', 'brotli'], ['gz', 'gzip']]){
+    try{ new DecompressionStream(pair[1]); out.push({ ext: pair[0], fmt: pair[1] }); }catch(e){}
+  }
+  return out;
+})();
+// 校验是否为 MIDI 文件头 "MThd"
+function _looksLikeMidi(buf){
+  if(!buf || buf.byteLength < 4) return false;
+  const b = new Uint8Array(buf, 0, 4);
+  return b[0] === 0x4D && b[1] === 0x54 && b[2] === 0x68 && b[3] === 0x64;
+}
+// 用 DecompressionStream 解压 ArrayBuffer；写入与读取并发，避免背压死锁
+async function _decompressBuffer(ab, fmt){
+  const ds = new DecompressionStream(fmt);
+  const writer = ds.writable.getWriter();
+  const writeP = writer.write(new Uint8Array(ab)).then(() => writer.close());
+  const reader = ds.readable.getReader();
+  const chunks = []; let total = 0;
+  for(;;){
+    const r = await reader.read();
+    if(r.done) break;
+    chunks.push(r.value); total += r.value.length;
+  }
+  await writeP;
+  const out = new Uint8Array(total); let off = 0;
+  for(const c of chunks){ out.set(c, off); off += c.length; }
+  return out.buffer;
+}
+// 谱面下载：优先压缩变体（.br -> .gz），全部失败再回退原文
+async function _fetchMediaBlob(relPath, onProgress, quiet){
+  if(_DECOMPRESS_FORMATS.length && /\.midi?$/i.test(relPath)){
+    for(const v of _DECOMPRESS_FORMATS){
+      try{
+        const blob = await _fetchBlobWithProgress(_mediaUrls(relPath + '.' + v.ext), onProgress, _songLabel(relPath), quiet);
+        const ab = await blob.arrayBuffer();
+        // 部分 CDN 可能已按扩展名自动解码：若已是 MIDI 直接用，避免二次解压
+        const out = _looksLikeMidi(ab) ? ab : await _decompressBuffer(ab, v.fmt);
+        if(!_looksLikeMidi(out)) throw new Error('解压结果不是有效 MIDI');
+        if(!quiet) console.log('[AudioDebug][INFO] ' + _songLabel(relPath) + ' 已通过 .' + v.ext + ' 解压 (' + (out.byteLength / 1024).toFixed(0) + 'KB)');
+        return new Blob([out]);
+      }catch(e){
+        if(!quiet) console.log('[AudioDebug][INFO] ' + _songLabel(relPath) + ' .' + v.ext + ' 不可用：' + (e && e.message ? e.message : e));
+      }
+    }
+  }
+  return _fetchBlobWithProgress(_mediaUrls(relPath), onProgress, _songLabel(relPath), quiet);
+}
+
 const SoundfontLoader = {
   cacheName: 'midi-player-soundfont-cache-v1',
   cdnBase: './soundfonts/',
@@ -2035,7 +2089,7 @@ async function _migrateDeprecatedBuiltins(files){
 // 带进度的下载（jsDelivr -> Pages 回退），用于「重新下载」时在按钮上显示百分比
 async function _fetchWithProgress(relPath, onProgress, quiet){
   const absUrl = AssetCache._abs(relPath);
-  const blob = await _fetchBlobWithProgress(_mediaUrls(relPath), onProgress, _songLabel(relPath), quiet);
+  const blob = await _fetchMediaBlob(relPath, onProgress, quiet);
   try{
     const cache = await caches.open(AssetCache.cacheName);
     await cache.put(absUrl, new Response(blob));
@@ -2060,15 +2114,21 @@ async function fetchMedia(relPath, onProgress, quiet){
 }
 // 探测未下载谱面的体积（HEAD 优先，失败回退 GET Range），用于下载前提示
 async function _probeMediaSize(relPath){
-  const urls = _mediaUrls(relPath);
-  for(const u of urls){
-    try{
-      const r = await fetch(u, {method: 'HEAD', mode: 'cors'});
-      if(r && r.ok){
-        const len = parseInt((r.headers && r.headers.get) ? (r.headers.get('content-length') || '0') : '0', 10);
-        if(len > 0) return len;
-      }
-    }catch(e){}
+  // 优先探测浏览器实际会用的压缩变体（.br -> .gz），再回退原文，使提示体积贴近真实传输量
+  const candidates = [];
+  if(/\.midi?$/i.test(relPath)) for(const v of _DECOMPRESS_FORMATS) candidates.push(relPath + '.' + v.ext);
+  candidates.push(relPath);
+  for(const p of candidates){
+    const urls = _mediaUrls(p);
+    for(const u of urls){
+      try{
+        const r = await fetch(u, {method: 'HEAD', mode: 'cors'});
+        if(r && r.ok){
+          const len = parseInt((r.headers && r.headers.get) ? (r.headers.get('content-length') || '0') : '0', 10);
+          if(len > 0) return len;
+        }
+      }catch(e){}
+    }
   }
   return 0;
 }
