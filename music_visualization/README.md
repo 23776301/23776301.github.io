@@ -261,8 +261,10 @@ index.html
 - **选中反馈**：选中元素绘制虚线框与四角手柄；点击空白处取消选中。
 - **元素库/背景**：底部「背景」工具页配置画布背景。
 - **性能面板**：图标栏「属性」右侧的「性能」按钮，设置画布**分辨率**（宽/高，范围 100×100 ~ 4320×2160）与**帧率**（FPS，范围 30 ~ 240），并预置 360p/480p/720p/1080p/2K/4K 分辨率与 30/60/90/120/144/240 帧率；超出范围时面板内报错且不生效。帧率超过浏览器实测上限时自动取上限：`_detectMaxFps()` 采样 45 帧 rAF 间隔、取最快 25% 的均值并**保留非标刷新率**（165/185/240 等，不再归一到常见档），打开性能面板时会重新检测。`render()` 按 `CFG.fps` 节流。
-- **实时叠加显示**：性能面板「显示实时帧率」开关（`CFG.showFps`）打开后，在 canvas 左上角用 `ctx.fillText` 叠加显示**实际渲染 FPS** 与**当前渲染分辨率**（`W×H`）：`_updateFps()` 每 500ms 统计一次实际绘制帧数，`_drawFps()` 绘制两行。Canvas 本身没有帧率 API，只能这样用 rAF 时间戳自行测量；浏览器也**没有 CPU/GPU 占用率 API**，故不显示。
-- **缩放**：已移除比例下拉与 `− / + / ⛶ 适配` 按钮，只保留 `fitCanvas()` 自动按宽度贴合（`zoom = 可用宽度 / 画布宽度`）；属性/性能面板开合、窗口尺寸变化、进入全屏都会重新适配。
+- **叠加信息开关**：性能面板有**两个独立开关**——「显示帧率」(`CFG.showFps`) 与「显示分辨率」(`CFG.showRes`)，默认都开；打开后在 canvas 左上角用 `ctx.fillText` 分别叠加**实际渲染 FPS** 与**当前渲染分辨率**（`W×H`，两行，关掉其中一个就只画另一个）。`_updateFps()` 每 500ms 统计一次实际绘制帧数。Canvas 本身没有帧率 API，只能这样用 rAF 时间戳自行测量。
+- **为什么没有 CPU / GPU 占用率**：浏览器**没有**任何标准 Web API 能读取 CPU / GPU 占用率（`navigator.hardwareConcurrency` 只是核心数、`performance.memory` 只是 JS 堆、WebGPU timestamp 只是 GPU 耗时，都不是占用率），因此**不添加** CPU/GPU 开关，只提供 FPS 与分辨率两个能真实取值的开关。
+- **缩放**：已移除比例下拉与 `− / + / ⛶ 适配` 按钮；`fitCanvas()` 改为**宽高同时贴合**（`zoom = min(可用宽/画布宽, 可用高/画布高)`），保证整个绘制区完整可见、不出现滚动条，终端紧随缩放后的下边界；属性/性能面板开合、窗口尺寸变化、进入全屏都会重新适配。
+- **面板宽度拖拽**：PC 端在左侧面板与绘制区之间有一条 `.panel-resizer` 拖拽条（移动端隐藏），拖动实时改 `--panel-w`（180–600px），画布随之**等比缩放**且始终完整可见。
 - **全屏**：图标栏最右「全屏」按钮（`fsToggleBtn`，在性能按钮右侧）把 `.canvas-area` 全屏；全屏期间 `pointerdown` 直接返回、并清空选中，**画布内元素不可选中/点击**；**双击任意位置**或 Esc 退出全屏。
 
 ---
@@ -342,7 +344,9 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 
 ### 布局：绘制区 / 进度条 / 终端
 
-- `.canvas-area` 为纵向 flex：`.canvas-stage`（绘制区，按宽度等比缩放）→ `.player-bar`（进度条，紧挨绘制区下方）→ `.log-toolbar` → `.log-bar`（终端，`flex:1` 向下延伸到浏览器底部）。原 `.canvas-toolbar`（缩放/比例控件）已移除。
+- `.canvas-area` 为纵向 flex：`.canvas-stage`（绘制区，宽高同时贴合）→ `.player-bar`（进度条，紧挨绘制区下方）→ `.log-toolbar` → `.log-bar`（终端，`flex:1` 向下延伸到浏览器底部）。原 `.canvas-toolbar`（缩放/比例控件）已移除。
+- `.canvas-stage` 为 `flex:0 1 auto; overflow:hidden`（PC）：高度=缩放后画布高度，因此进度条/终端始终紧贴画布下边界（终端跟随画布缩放）；不再出现纵向滚动条。移动端仍为 `overflow:auto`。
+- `.library` 与 `.props` 宽度用 `var(--panel-w,280px)`，PC 端由 `.panel-resizer` 拖拽调整。
 - `.canvas-stage` 为 `flex:0 1 auto; min-height:0; overflow:auto`：空间足够时高度贴合缩放后的画布，空间不足时收缩并滚动，保证进度条与终端始终可见、终端到底。
 - 属性面板 `.props` 与性能面板 `.props.perf` 默认 `display:none`（PC 与移动端一致），点「属性」/「性能」按钮加 `.open` 展开，再点收起；PC 端在**左侧**占宽（`.props{border-right; order:1}`，画布区 `order:2`），打开时给元素面板加 `.hidden` 隐藏之，`fitCanvas()` 会重新按新宽度适配。
 - **移动端所有面板从左侧滑出，最多占浏览器宽度 2/3**：`.library,.props` 统一 `position:fixed; top:40px; bottom:0; left:0; width:66.6667vw; transform:translateX(-100%); transition:transform .3s`，`.mobile-open`/`.open` 时 `translateX(0)`。

@@ -8,7 +8,7 @@
 :root{
   --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --line:#30363d;
   --text:#e6edf3; --muted:#8b949e; --accent:#ff3f58; --accent2:#c822ff;
-  --hover:#21262d; --radius:8px;
+  --hover:#21262d; --radius:8px; --panel-w:280px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 /* 统一触屏按下反馈：去掉默认的方形点击高亮（按外接矩形绘制、不裁圆角），
@@ -41,7 +41,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .iconbar .ibtn svg{width:20px;height:20px}
 .iconbar .ibtn span{font-size:9px}
 
-.library{width:260px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.library{width:var(--panel-w,280px);background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
 .lib-search{padding:10px;border-bottom:1px solid var(--line)}
 .lib-search input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;outline:none}
 .lib-search input:focus{border-color:var(--accent)}
@@ -56,8 +56,15 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .lib-item svg{width:70%;height:70%}
 .lib-item .label{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:9px;color:var(--muted);background:linear-gradient(transparent,rgba(0,0,0,.7));padding:4px 2px 2px}
 
-.canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;min-height:0;order:2}
-.canvas-stage{flex:0 1 auto;min-height:0;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:0;background:var(--panel)}
+.canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;min-height:0;order:3}
+.canvas-stage{flex:0 1 auto;min-height:0;display:flex;justify-content:center;align-items:center;overflow:hidden;padding:0;background:var(--panel)}
+/* 左侧面板宽度拖拽条（PC） */
+.panel-resizer{display:none}
+@media(min-width:769px){
+  .panel-resizer{display:block;order:2;flex:0 0 6px;width:6px;cursor:col-resize;background:transparent;position:relative;z-index:6;touch-action:none}
+  .panel-resizer::after{content:'';position:absolute;left:2px;top:0;bottom:0;width:2px;background:var(--accent);opacity:0;transition:opacity .15s}
+  .panel-resizer:hover::after,.panel-resizer.dragging::after{opacity:.8}
+}
 /* 全屏绘制区 */
 .canvas-area:fullscreen,.canvas-area:-webkit-full-screen{background:var(--bg);padding:0}
 .canvas-area:fullscreen .canvas-stage,.canvas-area:-webkit-full-screen .canvas-stage{flex:1 1 auto;min-height:0}
@@ -109,7 +116,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 
 .library.hidden{display:none}
 /* 属性面板与左侧其它面板一致：从左侧展示 */
-.props{width:310px;background:var(--panel);border-right:1px solid var(--line);display:none;flex-direction:column;flex-shrink:0;overflow:hidden;order:1}
+.props{width:var(--panel-w,280px);background:var(--panel);border-right:1px solid var(--line);display:none;flex-direction:column;flex-shrink:0;overflow:hidden;order:1}
 .props.open{display:flex}
 .props-header{padding:12px 14px;border-bottom:1px solid var(--line);font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px}
 .props-header .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
@@ -270,6 +277,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
   <div class="library" id="library">
     <div class="lib-body" id="libBody"></div>
   </div>
+  <div class="panel-resizer" id="panelResizer" title="拖动调整面板宽度"></div>
 
   <div class="canvas-area">
     <div class="canvas-stage" id="canvasStage">
@@ -545,7 +553,7 @@ const CFG = {
   elements: [], selectedId: null,
   audio: null, audioCtx: null, analyser: null, freq: null, wave: null,
   playing: false, loop: true, volume: 1, smoothing: 0.8,
-  fps: 60, showFps: false,
+  fps: 60, showFps: true, showRes: true,
 };
 window.__CFG = CFG;
 
@@ -930,8 +938,11 @@ function _updateFps(now){
   }
 }
 function _drawFps(){
+  const lines = [];
+  if(CFG.showFps) lines.push(_fpsValue + ' FPS');
+  if(CFG.showRes) lines.push(canvas.width + '×' + canvas.height);
+  if(!lines.length) return;
   const fs = Math.max(10, Math.round(canvas.height * 0.035));
-  const lines = [_fpsValue + ' FPS', canvas.width + '×' + canvas.height];
   const pad = Math.round(fs * 0.4);
   const x = Math.round(fs * 0.6), y = Math.round(fs * 0.6);
   const lh = Math.round(fs * 1.35);
@@ -943,10 +954,8 @@ function _drawFps(){
   for(const t of lines){ maxW = Math.max(maxW, ctx.measureText(t).width); }
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
   ctx.fillRect(x - pad, y - pad, maxW + pad * 2, lh * lines.length + pad * 2 - (lh - fs));
-  ctx.fillStyle = '#39d353';
-  ctx.fillText(lines[0], x, y);
-  ctx.fillStyle = '#e6edf3';
-  ctx.fillText(lines[1], x, y + lh);
+  const colors = ['#39d353','#e6edf3'];
+  lines.forEach((t,i)=>{ ctx.fillStyle = colors[i] || '#e6edf3'; ctx.fillText(t, x, y + i * lh); });
   ctx.restore();
 }
 function render(){
@@ -1004,7 +1013,7 @@ function render(){
     ctx.restore();
   }
   ctx.restore();
-  if(CFG.showFps) _drawFps();
+  if(CFG.showFps||CFG.showRes) _drawFps();
   updateSeekUI();
 }
 
@@ -1327,7 +1336,8 @@ function renderPerf(){
       </div>
       <div class="perf-hint">范围 ${FPS_MIN} ~ ${FPS_MAX}；超过浏览器上限 ${_maxFps} 自动取上限</div>
     </div>
-    <div class="field"><div class="toggle-row"><label style="margin-bottom:0">显示实时帧率</label><div class="toggle ${CFG.showFps?'on':''}" data-field="showFps"></div></div></div>
+    <div class="field"><div class="toggle-row"><label style="margin-bottom:0">显示帧率</label><div class="toggle ${CFG.showFps?'on':''}" data-field="showFps"></div></div></div>
+    <div class="field"><div class="toggle-row"><label style="margin-bottom:0">显示分辨率</label><div class="toggle ${CFG.showRes?'on':''}" data-field="showRes"></div></div></div>
     <div class="perf-err" id="perfErr"></div>
   `;
   bindPerfFields();
@@ -1365,8 +1375,9 @@ function bindPerfFields(){
   if(fEl) fEl.addEventListener('change',applyFps);
   body.querySelectorAll('#perfResPresets button').forEach(b=>b.addEventListener('click',()=>{ wEl.value=b.dataset.w; hEl.value=b.dataset.h; applyRes(); }));
   body.querySelectorAll('#perfFpsPresets button').forEach(b=>b.addEventListener('click',()=>{ fEl.value=b.dataset.fps; applyFps(); }));
-  const fpsToggle=body.querySelector('[data-field="showFps"]');
-  if(fpsToggle) fpsToggle.addEventListener('click',()=>{ CFG.showFps=!CFG.showFps; fpsToggle.classList.toggle('on',CFG.showFps); });
+  body.querySelectorAll('[data-field="showFps"],[data-field="showRes"]').forEach(t=>{
+    t.addEventListener('click',()=>{ const f=t.dataset.field; CFG[f]=!CFG[f]; t.classList.toggle('on',CFG[f]); });
+  });
 }
 
 /* 多色渐变编辑器 HTML */
@@ -1730,16 +1741,51 @@ function applyZoom(){
   stageWrap.style.height=(canvas.height*z)+'px';
 }
 function fitCanvas(){
-  // 优先等比例缩放到「宽度贴合左右控件边界」；高度超出时由 .canvas-stage 滚动，
-  // 进度条与终端始终位于绘制区下方并延伸到浏览器底部。
-  const area=document.getElementById('canvasStage');
-  if(!area) return;
-  const availW=area.clientWidth;
+  // 等比缩放到「宽高都完整可见」：zoom = min(可用宽/画布宽, 可用高/画布高)，
+  // 保证整个绘制区不被上下遮挡、不出现滚动条；终端紧随缩放后的下边界。
+  const stage=document.getElementById('canvasStage');
+  if(!stage) return;
+  const availW=stage.clientWidth;
   if(availW<=0){ CFG.canvas.zoom=1; applyZoom(); return; }
+  // 可用高度 = 绘制区总高 - 进度条 - 日志工具条 - 终端最小高度
+  const area=document.querySelector('.canvas-area');
+  let availH=0;
+  if(area){
+    const player=area.querySelector('.player-bar');
+    const lt=document.getElementById('logToolbar');
+    availH=area.clientHeight-(player?player.offsetHeight:0)-(lt?lt.offsetHeight:0)-100-1;
+  }
   const zW=availW/canvas.width;
-  CFG.canvas.zoom=Math.max(0.1,Math.min(2,zW));
+  const zH=availH>0?availH/canvas.height:Infinity;
+  CFG.canvas.zoom=Math.max(0.05,Math.min(2,Math.min(zW,zH)));
   applyZoom();
 }
+// 左侧面板宽度拖拽（PC）：拖动时画布等比缩放，始终完整可见
+(function(){
+  const rz=document.getElementById('panelResizer');
+  if(!rz) return;
+  let dragging=false, startX=0, startW=0;
+  function currentW(){
+    const el=document.querySelector('.library:not(.hidden)') || document.querySelector('.props.open');
+    return el ? el.getBoundingClientRect().width : 280;
+  }
+  rz.addEventListener('pointerdown',e=>{
+    dragging=true; startX=e.clientX; startW=currentW();
+    rz.classList.add('dragging');
+    try{ rz.setPointerCapture(e.pointerId); }catch(_){}
+    e.preventDefault();
+  });
+  rz.addEventListener('pointermove',e=>{
+    if(!dragging) return;
+    const w=Math.max(180, Math.min(600, startW+(e.clientX-startX)));
+    document.documentElement.style.setProperty('--panel-w', w+'px');
+    fitCanvas();
+  });
+  function end(){ if(!dragging) return; dragging=false; rz.classList.remove('dragging'); }
+  rz.addEventListener('pointerup',end);
+  rz.addEventListener('pointercancel',end);
+  window.addEventListener('pointerup',end);
+})();
 /* ============================================================
    事件绑定
    ============================================================ */
