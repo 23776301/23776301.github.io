@@ -2,7 +2,7 @@
 
 浏览器端实时音频可视化工具。上传一首歌，从 10 种可视化效果里选一个，拖动参数即时看到变化——不需要渲染、不需要等待导出。
 
-零依赖、零构建：入口 `music_visualization/index.html` 只含页面骨架、关键 CSS 与竞速加载器；全部样式与逻辑拆到 `app.css` / `app.js`，由浏览器并发从 4 个 jsDelivr 边缘 + 同源兜底竞速加载，最先完成者注入。
+零依赖、零构建：入口 `music_visualization/index.html` 只含页面骨架、关键 CSS 与加载器；全部样式与逻辑拆到 `app.css` / `app.js`，由加载器**优先同源加载**（保证与 HTML 同版本、绝不吃 CDN 陈旧缓存），同源失败才回退 jsDelivr，注入后显示。
 
 > 本文档描述的是**当前实现的真实行为**，包含真实的参数、边界与已知问题，并给出后续深挖方向。
 
@@ -98,7 +98,7 @@ python -m http.server 8000
 
 ```
 music_visualization/
-├── index.html      # 页面骨架 + 关键 CSS + 并发 CDN 竞速加载器
+├── index.html      # 页面骨架 + 关键 CSS + 加载器（同源优先，CDN 兜底）
 ├── app.css         # 全部样式
 ├── app.js          # 全部逻辑
 ├── demo.ogg        # 自动加载的演示音频

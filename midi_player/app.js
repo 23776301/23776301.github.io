@@ -963,6 +963,11 @@ const _DECOMPRESS_FORMATS = (function(){
   }
   return out;
 })();
+try{
+  console.log('[AudioDebug][INFO] 谱面压缩传输：' + (_DECOMPRESS_FORMATS.length
+    ? '支持 ' + _DECOMPRESS_FORMATS.map(function(v){ return '.' + v.ext; }).join(' / ')
+    : '不支持，回退原文'));
+}catch(e){}
 // 校验是否为 MIDI 文件头 "MThd"
 function _looksLikeMidi(buf){
   if(!buf || buf.byteLength < 4) return false;
@@ -990,16 +995,17 @@ async function _decompressBuffer(ab, fmt){
 async function _fetchMediaBlob(relPath, onProgress, quiet){
   if(_DECOMPRESS_FORMATS.length && /\.midi?$/i.test(relPath)){
     for(const v of _DECOMPRESS_FORMATS){
+      const label = _songLabel(relPath + '.' + v.ext);
       try{
-        const blob = await _fetchBlobWithProgress(_mediaUrls(relPath + '.' + v.ext), onProgress, _songLabel(relPath), quiet);
+        const blob = await _fetchBlobWithProgress(_mediaUrls(relPath + '.' + v.ext), onProgress, label, quiet);
         const ab = await blob.arrayBuffer();
         // 部分 CDN 可能已按扩展名自动解码：若已是 MIDI 直接用，避免二次解压
         const out = _looksLikeMidi(ab) ? ab : await _decompressBuffer(ab, v.fmt);
         if(!_looksLikeMidi(out)) throw new Error('解压结果不是有效 MIDI');
-        if(!quiet) console.log('[AudioDebug][INFO] ' + _songLabel(relPath) + ' 已通过 .' + v.ext + ' 解压 (' + (out.byteLength / 1024).toFixed(0) + 'KB)');
+        if(!quiet) console.log('[AudioDebug][INFO] ' + label + ' 已解压 (' + (out.byteLength / 1024).toFixed(0) + 'KB)');
         return new Blob([out]);
       }catch(e){
-        if(!quiet) console.log('[AudioDebug][INFO] ' + _songLabel(relPath) + ' .' + v.ext + ' 不可用：' + (e && e.message ? e.message : e));
+        if(!quiet) console.log('[AudioDebug][INFO] ' + label + ' 不可用：' + (e && e.message ? e.message : e));
       }
     }
   }

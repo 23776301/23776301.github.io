@@ -108,9 +108,9 @@
 
 <script id="appLoader">
 (function(){
-  /* 重代码（app.css/app.js）并发 CDN 全量下载竞速：4 个 jsDelivr 边缘 + 同源兜底，最先完成者胜出 */
-  var EDGES=['https://cdn.jsdelivr.net/gh/','https://fastly.jsdelivr.net/gh/','https://gcore.jsdelivr.net/gh/','https://testingcf.jsdelivr.net/gh/'];
-  var DIR='teecatt/teecatt.github.io@master/music_visualization/';
+  /* 入口重代码（app.css/app.js）优先同源加载：与 HTML 同版本、绝不吃 CDN 陈旧缓存；
+     同源失败才回退 jsDelivr。no-cache 强制校验（未变则 304），加载后注入并显示内容。 */
+  var CDN='https://cdn.jsdelivr.net/gh/teecatt/teecatt.github.io@master/music_visualization/';
   function reveal(){
     try{
       var el=document.getElementById('appLoading');
@@ -125,11 +125,11 @@
     }catch(e){}
     reveal();
   }
-  function urls(f){ var a=[]; for(var i=0;i<EDGES.length;i++) a.push(EDGES[i]+DIR+f); a.push(f); return a; }
-  function race(list){
-    var ps=list.map(function(u){ return fetch(u).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); }); });
-    if(window.Promise && Promise.any) return Promise.any(ps);
-    return new Promise(function(res,rej){ var n=ps.length,errs=[],done=false; ps.forEach(function(p){ p.then(function(v){ if(!done){done=true;res(v);} },function(e){ errs.push(e); if(--n===0) rej(errs[0]); }); }); });
+  function load(url){
+    return fetch(url, {cache:'no-cache'}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); });
+  }
+  function loadWithFallback(f){
+    return load(f).catch(function(){ return load(CDN+f); });
   }
   function inject(css,js){
     var st=document.createElement('style'); st.textContent=css+'\n/*# sourceURL=app.css */'; document.head.appendChild(st);
@@ -137,8 +137,8 @@
     reveal();
   }
   try{
-    Promise.all([race(urls('app.css')), race(urls('app.js'))]).then(
-      function(r){ inject(r[0],r[1]); },
+    Promise.all([loadWithFallback('app.css'), loadWithFallback('app.js')]).then(
+      function(r){ inject(r[0], r[1]); },
       fallback
     );
     setTimeout(reveal, 8000); // 兜底：无论成功与否 8s 后显示

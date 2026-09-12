@@ -500,7 +500,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 | --- | --- | --- |
 | `midi_player/soundfonts/` | 56 个 `*-ogg.js` | **≈ 132.6 MB** |
 | `midi_player/midi/` | 25 个（8 谱面 + 8 `.br` + 8 `.gz` + `list.json`） | ≈ 3.4 MB |
-| `midi_player/index.html` | 1 | ≈ 29 KB（骨架 + 关键 CSS + 竞速加载器） |
+| `midi_player/index.html` | 1 | ≈ 29 KB（骨架 + 关键 CSS + 加载器） |
 | `midi_player/app.css` | 1 | ≈ 25 KB |
 | `midi_player/app.js` | 1 | ≈ 176 KB |
 
@@ -743,7 +743,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ```
 midi_player/
-├── index.html                 # 页面骨架 + 关键 CSS + 并发 CDN 竞速加载器
+├── index.html                 # 页面骨架 + 关键 CSS + 加载器（同源优先，CDN 兜底）
 ├── app.css                    # 全部样式
 ├── app.js                     # 全部逻辑
 ├── README.md                  # 本文档
@@ -885,3 +885,4 @@ midi_player/
 | 门户描述 | 主页 MIDI 播放器卡片描述新增「多种键型钢琴 / 音游模式 / CDN竞速」 | `b898f8b` |
 | 重代码外置 | 内联 CSS/JS 拆为 `app.css`/`app.js`；`index.html` 仅留骨架 + 关键 CSS + 竞速加载器（4 个 jsDelivr 边缘 + 同源兜底并发全量下载，最先完成者注入）；loading 转圈 + `sourceURL` 保断点 | `89a34a2` |
 | 谱面压缩传输 | 内置谱面提供 `.mid.br`/`.mid.gz` 预压缩变体；`_fetchMediaBlob` 按能力 `brotli → gzip → 原文` 选择，`_decompressBuffer` 客户端解压，`_looksLikeMidi` 校验 `MThd` 头；解压后按原路径入 Cache API；一套代码兼容 GitHub Pages 与 Cloudflare Pages。`Rush E 3.mid` 2.70 MB → 95 KB | `48e632b` |
+| 加载器同源优先 | 修复 jsDelivr 各边缘缓存不一致导致入口代码陈旧的问题：`index.html` 加载器改为**同源优先**（`cache:'no-cache'` 强制校验），同源失败才回退 jsDelivr；谱面下载日志补上 `.br`/`.gz` 扩展名；启动时打印支持的压缩格式 | `_pending_` |
