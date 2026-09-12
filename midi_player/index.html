@@ -10,7 +10,7 @@
 <style>
 :root{
   --bg:#0d0d14; --panel:#16161f; --border:#2a2a3a; --text:#e8e8f0;
-  --dim:#8a8aa0; --accent:#ef4444; --accent-a18:rgba(239,68,68,.18); --accent-a28:rgba(239,68,68,.28); --accent2:#6366f1; --ok:#2fbf6f; --warn:#e8b64c;
+  --dim:#8a8aa0; --accent:#c20c0c; --accent-a18:rgba(194,12,12,.18); --accent-a28:rgba(194,12,12,.28); --accent2:#6366f1; --ok:#2fbf6f; --warn:#e8b64c;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh;overflow-x:hidden}
@@ -74,15 +74,21 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
   border:1px solid #333;background:rgba(255,255,255,.04);color:#ddd;font-size:11px}
 .palette-theme-btn.active{border-color:var(--accent);background:var(--accent-a18,rgba(139,92,246,.18));color:#fff}
 .palette-theme-btn .sw{width:14px;height:14px;border-radius:3px;border:1px solid #555}
-#paletteEndpoints{display:block;width:100%;height:auto;margin-bottom:6px}
-.pe-dot{cursor:pointer}
-.pe-dot.sel{filter:drop-shadow(0 0 3px #fff)}
-.palette-presets{display:flex;justify-content:space-between;gap:4px;margin-bottom:6px}
+#paletteEndpoints{position:relative;display:flex;flex-direction:column;gap:4px;margin-bottom:6px}
+.pe-row{display:flex;align-items:center;gap:6px}
+.pe-bar{position:relative;flex:1;height:20px;min-width:0}
+.pe-bar svg{display:block;width:100%;height:100%}
+.pe-box{width:22px;height:22px;border-radius:6px;border:1px solid #333;background:rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex:0 0 auto}
+.pe-box .sw{width:14px;height:14px;border-radius:3px;border:1px solid #555}
+.pe-box.sel{border-color:var(--accent);background:var(--accent-a18,rgba(194,12,12,.18))}
+.palette-preset-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.pp-title{writing-mode:vertical-rl;text-orientation:upright;font-size:9px;color:#aaa;letter-spacing:1px;line-height:1;flex:0 0 auto}
+.palette-presets{flex:1;display:flex;justify-content:space-between;gap:4px;min-width:0}
 .pp-item{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;cursor:pointer;padding:0;flex:1;min-width:0}
 .pp-swatch{width:22px;height:22px;border-radius:5px;border:1px solid rgba(255,255,255,.25);display:block;transition:transform .1s}
 .pp-item:hover .pp-swatch{transform:scale(1.1)}
 .pp-item:active .pp-swatch{transform:scale(.94)}
-.pp-name{font-size:9px;line-height:1;color:#aaa;white-space:nowrap}
+.pp-name{font-size:7px;line-height:1;color:#aaa;white-space:nowrap;width:22px;text-align:center}
 .palette-colors{display:flex;gap:8px;height:108px;margin-bottom:6px}
 .palette-board-wrap{position:relative;flex:0 0 50%;height:100%}
 .palette-board-wrap canvas{width:100%;height:100%;border-radius:6px;cursor:crosshair;touch-action:none;display:block}
@@ -392,9 +398,9 @@ select:focus{border-color:var(--accent)}
 /* 首屏主题色：在样式之后、渲染之前同步应用已保存的配色，避免「先紫后红」闪烁 */
 (function(){
   try{
-    var T = { A:'#8b5cf6', B:'#ef4444', C:'#fb7299' };
+    var T = { A:'#8b5cf6', B:'#c20c0c', C:'#fb7299' };
     var name = localStorage.getItem('paletteV2') || 'B';
-    var color = T[name] || '#ef4444';
+    var color = T[name] || '#c20c0c';
     if(name === 'custom'){
       var o = JSON.parse(localStorage.getItem('paletteCustom') || '{}');
       if(o.theme) color = o.theme;
@@ -3427,9 +3433,9 @@ const PALETTES = {
   }
 };
 // ===== 主题色（按钮/按键遮罩/开关/滑块）=====
-const PALETTE_THEME = { A: '#8b5cf6', B: '#ef4444', C: '#fb7299' }; // A紫 B红 C哔哩哔哩浅粉
-let _themeAccent = '#ef4444';
-let _themeAccentRgba = 'rgba(239,68,68,0.7)';
+const PALETTE_THEME = { A: '#8b5cf6', B: '#c20c0c', C: '#fb7299' }; // A紫 B网抑红 C哔哩哔哩浅粉
+let _themeAccent = '#c20c0c';
+let _themeAccentRgba = 'rgba(194,12,12,0.7)';
 let _themeBeforeEdit = null;
 function _hexToRgb(hex){
   let h = String(hex).replace('#', '');
@@ -3450,7 +3456,7 @@ function _hslaToHex(h, s, l, a){
 }
 // 应用主题色：写入 --accent 及半透明变体，并更新按键遮罩色
 function applyTheme(color){
-  const c = color || '#ef4444';
+  const c = color || '#c20c0c';
   _themeAccent = c;
   const root = document.documentElement;
   root.style.setProperty('--accent', c);
@@ -3462,7 +3468,7 @@ function applyTheme(color){
 }
 
 // ===== 自定义配色（四端颜色插值出 5 级）=====
-const paletteEditColors = { wl: '#5eead4', wh: '#3b82f6', bl: '#f9a8d4', bh: '#be185d', theme: '#ef4444' };
+const paletteEditColors = { wl: '#5eead4', wh: '#3b82f6', bl: '#f9a8d4', bh: '#be185d', theme: '#c20c0c' };
 const PALETTE_TARGET_LABELS = { wl: '白键最轻', wh: '白键最重', bl: '黑键最轻', bh: '黑键最重', theme: '主题色' };
 // 常用品牌色预置：点按即把取色板滑块定位到该色并实时应用
 const PALETTE_PRESETS = [
@@ -3576,7 +3582,7 @@ function setPalette(name){
   });
   const editBtn = document.getElementById('paletteEditBtn');
   if(editBtn) editBtn.classList.toggle('active', name === 'custom');
-  applyTheme(name === 'custom' ? (paletteEditColors.theme || '#ef4444') : PALETTE_THEME[name]);
+  applyTheme(name === 'custom' ? (paletteEditColors.theme || '#c20c0c') : PALETTE_THEME[name]);
   updatePaletteSwatch();
   if(typeof allNotes !== 'undefined'){
     const fallDur = 2.0 / fallSpeedMultiplier;
@@ -3664,7 +3670,7 @@ function _pickColorAt(e){
 }
 // 由当前目标色反推 HSL，同步到 2D 板与三个滑块
 function _syncEditHSL(){
-  const c = paletteEditColors[paletteEditTarget] || '#ef4444';
+  const c = paletteEditColors[paletteEditTarget] || '#c20c0c';
   const hsl = _hexToHsl(c);
   _editHSL.h = hsl[0]; _editHSL.s = hsl[1]; _editHSL.l = hsl[2];
   _editHSL.a = _hexAlpha(c);
@@ -3721,36 +3727,32 @@ function _positionBoardMarker(){
 }
 // 黑白键力度图：直角梯形（左底边=右底边一半，左轻右重），两端方形色块可点选目标
 function renderPaletteEndpoints(){
-  const svg = document.getElementById('paletteEndpoints');
-  if(!svg) return;
+  const host = document.getElementById('paletteEndpoints');
+  if(!host) return;
   const c = paletteEditColors;
   const p = buildCustomPalette(c.wl, c.wh, c.bl, c.bh);
-  const W = 340, rh = 20, gap = 8, y1 = 0, y2 = y1 + rh + gap;
-  const labelW = 22, sq = 16, trapX = 48, trapW = 268;
   const stops = cols => cols.map((col, i) =>
     '<stop offset="' + (i / (cols.length - 1) * 100).toFixed(1) + '%" stop-color="' + col + '"/>').join('');
-  // 直角梯形：左竖直边高 rh/2，右竖直边高 rh
-  const trap = (y, fillId) =>
-    '<polygon points="' + trapX + ',' + (y + rh / 2) + ' ' + (trapX + trapW) + ',' + y + ' ' +
-    (trapX + trapW) + ',' + (y + rh) + ' ' + trapX + ',' + (y + rh) + '" fill="url(#' + fillId + ')"/>';
-  const sqBox = (t, x, y, col) => {
-    const sel = paletteEditTarget === t;
-    return '<rect class="pe-dot' + (sel ? ' sel' : '') + '" data-target="' + t + '" x="' + x +
-      '" y="' + (y + (rh - sq) / 2) + '" width="' + sq + '" height="' + sq + '" rx="3" fill="' + col +
-      '" stroke="' + (sel ? '#fff' : 'rgba(255,255,255,.35)') + '" stroke-width="' + (sel ? 2 : 1) + '"/>';
-  };
-  svg.innerHTML =
-    '<defs>' +
+  // 直角梯形力度条（左底边=右底边一半），标签覆盖在左侧与中间（与配色面板一致）
+  const bar = (gradId, label) =>
+    '<div class="pe-bar">' +
+      '<svg viewBox="0 0 300 20" preserveAspectRatio="none">' +
+        '<polygon points="0,10 300,0 300,20 0,20" fill="url(#' + gradId + ')"/>' +
+      '</svg>' +
+      _swatchLabel(label, 'left:6px;top:50%;transform:translateY(-50%);') +
+    '</div>';
+  // 端点色块：与右上角主题色按钮同形式（圆角框 + 内部色块）
+  const box = (t, col) =>
+    '<button type="button" class="pe-box' + (paletteEditTarget === t ? ' sel' : '') + '" data-target="' + t +
+    '" title="' + PALETTE_TARGET_LABELS[t] + '"><span class="sw" style="background:' + col + '"></span></button>';
+  host.innerHTML =
+    '<svg width="0" height="0" style="position:absolute"><defs>' +
       '<linearGradient id="peW" x1="0" y1="0" x2="1" y2="0">' + stops(p.white) + '</linearGradient>' +
       '<linearGradient id="peB" x1="0" y1="0" x2="1" y2="0">' + stops(p.black) + '</linearGradient>' +
-    '</defs>' +
-    '<text x="0" y="' + (y1 + rh * 0.72) + '" fill="#bbb" font-size="10">白键</text>' +
-    '<text x="0" y="' + (y2 + rh * 0.72) + '" fill="#bbb" font-size="10">黑键</text>' +
-    trap(y1, 'peW') + trap(y2, 'peB') +
-    sqBox('wl', labelW + 2, y1, c.wl) +
-    sqBox('wh', trapX + trapW + 6, y1, c.wh) +
-    sqBox('bl', labelW + 2, y2, c.bl) +
-    sqBox('bh', trapX + trapW + 6, y2, c.bh);
+    '</defs></svg>' +
+    '<div class="pe-row">' + box('wl', c.wl) + bar('peW', '白键') + box('wh', c.wh) + '</div>' +
+    '<div class="pe-row">' + box('bl', c.bl) + bar('peB', '黑键') + box('bh', c.bh) + '</div>' +
+    _swatchLabel('力度', 'left:50%;top:50%;transform:translate(-50%,-50%);');
 }
 function renderPalettePresets(){
   const host = document.getElementById('palettePresets');
@@ -3837,11 +3839,11 @@ function _bindPaletteModal(){
   if(_paletteModalBound) return;
   _paletteModalBound = true;
   const m = document.getElementById('paletteModal');
-  const svg = document.getElementById('paletteEndpoints');
+  const eps = document.getElementById('paletteEndpoints');
   const presets = document.getElementById('palettePresets');
   // 无叉号/取消按钮：点遮罩空白处关闭；改动已实时生效
   if(m) m.addEventListener('pointerdown', e => { if(e.target === m) closePaletteModal(); });
-  if(svg) svg.addEventListener('click', e => {
+  if(eps) eps.addEventListener('click', e => {
     const t = e.target.closest ? e.target.closest('[data-target]') : null;
     if(t) selectPaletteTarget(t.getAttribute('data-target'));
   });
@@ -3860,7 +3862,7 @@ function openPaletteModal(){
     paletteEditColors.bl = PALETTES.custom.black[0];
     paletteEditColors.bh = PALETTES.custom.black[4];
   }
-  paletteEditColors.theme = (currentPalette === 'custom' && paletteEditColors.theme) ? paletteEditColors.theme : (_themeAccent || '#ef4444');
+  paletteEditColors.theme = (currentPalette === 'custom' && paletteEditColors.theme) ? paletteEditColors.theme : (_themeAccent || '#c20c0c');
   paletteEditTarget = 'theme';
   _bindColorBoard();
   _bindPaletteModal();
@@ -4414,7 +4416,10 @@ applyPanelAppearance();     // 统一菜单/调试/选谱/管理面板的透明�
       </button>
     </div>
     <svg id="paletteEndpoints" viewBox="0 0 340 48"></svg>
-    <div id="palettePresets" class="palette-presets"></div>
+    <div class="palette-preset-row">
+      <span class="pp-title">常用</span>
+      <div id="palettePresets" class="palette-presets"></div>
+    </div>
     <div class="palette-colors">
       <div class="palette-board-wrap">
         <canvas id="colorBoard" width="240" height="140"></canvas>
