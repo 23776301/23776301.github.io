@@ -72,7 +72,7 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
   padding:6px 8px;border-radius:8px;cursor:pointer;
   border:1px solid #333;background:rgba(255,255,255,.04);color:#ddd;font-size:12px;
 }
-.palette-target.active{border-color:#8b5cf6;background:rgba(139,92,246,.18);color:#fff}
+.palette-target.active{border-color:var(--accent);background:var(--accent-a18,rgba(139,92,246,.18));color:#fff}
 .palette-target .sw{width:22px;height:14px;border-radius:3px;border:1px solid #555;flex-shrink:0}
 
 /* 去掉移动端默认点击高亮（按外接矩形绘制、不裁圆角），改用随圆角裁切的按下反馈 */
@@ -302,7 +302,7 @@ select:focus{border-color:var(--accent)}
   white-space:nowrap;overflow:hidden;
 }
 .csel-opt:hover,.csel-opt.active{background:rgba(255,255,255,.08)}
-.csel-opt.selected{background:rgba(139,92,246,.28);color:#fff;font-weight:600}
+.csel-opt.selected{background:var(--accent-a28,rgba(139,92,246,.28));color:#fff;font-weight:600}
 .csel-opt .csel-opt-label{overflow:hidden;text-overflow:ellipsis}
 .csel-opt .csel-check{flex-shrink:0;width:14px;height:14px;opacity:0;color:var(--accent)}
 .csel-opt.selected .csel-check{opacity:1}
@@ -3382,9 +3382,32 @@ const PALETTES = {
     black: ['#f9a8d4', '#f472b6', '#ec4899', '#db2777', '#be185d']
   }
 };
+// ===== 主题色（按钮/按键遮罩/开关/滑块）=====
+const PALETTE_THEME = { A: '#8b5cf6', B: '#ef4444', C: '#22c55e' }; // A紫 B红 C绿
+let _themeAccent = '#8b5cf6';
+let _themeAccentRgba = 'rgba(139,92,246,0.7)';
+let _themeBeforeEdit = null;
+function _hexToRgb(hex){
+  const h = String(hex).replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const n = parseInt(full, 16) || 0;
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+// 应用主题色：写入 --accent 及半透明变体，并更新按键遮罩色
+function applyTheme(color){
+  const c = color || '#8b5cf6';
+  _themeAccent = c;
+  const root = document.documentElement;
+  root.style.setProperty('--accent', c);
+  const rgb = _hexToRgb(c);
+  root.style.setProperty('--accent-a18', 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.18)');
+  root.style.setProperty('--accent-a28', 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.28)');
+  _themeAccentRgba = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.7)';
+}
+
 // ===== 自定义配色（四端颜色插值出 5 级）=====
-const paletteEditColors = { wl: '#5eead4', wh: '#3b82f6', bl: '#f9a8d4', bh: '#be185d' };
-const PALETTE_TARGET_LABELS = { wl: '白键最轻', wh: '白键最重', bl: '黑键最轻', bh: '黑键最重' };
+const paletteEditColors = { wl: '#5eead4', wh: '#3b82f6', bl: '#f9a8d4', bh: '#be185d', theme: '#8b5cf6' };
+const PALETTE_TARGET_LABELS = { wl: '白键最轻', wh: '白键最重', bl: '黑键最轻', bh: '黑键最重', theme: '主题色' };
 let paletteEditTarget = 'wl';
 let _colorPicking = false;
 let _colorBoardBound = false;
@@ -3421,6 +3444,7 @@ function loadCustomPalette(){
     if(!o.wl || !o.wh || !o.bl || !o.bh) return false;
     paletteEditColors.wl = o.wl; paletteEditColors.wh = o.wh;
     paletteEditColors.bl = o.bl; paletteEditColors.bh = o.bh;
+    if(o.theme) paletteEditColors.theme = o.theme;
     PALETTES.custom = buildCustomPalette(o.wl, o.wh, o.bl, o.bh);
     return true;
   }catch(e){ return false; }
@@ -3481,6 +3505,7 @@ function setPalette(name){
   });
   const editBtn = document.getElementById('paletteEditBtn');
   if(editBtn) editBtn.classList.toggle('active', name === 'custom');
+  applyTheme(name === 'custom' ? (paletteEditColors.theme || '#8b5cf6') : PALETTE_THEME[name]);
   updatePaletteSwatch();
   if(typeof allNotes !== 'undefined'){
     const fallDur = 2.0 / fallSpeedMultiplier;
@@ -3563,6 +3588,7 @@ function _pickColorAt(e){
   x = Math.max(0, Math.min(cv.width - 1, x));
   y = Math.max(0, Math.min(cv.height - 1, y));
   paletteEditColors[paletteEditTarget] = hslToHex(x / (cv.width - 1) * 360, 1, 1 - y / (cv.height - 1));
+  if(paletteEditTarget === 'theme') applyTheme(paletteEditColors.theme); // 主题色实时预览
   updatePalettePickUI();
 }
 function renderPaletteTargets(){
@@ -3570,7 +3596,8 @@ function renderPaletteTargets(){
   if(!host) return;
   host.innerHTML = Object.keys(PALETTE_TARGET_LABELS).map(k =>
     '<button type="button" class="palette-target' + (k === paletteEditTarget ? ' active' : '') +
-    '" onclick="selectPaletteTarget(\'' + k + '\')">' +
+    '"' + (k === 'theme' ? ' style="grid-column:1/-1"' : '') +
+    ' onclick="selectPaletteTarget(\'' + k + '\')">' +
     '<span>' + PALETTE_TARGET_LABELS[k] + '</span>' +
     '<span class="sw" style="background:' + paletteEditColors[k] + '"></span></button>').join('');
 }
@@ -3596,6 +3623,8 @@ function openPaletteModal(){
     paletteEditColors.bl = PALETTES.custom.black[0];
     paletteEditColors.bh = PALETTES.custom.black[4];
   }
+  paletteEditColors.theme = (currentPalette === 'custom' && paletteEditColors.theme) ? paletteEditColors.theme : (_themeAccent || '#8b5cf6');
+  _themeBeforeEdit = _themeAccent;
   paletteEditTarget = 'wl';
   _bindColorBoard();
   drawColorBoard();
@@ -3605,6 +3634,8 @@ function openPaletteModal(){
 function closePaletteModal(){
   const m = document.getElementById('paletteModal');
   if(m) m.style.display = 'none';
+  // 取消/关闭：回退主题色实时预览
+  if(_themeBeforeEdit){ applyTheme(_themeBeforeEdit); _themeBeforeEdit = null; }
 }
 function savePaletteCustom(){
   const c = paletteEditColors;
@@ -4040,7 +4071,7 @@ function drawScene(notes, startIdx, endIdx, curTime){
 
   // 按键高亮
   if(activeKeySet.size > 0){
-    ctx.fillStyle = 'rgba(139,92,246,0.7)';
+    ctx.fillStyle = _themeAccentRgba;
     activeKeySet.forEach(midi => {
       const key = keyByMidi[midi];
       if(!key) return;
