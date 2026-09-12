@@ -953,13 +953,16 @@ function scrollDebugBottom(){
   const p = _debugPanelScrollEl();
   if(p) p.scrollTop = p.scrollHeight;
 }
+// lucide:copy-check —— 复制成功反馈（矢量勾，替代文字 copied）
+const COPY_CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 15 2 2 4-4"/><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
 function _copyFeedback(ok){
   const btn = document.getElementById('debugCopyBtn');
   if(!btn) return;
-  if(!btn._origText) btn._origText = btn.textContent;
-  btn.textContent = ok ? 'copied✓' : 'failed';
+  // 保存原始 innerHTML（按钮内是 SVG，textContent 为空，旧实现恢复时会把图标清空）
+  if(!btn._origHTML) btn._origHTML = btn.innerHTML;
+  btn.innerHTML = ok ? COPY_CHECK_ICON : '<span style="font-size:10px">failed</span>';
   clearTimeout(btn._t);
-  btn._t = setTimeout(() => { btn.textContent = btn._origText; }, 1200);
+  btn._t = setTimeout(() => { btn.innerHTML = btn._origHTML; }, 1200);
 }
 function _copyFallback(text){
   try{
