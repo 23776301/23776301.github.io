@@ -54,7 +54,7 @@
 
 - 音频文件上传（点击顶部区域选择，或拖入）。
 - 播放/暂停、进度条拖拽 seek、音量、循环。
-- 自动加载演示音频 `demo.ogg`（优先从 jsDelivr CDN 获取，失败回退本站 Pages）。
+- 自动加载演示音频 `demo.ogg`（多个 jsDelivr 边缘节点**并发完整下载竞速**，最先完成者胜出，其余立即中止并清理不完整分片，全部失败回退本站 Pages）。
 
 ### 2.3 其它
 
@@ -334,4 +334,4 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 
 ## 附：缓存
 
-`AssetCache` 使用 Cache API，缓存名 `music-viz-assets-v1`，以绝对路径为键、`ignoreSearch` 提高命中率；缓存失败时回退到普通 `fetch`。目前仅用于演示音频 `demo.ogg`：`fetchDemo()` 先查缓存，未命中则按 `cdn.jsdelivr.net/gh/teecatt/teecatt.github.io@master/music_visualization/demo.ogg` → 本地 `demo.ogg` 顺序尝试，命中后写回缓存（CORS 可用且不消耗 Pages 带宽）。
+`AssetCache` 使用 Cache API，缓存名 `music-viz-assets-v1`，以绝对路径为键、`ignoreSearch` 提高命中率；缓存失败时回退到普通 `fetch`。目前仅用于演示音频 `demo.ogg`：`fetchDemo()` 先查缓存；未命中则由 `_raceDownloadDemo()` 同时向 4 个 jsDelivr 边缘节点（`cdn` / `fastly` / `gcore` / `testingcf`，均 `gh/teecatt/teecatt.github.io@master/music_visualization/demo.ogg`）+ 本地 `demo.ogg` 发起**完整下载**，`Promise.any` 取最先完整下载完成者，随后 `AbortController.abort()` 中止其余镜像并丢弃其不完整分片（`_downloadBlobDemo` 中止时把分片数组置 null）；终端日志实时显示竞速进度（领先镜像 + 速度）、胜出镜像（大小/耗时/平均速度）与清理信息。命中后写回缓存（CORS 可用且不消耗 Pages 带宽）。
