@@ -67,10 +67,21 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 }
 /* 全屏绘制区 */
 .canvas-area:fullscreen,.canvas-area:-webkit-full-screen{background:var(--bg);padding:0}
-.canvas-area:fullscreen .canvas-stage,.canvas-area:-webkit-full-screen .canvas-stage{flex:1 1 auto;min-height:0}
+.canvas-area:fullscreen .canvas-stage,.canvas-area:-webkit-full-screen .canvas-stage{flex:1 1 auto;min-height:0;overflow:hidden}
 /* 全屏只保留绘制区：隐藏进度条与终端 */
 .canvas-area:fullscreen .player-bar,.canvas-area:fullscreen .log-toolbar,.canvas-area:fullscreen .log-bar,
 .canvas-area:-webkit-full-screen .player-bar,.canvas-area:-webkit-full-screen .log-toolbar,.canvas-area:-webkit-full-screen .log-bar{display:none}
+/* 全屏时覆盖移动端「强制宽度 100%」：改用 JS 计算的等比缩放完整显示（contain） */
+.canvas-area:fullscreen .stage-wrap,.canvas-area:-webkit-full-screen .stage-wrap{
+  width:calc(var(--canvas-w,1280px) * var(--canvas-zoom,1))!important;
+  height:calc(var(--canvas-h,720px) * var(--canvas-zoom,1))!important;
+}
+.canvas-area:fullscreen .stage-wrap canvas,.canvas-area:-webkit-full-screen .stage-wrap canvas{
+  width:var(--canvas-w,1280px)!important;
+  height:var(--canvas-h,720px)!important;
+  transform:scale(var(--canvas-zoom,1))!important;
+  transform-origin:0 0!important;
+}
 .stage-wrap{position:relative;box-shadow:none;border-radius:0;overflow:visible;flex-shrink:0;align-self:center}
 #mainCanvas{display:block;cursor:default;touch-action:none;transform-origin:0 0}
 
@@ -1794,6 +1805,11 @@ function applyZoom(){
   canvas.style.transformOrigin='0 0';
   stageWrap.style.width=(canvas.width*z)+'px';
   stageWrap.style.height=(canvas.height*z)+'px';
+  // 供全屏 CSS 覆盖移动端强制宽度（!important 需要变量参与）
+  const rs=document.documentElement.style;
+  rs.setProperty('--canvas-zoom', z);
+  rs.setProperty('--canvas-w', canvas.width+'px');
+  rs.setProperty('--canvas-h', canvas.height+'px');
 }
 function fitCanvas(){
   // 等比缩放到「宽高都完整可见」：zoom = min(可用宽/画布宽, 可用高/画布高)，
@@ -1964,7 +1980,8 @@ function _onFsChange(){
   _isFullscreen=!!(document.fullscreenElement||document.webkitFullscreenElement);
   if(_fsBtn) _fsBtn.classList.toggle('active',_isFullscreen);
   if(_isFullscreen){ CFG.selectedId=null; renderProps(); } // 全屏不可选中元素
-  setTimeout(fitCanvas,60);
+  requestAnimationFrame(()=>fitCanvas());
+  setTimeout(fitCanvas,150);
 }
 if(_fsBtn) _fsBtn.addEventListener('click',_toggleFullscreen);
 document.addEventListener('fullscreenchange',_onFsChange);
