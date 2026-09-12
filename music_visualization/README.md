@@ -63,7 +63,7 @@
 - 画布内点击选中元素（**不允许拖动移动**，位置在属性面板 X/Y 设置）；选中时显示虚线框与四角手柄，可拖角自由（非等比）缩放，触摸端支持两指夹捏等比缩放。
 - 背景：纯色 / 线性渐变 / 径向渐变 / 图片（模糊 + 暗化）。
 - 配色：纯色 / 渐变 / 彩虹，渐变支持多色增删排序。
-- **刷新即恢复默认**：不做配置持久化（`saveConfig` 为空实现，`loadConfig` 会清除历史键），每次刷新元素回到默认居中（x/y=50）、画布分辨率回到 1280×720，属性面板默认不展开。
+- **设置持久化**：分辨率、帧率、帧率/分辨率显示开关、元素及其参数、背景、循环/音量/平滑度、左侧面板宽度都写入 `localStorage`（键 `music-viz-config-v1`），刷新后自动恢复；背景图片是 object URL 无法持久化（刷新回退为纯色/渐变）。属性面板默认仍不展开。
 
 ### 2.4 快捷键
 
@@ -169,7 +169,7 @@ index.html
 ├── <style>                     # 暗色主题、响应式、组件样式
 ├── AssetCache                  # Cache API 缓存（music-viz-assets-v1）
 ├── CFG                         # 全局配置（canvas / elements / audio）
-├── saveConfig / loadConfig     # 不做持久化：刷新恢复默认（清除 music-viz-config-v1）
+├── saveConfig / loadConfig     # 持久化到 music-viz-config-v1；resetAllSettings 清除并恢复默认
 ├── VISUAL_STYLES               # 效果清单（id / name / cat）
 ├── defaultElementParams()      # 元素默认参数
 ├── 颜色工具                     # hexToRgb / rgbToHex / lerpColor / multiColor / elemColor
@@ -205,7 +205,7 @@ index.html
 - `DRAW` 是效果注册表：`DRAW[type] = function(ctx, p, W, H, el, dt)`。
 - 效果清单 `VISUAL_STYLES` 与 `DRAW` 分离，新增效果需同时登记两处。
 - 属性面板由参数声明式生成，不手写每个控件。
-- `saveConfig` 为空实现、`loadConfig` 每次刷新清除 `music-viz-config-v1` 并返回 false，因此刷新后画布/元素/分辨率都恢复默认（元素居中、1280×720）；`scheduleSave` 仍保留调用点但不再写盘。
+- `scheduleSave` 300ms 防抖写盘；`saveConfig` 序列化 `canvas`（剔除 `bgImage`）、`elements`、`fps`、`showFps`/`showRes`、`loop`/`volume`/`smoothing`、`panelW`；`loadConfig` 读回并合并到 `CFG`。性能面板底部「重置所有设置」按钮调用 `resetAllSettings()`：清除存储并恢复出厂默认（1280×720、60fps、单个居中 bars、面板 280px）。
 
 ---
 

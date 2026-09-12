@@ -116,6 +116,8 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .perf-presets button:hover{border-color:var(--accent);color:var(--accent)}
 .perf-hint{font-size:10px;color:var(--muted);margin-top:5px}
 .perf-err{display:none;font-size:11px;color:#ff6b6b;background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.35);border-radius:5px;padding:6px 8px;margin-top:8px}
+.perf-reset{width:100%;margin-top:12px;padding:8px;background:rgba(255,107,107,.12);border:1px solid rgba(255,107,107,.4);color:#ff6b6b;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s}
+.perf-reset:hover{background:rgba(255,107,107,.22)}
 
 .library.hidden{display:none}
 /* 属性面板与左侧其它面板一致：从左侧展示 */
@@ -564,18 +566,64 @@ window.__CFG = CFG;
    配置持久化（localStorage）
    ============================================================ */
 const STORAGE_KEY = 'music-viz-config-v1';
+let _panelW = 280;
 let _saveTimer = null;
 function scheduleSave(){
   if(_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(saveConfig, 300);
 }
 function saveConfig(){
-  // 不持久化：每次刷新都恢复默认（元素居中、画板 16:9），故不写入 localStorage
+  try{
+    const data={
+      v:1,
+      canvas: Object.assign({}, CFG.canvas, {bgImage:''}), // 背景图是 object URL，无法持久化
+      elements: CFG.elements.map(e=>({id:e.id, type:e.type, params:e.params})),
+      fps: CFG.fps, showFps: CFG.showFps, showRes: CFG.showRes,
+      loop: CFG.loop, volume: CFG.volume, smoothing: CFG.smoothing,
+      panelW: _panelW,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }catch(e){}
 }
 function loadConfig(){
-  // 每次刷新都恢复默认：清除历史配置，不做恢复（元素/位置居中、画板比例回到 16:9）
+  let raw=null;
+  try{ raw=localStorage.getItem(STORAGE_KEY); }catch(e){}
+  if(!raw) return false;
+  try{
+    const d=JSON.parse(raw);
+    if(!d || typeof d!=='object') return false;
+    if(d.canvas) Object.assign(CFG.canvas, d.canvas, {bgImage:''});
+    if(Array.isArray(d.elements)) CFG.elements=d.elements;
+    if(typeof d.fps==='number' && isFinite(d.fps)) CFG.fps=Math.max(30, Math.min(240, Math.round(d.fps)));
+    if(typeof d.showFps==='boolean') CFG.showFps=d.showFps;
+    if(typeof d.showRes==='boolean') CFG.showRes=d.showRes;
+    if(typeof d.loop==='boolean') CFG.loop=d.loop;
+    if(typeof d.volume==='number') CFG.volume=d.volume;
+    if(typeof d.smoothing==='number') CFG.smoothing=d.smoothing;
+    if(typeof d.panelW==='number'){ _panelW=Math.max(180, Math.min(600, d.panelW)); document.documentElement.style.setProperty('--panel-w', _panelW+'px'); }
+    return true;
+  }catch(e){ return false; }
+}
+// 重置所有设置（性能面板底部按钮）：清除持久化并恢复出厂默认
+function resetAllSettings(){
   try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
-  return false;
+  Object.assign(CFG.canvas, { w:1280, h:720, zoom:1, bgType:'solid', bgColor:'#000000',
+    gradColor1:'#00ced1', gradColor2:'#000000', gradStops:[0,25,50,75,100],
+    gradAngle:360, gradRadius:640, bgImage:'', bgBlur:0, bgDarken:0 });
+  canvas.width=1280; canvas.height=720;
+  CFG.elements=[]; CFG.selectedId=null; _eid=0;
+  CFG.fps=60; CFG.showFps=true; CFG.showRes=true;
+  CFG.loop=true; CFG.volume=1; CFG.smoothing=0.8;
+  _panelW=280; document.documentElement.style.setProperty('--panel-w', '280px');
+  if(CFG.audio){ CFG.audio.loop=true; CFG.audio.volume=1; }
+  const vs=document.getElementById('volSlider'); if(vs) vs.value=1;
+  const lb=document.getElementById('loopBtn'); if(lb){ lb.classList.add('active'); lb.innerHTML=LIST_LOOP_ICON; }
+  addElement('bars');
+  document.getElementById('propsPanel').classList.remove('mobile-open');
+  renderLibrary(); renderProps();
+  if(_lastTool==='perf') renderPerf();
+  fitCanvas();
+  _log('已重置所有设置', 'warn');
 }
 
 const PLAY_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
@@ -1342,6 +1390,7 @@ function renderPerf(){
     <div class="field"><div class="toggle-row"><label style="margin-bottom:0">显示帧率</label><div class="toggle ${CFG.showFps?'on':''}" data-field="showFps"></div></div></div>
     <div class="field"><div class="toggle-row"><label style="margin-bottom:0">显示分辨率</label><div class="toggle ${CFG.showRes?'on':''}" data-field="showRes"></div></div></div>
     <div class="perf-err" id="perfErr"></div>
+    <button type="button" class="perf-reset" id="perfResetBtn">重置所有设置</button>
   `;
   bindPerfFields();
   // 打开面板时重新检测浏览器最大帧率（用户此刻在前台，采样更准）
@@ -1371,6 +1420,7 @@ function bindPerfFields(){
     showErr('');
     if(f>_maxFps){ f=_maxFps; fEl.value=f; _log('帧率超过浏览器上限，自动取上限 '+_maxFps+'fps','warn'); }
     CFG.fps=f;
+    scheduleSave();
     _log('目标帧率设为 '+f+'fps','ok');
   }
   if(wEl) wEl.addEventListener('change',applyRes);
@@ -1379,8 +1429,10 @@ function bindPerfFields(){
   body.querySelectorAll('#perfResPresets button').forEach(b=>b.addEventListener('click',()=>{ wEl.value=b.dataset.w; hEl.value=b.dataset.h; applyRes(); }));
   body.querySelectorAll('#perfFpsPresets button').forEach(b=>b.addEventListener('click',()=>{ fEl.value=b.dataset.fps; applyFps(); }));
   body.querySelectorAll('[data-field="showFps"],[data-field="showRes"]').forEach(t=>{
-    t.addEventListener('click',()=>{ const f=t.dataset.field; CFG[f]=!CFG[f]; t.classList.toggle('on',CFG[f]); });
+    t.addEventListener('click',()=>{ const f=t.dataset.field; CFG[f]=!CFG[f]; t.classList.toggle('on',CFG[f]); scheduleSave(); });
   });
+  const rb=document.getElementById('perfResetBtn');
+  if(rb) rb.addEventListener('click',()=>{ if(typeof confirm!=='function' || confirm('确定重置所有设置吗？')) resetAllSettings(); });
 }
 
 /* 多色渐变编辑器 HTML */
@@ -1784,10 +1836,11 @@ function fitCanvas(){
   rz.addEventListener('pointermove',e=>{
     if(!dragging) return;
     const w=Math.max(180, Math.min(600, startW+(e.clientX-startX)));
+    _panelW=w;
     document.documentElement.style.setProperty('--panel-w', w+'px');
     fitCanvas();
   });
-  function end(){ if(!dragging) return; dragging=false; rz.classList.remove('dragging'); }
+  function end(){ if(!dragging) return; dragging=false; rz.classList.remove('dragging'); scheduleSave(); }
   rz.addEventListener('pointerup',end);
   rz.addEventListener('pointercancel',end);
   window.addEventListener('pointerup',end);
@@ -1928,17 +1981,27 @@ window.addEventListener('keydown',e=>{
 /* ============================================================
    初始化
    ============================================================ */
-const _restored = loadConfig(); // 恒为 false：每次刷新都恢复默认
-// 默认分辨率 1280×720（改由性能面板设置，画布比例下拉/缩放按钮已移除）
-canvas.width=1280; canvas.height=720; CFG.canvas.w=1280; CFG.canvas.h=720;
+const _restored = loadConfig(); // 从 localStorage 恢复分辨率/帧率/元素等设置
+if(_restored){
+  canvas.width=CFG.canvas.w||1280; canvas.height=CFG.canvas.h||720;
+  _eid = CFG.elements.reduce((m,e)=>Math.max(m, e.id||0), 0);
+}else{
+  // 无历史配置：默认 1280×720
+  canvas.width=1280; canvas.height=720; CFG.canvas.w=1280; CFG.canvas.h=720;
+}
 document.getElementById('volSlider').value = CFG.volume;
 document.getElementById('loopBtn').classList.toggle('active', CFG.loop);
 document.getElementById('loopBtn').innerHTML=CFG.loop?LIST_LOOP_ICON:NO_LOOP_ICON;
 const _rfs=document.getElementById('raceFullSw'); if(_rfs) _rfs.checked=raceFullDownload;
 _detectMaxFps();
 renderLibrary();
-// 默认添加一个居中元素（x/y=50），但不自动展开属性面板
-addElement('bars');
+if(_restored && CFG.elements.length){
+  CFG.selectedId=null;
+  renderProps();
+}else{
+  // 默认添加一个居中元素（x/y=50），但不自动展开属性面板
+  addElement('bars');
+}
 document.getElementById('propsPanel').classList.remove('mobile-open');
 _lastTool=null;
 _syncBackdrop();
