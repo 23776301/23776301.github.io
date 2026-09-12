@@ -62,8 +62,8 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .canvas-toolbar .tool-btn:hover{background:var(--hover);color:var(--text)}
 .canvas-toolbar .tool-btn.active{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
 .canvas-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow:auto;padding:0;background:var(--panel)}
-.stage-wrap{position:relative;box-shadow:none;border-radius:0;overflow:hidden;flex-shrink:0;max-width:100%}
-#mainCanvas{display:block;cursor:default;touch-action:none;max-width:100%;height:auto}
+.stage-wrap{position:relative;box-shadow:none;border-radius:0;overflow:visible;flex-shrink:0;align-self:center}
+#mainCanvas{display:block;cursor:default;touch-action:none;transform-origin:0 0}
 
 .player-bar{width:100%;height:48px;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:1px solid rgba(255,255,255,.08);display:flex;align-items:center;padding:0 12px;gap:10px;z-index:5;flex-shrink:0}
 .player-bar .play-btn{width:32px;height:32px;border-radius:50%;background:linear-gradient(120deg,var(--accent),var(--accent2));border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0}
@@ -151,7 +151,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
   .canvas-toolbar .tool-btn{padding:2px 5px;font-size:10px}
   .canvas-stage{overflow:auto;padding:0;background:var(--panel)}
   .stage-wrap{width:100%!important;height:auto!important}
-  .stage-wrap canvas{width:100%!important;height:auto!important}
+  .stage-wrap canvas{width:100%!important;height:auto!important;transform:none!important}
   .player-bar{height:36px;padding:0 6px;gap:6px}
   .player-bar .play-btn{width:28px;height:28px}
   .player-bar .play-btn svg{width:12px;height:12px}
@@ -879,11 +879,7 @@ function render(){
     CFG.analyser.getByteTimeDomainData(CFG.wave);
   }
   // 只对频谱元素应用缩放，画板和背景保持不变
-  const z = CFG.canvas.zoom;
   ctx.save();
-  ctx.translate(canvas.width/2, canvas.height/2);
-  ctx.scale(z, z);
-  ctx.translate(-canvas.width/2, -canvas.height/2);
   const sorted = [...CFG.elements].sort((a,b)=>a.params.y - b.params.y);
   for(const el of sorted){
     const p = el.params;
@@ -909,12 +905,12 @@ function render(){
     const ew = canvas.width*p.w/100, eh = canvas.height*p.h/100;
     const ex = canvas.width*p.x/100-ew/2, ey = canvas.height*p.y/100-eh/2;
     ctx.save();
-    ctx.setLineDash([6/z, 4/z]);
-    ctx.lineWidth = 1.5/z;
+    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = 1.5;
     ctx.strokeStyle = 'rgba(88,166,255,0.95)';
     ctx.strokeRect(ex, ey, ew, eh);
     ctx.setLineDash([]);
-    const hs = 6/z;
+    const hs = 6;
     ctx.fillStyle = 'rgba(88,166,255,0.95)';
     [[ex,ey],[ex+ew,ey],[ex,ey+eh],[ex+ew,ey+eh]].forEach(([hx,hy])=>ctx.fillRect(hx-hs/2,hy-hs/2,hs,hs));
     ctx.restore();
@@ -1367,26 +1363,22 @@ function canvasPos(e){
   const rect=canvas.getBoundingClientRect();
   return { x:(e.clientX-rect.left)/rect.width*canvas.width, y:(e.clientY-rect.top)/rect.height*canvas.height };
 }
-// 画布像素坐标 -> 元素世界坐标（逆缩放变换，保证缩放后命中/拖动仍准确）
+// 画布像素坐标 -> 元素世界坐标（CSS缩放由getBoundingClientRect自动处理）
 function worldPoint(mx,my){
-  const z=CFG.canvas.zoom, cx=canvas.width/2, cy=canvas.height/2;
-  return { x: cx+(mx-cx)/z, y: cy+(my-cy)/z };
+  return { x: mx, y: my };
 }
 function worldRect(p){
   const ew=canvas.width*p.w/100, eh=canvas.height*p.h/100;
   return { x:canvas.width*p.x/100-ew/2, y:canvas.height*p.y/100-eh/2, w:ew, h:eh };
 }
-// 元素在画布像素坐标下的矩形（用于命中检测，已考虑缩放）
+// 元素在画布像素坐标下的矩形（用于命中检测）
 function screenRect(p){
-  const r=worldRect(p), z=CFG.canvas.zoom, cx=canvas.width/2, cy=canvas.height/2;
-  const x1=cx+(r.x-cx)*z, y1=cy+(r.y-cy)*z;
-  const x2=cx+(r.x+r.w-cx)*z, y2=cy+(r.y+r.h-cy)*z;
-  return { x:Math.min(x1,x2), y:Math.min(y1,y2), w:Math.abs(x2-x1), h:Math.abs(y2-y1) };
+  return worldRect(p);
 }
 const HANDLE_CURSOR={ nw:'nwse-resize', se:'nwse-resize', ne:'nesw-resize', sw:'nesw-resize' };
 function getHandleAt(wx,wy,p){
   const r=worldRect(p);
-  const hit=16/Math.max(0.05, CFG.canvas.zoom);
+  const hit=16;
   const corners={ nw:[r.x,r.y], ne:[r.x+r.w,r.y], sw:[r.x,r.y+r.h], se:[r.x+r.w,r.y+r.h] };
   for(const k in corners){
     const [hx,hy]=corners[k];
@@ -1541,14 +1533,28 @@ function setAspect(aspect){
   const base=1280;
   if(w>=h){ canvas.width=base; canvas.height=Math.round(base*h/w); }
   else { canvas.height=base; canvas.width=Math.round(base*w/h); }
-  stageWrap.style.width=canvas.width+'px';
-  stageWrap.style.height=canvas.height+'px';
-  applyZoom();
+  fitCanvas();
   scheduleSave();
 }
 function applyZoom(){
   const z=CFG.canvas.zoom;
+  canvas.style.transform='scale('+z+')';
+  canvas.style.transformOrigin='0 0';
+  stageWrap.style.width=(canvas.width*z)+'px';
+  stageWrap.style.height=(canvas.height*z)+'px';
   document.getElementById('zoomLabel').textContent=Math.round(z*100)+'%';
+}
+function fitCanvas(){
+  const area=document.getElementById('canvasStage');
+  const barH=document.querySelector('.player-bar')?.offsetHeight||48;
+  const logH=document.querySelector('.log-toolbar')?.offsetHeight||28;
+  const availW=area.clientWidth;
+  const availH=area.clientHeight-barH-logH;
+  if(availW<=0||availH<=0){CFG.canvas.zoom=1;applyZoom();return;}
+  const zW=availW/canvas.width;
+  const zH=availH/canvas.height;
+  CFG.canvas.zoom=Math.max(0.1,Math.min(2,Math.min(zW,zH)));
+  applyZoom();
 }
 /* ============================================================
    事件绑定
@@ -1666,7 +1672,7 @@ zout.addEventListener('mouseup',stopZoom);
 zout.addEventListener('mouseleave',stopZoom);
 zout.addEventListener('touchstart',e=>{e.preventDefault();startZoom(-1);});
 zout.addEventListener('touchend',stopZoom);
-document.getElementById('btnFit').addEventListener('click',()=>{CFG.canvas.zoom=1;applyZoom();});
+document.getElementById('btnFit').addEventListener('click',fitCanvas);
 window.addEventListener('keydown',e=>{
   if(e.code==='Space'&&!e.target.matches('input,select,textarea')){e.preventDefault();togglePlay();}
   if(e.code==='Delete'&&CFG.selectedId){removeElement(CFG.selectedId);}
@@ -1684,6 +1690,7 @@ if(_restored && CFG.elements.length) renderProps();
 else addElement('bars');
 _lastTool=null;
 requestAnimationFrame(render);
+window.addEventListener('resize',()=>fitCanvas());
 // 保持默认100%缩放，不自动适配（窗口尺寸变化不改缩放，避免默认被压到很小）
 
 // 自动加载演示音频
