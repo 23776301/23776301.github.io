@@ -254,7 +254,7 @@ index.html
 ## 十、交互
 
 - **元素库**：左侧面板按分类列出效果缩略图，点击即追加一个新元素。
-- **属性面板**：右侧（移动端底部抽屉）分组展示参数。
+- **属性面板**：**左侧**（与元素/背景面板一致，PC 端同占左侧槽位、打开时隐藏元素面板），移动端与其它面板一样**从左侧滑出**；分组展示参数。
 - **画布**：Pointer Events 统一鼠标/触摸——`pointerdown` 命中检测并 `setPointerCapture`，`pointermove` 更新，`pointerup`/`pointercancel` 结束；画布设置 `touch-action:none` 防止触摸滚动。
 - **移动**：拖动元素本体，按 `worldPoint()` 逆缩放换算，缩放下位置依然准确。
 - **四角缩放**：悬停四角显示 `nwse/nesw-resize` 光标，拖动对应角可**自由非等比**改变宽高（对角固定，宽高限制 2%–100%），类似 Windows 窗口缩放。
@@ -340,4 +340,5 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 
 - `.canvas-area` 为纵向 flex：`.canvas-toolbar` → `.canvas-stage`（绘制区，按宽度等比缩放）→ `.player-bar`（进度条，紧挨绘制区下方）→ `.log-toolbar` → `.log-bar`（终端，`flex:1` 向下延伸到浏览器底部）。
 - `.canvas-stage` 为 `flex:0 1 auto; min-height:0; overflow:auto`：空间足够时高度贴合缩放后的画布，空间不足时收缩并滚动，保证进度条与终端始终可见、终端到底。
-- 属性面板 `.props` 默认 `display:none`（PC 与移动端一致），点「属性」按钮加 `.open` 展开，再点收起；打开时右侧占宽，`fitCanvas()` 会重新按新宽度适配。
+- 属性面板 `.props` 默认 `display:none`（PC 与移动端一致），点「属性」按钮加 `.open` 展开，再点收起；PC 端在**左侧**占宽（`.props{border-right; order:1}`，画布区 `order:2`），打开时给元素面板加 `.hidden` 隐藏之，`fitCanvas()` 会重新按新宽度适配。
+- **移动端所有面板从左侧滑出**（不再从底部弹出）：`.library,.props` 统一 `position:fixed; top:40px; bottom:0; left:0; width:82vw; transform:translateX(-100%); transition:transform .3s`，`.mobile-open`/`.open` 时 `translateX(0)`；`#mobilePreview`「收起面板」总是收起所有面板（不再有再点还原逻辑）。

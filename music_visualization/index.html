@@ -56,7 +56,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .lib-item svg{width:70%;height:70%}
 .lib-item .label{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:9px;color:var(--muted);background:linear-gradient(transparent,rgba(0,0,0,.7));padding:4px 2px 2px}
 
-.canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;min-height:0}
+.canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;min-height:0;order:2}
 .canvas-toolbar{height:40px;display:flex;align-items:center;padding:0 12px;gap:8px;border-bottom:1px solid var(--line);background:var(--panel);flex-shrink:0}
 .canvas-toolbar .tool-btn{background:transparent;border:1px solid transparent;color:var(--muted);padding:4px 8px;border-radius:5px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px}
 .canvas-toolbar .tool-btn:hover{background:var(--hover);color:var(--text)}
@@ -91,7 +91,9 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .log-toolbar .log-spacer{flex:1}
 .log-toolbar .log-hint{font-size:9px;color:var(--muted)}
 
-.props{width:310px;background:var(--panel);border-left:1px solid var(--line);display:none;flex-direction:column;flex-shrink:0;overflow:hidden}
+.library.hidden{display:none}
+/* 属性面板与左侧其它面板一致：从左侧展示 */
+.props{width:310px;background:var(--panel);border-right:1px solid var(--line);display:none;flex-direction:column;flex-shrink:0;overflow:hidden;order:1}
 .props.open{display:flex}
 .props-header{padding:12px 14px;border-bottom:1px solid var(--line);font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px}
 .props-header .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
@@ -145,8 +147,10 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
   .iconbar .ibtn{flex:1;height:40px;flex-direction:row;padding:0;gap:3px;justify-content:center}
   .iconbar .ibtn span{font-size:9px}
   .iconbar .ibtn svg{width:16px;height:16px}
-  .library{position:fixed;bottom:0;left:0;right:0;z-index:99;width:100%;max-height:0;border-right:none;border-top:1px solid var(--line);transition:max-height .3s ease;overflow:hidden;background:var(--panel)}
-  .library.mobile-open{max-height:50vh}
+  /* 移动端：所有面板统一从左侧滑出（覆盖在 topbar 下方） */
+  .library,.props{position:fixed;top:40px;bottom:0;left:0;right:auto;width:82vw;max-width:340px;height:auto;max-height:none;z-index:100;background:var(--panel);border-right:1px solid var(--line);border-top:none;transform:translateX(-100%);transition:transform .3s ease;overflow:hidden;display:flex}
+  .library.hidden{display:flex}
+  .library.mobile-open,.props.open,.props.mobile-open{transform:translateX(0)}
   .canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
   .canvas-toolbar{height:32px;padding:0 6px;flex-shrink:0}
   .canvas-toolbar .tool-btn{padding:2px 5px;font-size:10px}
@@ -163,10 +167,8 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
   .player-bar .loop-btn svg{width:14px;height:14px}
   .log-toolbar .log-btn{padding:2px 4px}
   .log-toolbar .log-btn svg{width:10px;height:10px}
-  .props{position:fixed;bottom:0;left:0;right:0;width:auto;z-index:100;background:var(--panel);max-height:0;border-top:1px solid var(--line);transition:max-height .3s ease;overflow:hidden}
-  .props.open,.props.mobile-open{display:flex;max-height:50vh}
   .props-header{padding:12px;font-size:13px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
-  .props-body{overflow-y:auto;padding:10px;max-height:calc(50vh - 50px)}
+  .props-body{flex:1;overflow-y:auto;padding:10px;max-height:none}
   .props .close-btn{margin-left:auto;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px}
 }
 
@@ -1596,18 +1598,22 @@ document.querySelectorAll('.ibtn[data-tool]').forEach(b=>b.addEventListener('cli
   if(_panelTimer) clearTimeout(_panelTimer);
   if(isActive){
     lib.classList.remove('mobile-open');
+    lib.classList.remove('hidden');
     propsPanel.classList.remove('open');
   }else{
     b.classList.add('active');
     _lastTool=tool;
     if(tool==='props'){
+      // 属性面板与左侧其它面板共用左侧位置：打开属性时隐藏元素面板
       lib.classList.remove('mobile-open');
+      lib.classList.add('hidden');
       void propsPanel.offsetHeight;
       renderProps();
       propsPanel.classList.add('open');
       propsPanel.classList.add('mobile-open');
     }else{
       propsPanel.classList.remove('open');
+      lib.classList.remove('hidden');
       lib.classList.remove('mobile-open');
       void lib.offsetHeight;
       _panelTimer=setTimeout(()=>{
@@ -1620,28 +1626,15 @@ document.querySelectorAll('.ibtn[data-tool]').forEach(b=>b.addEventListener('cli
   document.getElementById('mobilePreview').classList.remove('active');
 }));
 document.getElementById('mobilePreview').addEventListener('click',function(){
+  // 总是收起所有面板：不再有「再点一次还原刚收起的面板」的逻辑
   const lib=document.getElementById('library');
   const propsPanel=document.querySelector('.props');
-  const isOpen=lib.classList.contains('mobile-open')||propsPanel.classList.contains('mobile-open');
   lib.classList.remove('mobile-open');
+  lib.classList.remove('hidden');
   propsPanel.classList.remove('mobile-open');
-  if(isOpen){
-    propsPanel.classList.remove('open');
-    document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
-    this.classList.add('active');
-  }else{
-    document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
-    document.querySelector(`.ibtn[data-tool="${_lastTool}"]`)?.classList.add('active');
-    if(_lastTool==='props'){
-      renderProps();
-      propsPanel.classList.add('open');
-      propsPanel.classList.add('mobile-open');
-    }else{
-      renderLibrary();
-      lib.classList.add('mobile-open');
-    }
-    this.classList.remove('active');
-  }
+  propsPanel.classList.remove('open');
+  document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
+  this.classList.add('active');
   fitCanvas();
 });
 // 缩放按钮：点击+长按连续调整
