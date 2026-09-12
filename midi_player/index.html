@@ -10,7 +10,7 @@
 <style>
 :root{
   --bg:#0d0d14; --panel:#16161f; --border:#2a2a3a; --text:#e8e8f0;
-  --dim:#8a8aa0; --accent:#8b5cf6; --accent2:#6366f1; --ok:#2fbf6f; --warn:#e8b64c;
+  --dim:#8a8aa0; --accent:#ef4444; --accent-a18:rgba(239,68,68,.18); --accent-a28:rgba(239,68,68,.28); --accent2:#6366f1; --ok:#2fbf6f; --warn:#e8b64c;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh;overflow-x:hidden}
@@ -110,9 +110,9 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 }
 /* 选中：实心主题紫 + 外圈白框标识（与播放控制按钮一致的选中观感） */
 .pal-btn.active{background:var(--accent);color:#fff}
-.pal-btn:hover{background:#7c3aed}
+.pal-btn:hover{box-shadow:inset 0 0 0 999px rgba(0,0,0,.15)}
 /* 按下反馈 */
-.pal-btn:active{background:#6d28d9;opacity:1}
+.pal-btn:active{box-shadow:inset 0 0 0 999px rgba(0,0,0,.28);opacity:1}
 .pal-btn:focus{outline:none}
 /* 键盘焦点轮廓跟随圆角（仅键盘触发，触屏不显示） */
 .pal-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
@@ -166,7 +166,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .ctl-btn:active{background:rgba(255,255,255,.18);opacity:1}
 .ctl-btn:disabled{opacity:.4;cursor:not-allowed}
 .ctl-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.ctl-btn.primary:hover{background:#7c3aed}
+.ctl-btn.primary:hover{box-shadow:inset 0 0 0 999px rgba(0,0,0,.15)}
 .ctl-btn svg{width:16px;height:16px}
 .control-row .ctl-btn svg{width:52%;height:52%}
 #settingsBtn svg,#paletteToggleBtn svg,#uploadBtn svg{width:58%;height:58%}
@@ -246,11 +246,11 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--text);font-size:13px;cursor:pointer;transition:all .15s;min-height:40px}
 .btn:hover{background:rgba(255,255,255,.08)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-.btn.primary:hover{background:#7c3aed}
+.btn.primary:hover{box-shadow:inset 0 0 0 999px rgba(0,0,0,.15)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
-.speed-btn{border-radius:10px !important;border:none !important;background:rgba(124,58,237,.15) !important;color:#c4b5fd !important}
+.speed-btn{border-radius:10px !important;border:none !important;background:var(--accent-a18,rgba(124,58,237,.15)) !important;color:var(--accent) !important}
 .speed-btn.active{background:var(--accent) !important;color:#fff !important;font-weight:600}
-.speed-btn:hover{background:rgba(124,58,237,.3) !important}
+.speed-btn:hover{background:var(--accent-a28,rgba(124,58,237,.3)) !important}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 
 /* 顶部控制栏（可视化区上方） */
@@ -386,6 +386,27 @@ select:focus{border-color:var(--accent)}
 .file-info b{color:var(--text)}
 .timbre-hint{font-size:11px;color:var(--dim);margin-top:4px;min-height:16px}
 </style>
+<script>
+/* 首屏主题色：在样式之后、渲染之前同步应用已保存的配色，避免「先紫后红」闪烁 */
+(function(){
+  try{
+    var T = { A:'#8b5cf6', B:'#ef4444', C:'#fb7299' };
+    var name = localStorage.getItem('paletteV2') || 'B';
+    var color = T[name] || '#ef4444';
+    if(name === 'custom'){
+      var o = JSON.parse(localStorage.getItem('paletteCustom') || '{}');
+      if(o.theme) color = o.theme;
+    }
+    var h = color.replace('#','');
+    if(h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    var n = parseInt(h,16), r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+    var st = document.documentElement.style;
+    st.setProperty('--accent', color);
+    st.setProperty('--accent-a18', 'rgba('+r+','+g+','+b+',0.18)');
+    st.setProperty('--accent-a28', 'rgba('+r+','+g+','+b+',0.28)');
+  }catch(e){}
+})();
+</script>
 </head>
 <body>
 <div class="container">
@@ -3403,8 +3424,8 @@ const PALETTES = {
 };
 // ===== 主题色（按钮/按键遮罩/开关/滑块）=====
 const PALETTE_THEME = { A: '#8b5cf6', B: '#ef4444', C: '#fb7299' }; // A紫 B红 C哔哩哔哩浅粉
-let _themeAccent = '#8b5cf6';
-let _themeAccentRgba = 'rgba(139,92,246,0.7)';
+let _themeAccent = '#ef4444';
+let _themeAccentRgba = 'rgba(239,68,68,0.7)';
 let _themeBeforeEdit = null;
 function _hexToRgb(hex){
   const h = String(hex).replace('#', '');
@@ -3414,7 +3435,7 @@ function _hexToRgb(hex){
 }
 // 应用主题色：写入 --accent 及半透明变体，并更新按键遮罩色
 function applyTheme(color){
-  const c = color || '#8b5cf6';
+  const c = color || '#ef4444';
   _themeAccent = c;
   const root = document.documentElement;
   root.style.setProperty('--accent', c);
@@ -3425,7 +3446,7 @@ function applyTheme(color){
 }
 
 // ===== 自定义配色（四端颜色插值出 5 级）=====
-const paletteEditColors = { wl: '#5eead4', wh: '#3b82f6', bl: '#f9a8d4', bh: '#be185d', theme: '#8b5cf6' };
+const paletteEditColors = { wl: '#5eead4', wh: '#3b82f6', bl: '#f9a8d4', bh: '#be185d', theme: '#ef4444' };
 const PALETTE_TARGET_LABELS = { wl: '白键最轻', wh: '白键最重', bl: '黑键最轻', bh: '黑键最重', theme: '主题色' };
 // 常用品牌色预置：点按即把取色板滑块定位到该色并实时应用
 const PALETTE_PRESETS = [
@@ -3537,7 +3558,7 @@ function setPalette(name){
   });
   const editBtn = document.getElementById('paletteEditBtn');
   if(editBtn) editBtn.classList.toggle('active', name === 'custom');
-  applyTheme(name === 'custom' ? (paletteEditColors.theme || '#8b5cf6') : PALETTE_THEME[name]);
+  applyTheme(name === 'custom' ? (paletteEditColors.theme || '#ef4444') : PALETTE_THEME[name]);
   updatePaletteSwatch();
   if(typeof allNotes !== 'undefined'){
     const fallDur = 2.0 / fallSpeedMultiplier;
@@ -3625,7 +3646,7 @@ function _pickColorAt(e){
 }
 // 由当前目标色反推 HSL，同步到 2D 板与三个滑块
 function _syncEditHSL(){
-  const hsl = _hexToHsl(paletteEditColors[paletteEditTarget] || '#8b5cf6');
+  const hsl = _hexToHsl(paletteEditColors[paletteEditTarget] || '#ef4444');
   _editHSL.h = hsl[0]; _editHSL.s = hsl[1]; _editHSL.l = hsl[2];
 }
 // 提交 HSL 改动：写回 hex、实时应用、同步四个滑块
@@ -3810,7 +3831,7 @@ function openPaletteModal(){
     paletteEditColors.bl = PALETTES.custom.black[0];
     paletteEditColors.bh = PALETTES.custom.black[4];
   }
-  paletteEditColors.theme = (currentPalette === 'custom' && paletteEditColors.theme) ? paletteEditColors.theme : (_themeAccent || '#8b5cf6');
+  paletteEditColors.theme = (currentPalette === 'custom' && paletteEditColors.theme) ? paletteEditColors.theme : (_themeAccent || '#ef4444');
   paletteEditTarget = 'theme';
   _bindColorBoard();
   _bindPaletteModal();
