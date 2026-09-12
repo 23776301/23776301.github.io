@@ -8,7 +8,7 @@
 |------|------|
 | `/` | 首页导航 |
 | `/music_visualization/` | 音频可视化 |
-| `/midi_player/` | 在线 MIDI 播放器，88 键钢琴可视化 |
+| `/midi_player/` | 在线 MIDI 播放器，多种键型钢琴 · 音游模式 · CDN竞速 |
 | `/library/` | 资源库，按类型分类：rules / tools / skills / plugins / guides |
 | `/links/` | 外部在线工具导航 |
 
