@@ -66,8 +66,15 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
   flex:0 0 auto;
 }
 
-/* 自定义配色弹窗（紧凑、实时生效） */
-.palette-card{background:#1a1a2e;border-radius:10px;padding:10px 12px;width:94%;max-width:400px}
+/* 自定义配色：从「自定义」按钮下方展开的面板（纯黑不透明，便于精准取色） */
+.palette-editor{display:none;position:absolute;top:100%;left:0;margin-top:6px;
+  width:min(92vw,400px);max-height:66.67vh;overflow-y:auto;
+  background:#000;border:1px solid var(--border,#333);border-radius:12px;padding:12px;
+  box-shadow:0 14px 44px rgba(0,0,0,.55);
+  backdrop-filter:none;-webkit-backdrop-filter:none;z-index:10060}
+.palette-editor.open{display:block}
+/* 配色行允许子面板溢出显示，不裁剪 */
+#paletteRow{overflow:visible;max-height:none}
 .palette-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .palette-head h3{margin:0;color:#fff;font-size:13px;font-weight:600}
 .palette-theme-btn{display:flex;align-items:center;gap:5px;padding:2px 8px;border-radius:6px;cursor:pointer;
@@ -472,13 +479,46 @@ select:focus{border-color:var(--accent)}
               <button class="pal-btn palette-btn" data-palette="A" onclick="setPalette('A')" title="纯紫">A</button>
               <button class="pal-btn palette-btn active" data-palette="B" onclick="setPalette('B')" title="青蓝×琥珀红">B</button>
               <button class="pal-btn palette-btn" data-palette="C" onclick="setPalette('C')" title="青绿×品红">C</button>
-              <button class="pal-btn" id="paletteEditBtn" onclick="openPaletteModal()" title="自定义配色">
+              <button class="pal-btn" id="paletteEditBtn" onclick="togglePaletteEditor()" title="自定义配色">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M8.203 2.004c1.261 0 2.304 1.103 2.476 2.538l8.483 8.484l-7.778 7.778a3 3 0 0 1-4.243 0L2.9 16.562a3 3 0 0 1 0-4.243l2.804-2.805V4.961c0-1.633 1.12-2.957 2.5-2.957m.5 2.957v1.553l-1 1V4.961c0-.327.224-.591.5-.591c.277 0 .5.264.5.591m0 5.914V9.342l-4.39 4.391a1 1 0 0 0 0 1.414l4.243 4.243a1 1 0 0 0 1.414 0l6.364-6.364l-5.63-5.63v3.48l-.003.128h-2.01a1 1 0 0 0 .012-.129" clip-rule="evenodd"/><path d="M16.859 16.875a3 3 0 1 0 4.242 0l-2.121-2.121z"/></svg>
               </button>
               </div>
               <div class="pal-hint">无操作2s自动收起配色面板</div>
             </div>
             <div id="paletteSwatch" style="flex:1 1 0;min-width:0;max-width:340px;height:44px;position:relative;"></div>
+            <div id="paletteEditor" class="palette-editor">
+              <div class="palette-head">
+                <h3>自定义配色</h3>
+                <button type="button" id="paletteThemeBtn" class="palette-theme-btn" onclick="selectPaletteTarget('theme')" title="主题色（按钮/按键遮罩/开关/滑块）">
+                  <span class="sw" id="paletteThemeSwatch"></span><span>主题色</span>
+                </button>
+              </div>
+              <div id="paletteEndpoints"></div>
+              <div class="palette-preset-row">
+                <span class="pp-title">常用</span>
+                <div id="palettePresets" class="palette-presets"></div>
+              </div>
+              <div class="palette-colors">
+                <div class="palette-board-wrap">
+                  <canvas id="colorBoard" width="240" height="140"></canvas>
+                  <span id="colorBoardMarker" class="color-board-marker"></span>
+                </div>
+                <div class="hsl-sliders">
+                  <span class="hsl-label">色相</span>
+                  <div class="hsl-slider" data-hsl="h"><span class="hsl-handle" id="hslHandleH"></span></div>
+                  <span class="hsl-label">饱和度</span>
+                  <div class="hsl-slider" data-hsl="s"><span class="hsl-handle" id="hslHandleS"></span></div>
+                  <span class="hsl-label">亮度</span>
+                  <div class="hsl-slider" data-hsl="l"><span class="hsl-handle" id="hslHandleL"></span></div>
+                  <span class="hsl-label">透明度</span>
+                  <div class="hsl-slider" data-hsl="a"><span class="hsl-handle" id="hslHandleA"></span></div>
+                </div>
+              </div>
+              <div class="palette-foot">
+                <span>正在设置：<b id="palettePickLabel" style="color:#fff">主题色</b></span>
+                <span style="display:flex;align-items:center;gap:5px;">当前<span id="palettePickPreview"></span></span>
+              </div>
+            </div>
           </div>
           <div class="debug-panel drop-panel" id="debugPanel">
             <div class="dbg-header">
@@ -894,6 +934,7 @@ const DROP_TOGGLE_MAP = [
   ['manageModal', '#manageBtn svg'],
   ['controlPanel', '#settingsBtn svg'],
   ['paletteRow', '#paletteToggleIcon'],
+  ['paletteEditor', '#paletteEditBtn svg'],
   ['debugPanel', '#debugToggleBtn svg'],
 ];
 function syncDropToggleIcons(){
@@ -907,6 +948,8 @@ function syncDropToggleIcons(){
 }
 function _closeDropPanelsOnly(except){
   document.querySelectorAll('.drop-panel.open').forEach(p => { if(p !== except) p.classList.remove('open'); });
+  const pe = document.getElementById('paletteEditor');
+  if(pe && pe !== except) pe.classList.remove('open'); // 选色面板不参与互斥判断，但同样需要收起
   syncDropToggleIcons(); // 因打开其他面板 / 点击面板外而收起时，同步旋转图标
 }
 // 关闭所有下拉面板 + 选谱/音色下拉（互斥）
@@ -3852,6 +3895,7 @@ function setPaletteRowCollapsed(collapsed){
   const row = _paletteRow();
   if(!row) return;
   row.classList.toggle('open', !collapsed);
+  if(collapsed) closePaletteEditor();
   updatePaletteToggleIcon();
 }
 function cancelPaletteAutoCollapse(){
@@ -3861,6 +3905,7 @@ function cancelPaletteAutoCollapse(){
 function schedulePaletteAutoCollapse(){
   cancelPaletteAutoCollapse();
   const row = _paletteRow();
+  if(_paletteEditorOpen()) return; // 选色面板打开时不启用 2s 无操作自动收起
   if(!isPlaying || !row || !row.classList.contains('open')) return;
   paletteAutoCollapseTimer = setTimeout(() => {
     paletteAutoCollapseTimer = null;
@@ -4143,14 +4188,13 @@ function updatePalettePickUI(){
   _renderPaletteThemeBtn();
   _updateSliderUI();
 }
+function _paletteEditorEl(){ return document.getElementById('paletteEditor'); }
+function _paletteEditorOpen(){ const pe = _paletteEditorEl(); return !!(pe && pe.classList.contains('open')); }
 function _bindPaletteModal(){
   if(_paletteModalBound) return;
   _paletteModalBound = true;
-  const m = document.getElementById('paletteModal');
   const eps = document.getElementById('paletteEndpoints');
   const presets = document.getElementById('palettePresets');
-  // 无叉号/取消按钮：点遮罩空白处关闭；改动已实时生效
-  if(m) m.addEventListener('pointerdown', e => { if(e.target === m) closePaletteModal(); });
   if(eps) eps.addEventListener('click', e => {
     const t = e.target.closest ? e.target.closest('[data-target]') : null;
     if(t) selectPaletteTarget(t.getAttribute('data-target'));
@@ -4161,9 +4205,10 @@ function _bindPaletteModal(){
   });
   _bindHSLSliders();
 }
-function openPaletteModal(){
-  const m = document.getElementById('paletteModal');
-  if(!m) return;
+function openPaletteEditor(){
+  const pe = _paletteEditorEl();
+  if(!pe) return;
+  cancelPaletteAutoCollapse(); // 选色面板打开时不自动收起
   if(PALETTES.custom){
     paletteEditColors.wl = PALETTES.custom.white[0];
     paletteEditColors.wh = PALETTES.custom.white[4];
@@ -4181,11 +4226,17 @@ function openPaletteModal(){
   _renderPaletteThemeBtn();
   updatePalettePickUI();
   _positionBoardMarker();
-  m.style.display = 'flex';
+  pe.classList.add('open');
+  syncDropToggleIcons();
 }
-function closePaletteModal(){
-  const m = document.getElementById('paletteModal');
-  if(m) m.style.display = 'none';
+function closePaletteEditor(){
+  const pe = _paletteEditorEl();
+  if(pe) pe.classList.remove('open');
+  syncDropToggleIcons();
+}
+function togglePaletteEditor(){
+  if(_paletteEditorOpen()) closePaletteEditor();
+  else openPaletteEditor();
 }
 function savePaletteCustom(){ _applyCustomLive(); } // 兼容旧调用：实时应用
 // 恢复上次选择与自定义配色
@@ -4715,42 +4766,6 @@ applyPanelAppearance();     // 统一菜单/调试/选谱/管理面板的透明�
     </div>
   </div>
 </div>
-<div id="paletteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:20000;align-items:center;justify-content:center">
-  <div class="palette-card">
-    <div class="palette-head">
-      <h3>自定义配色</h3>
-      <button type="button" id="paletteThemeBtn" class="palette-theme-btn" onclick="selectPaletteTarget('theme')" title="主题色（按钮/按键遮罩/开关/滑块）">
-        <span class="sw" id="paletteThemeSwatch"></span><span>主题色</span>
-      </button>
-    </div>
-    <div id="paletteEndpoints"></div>
-    <div class="palette-preset-row">
-      <span class="pp-title">常用</span>
-      <div id="palettePresets" class="palette-presets"></div>
-    </div>
-    <div class="palette-colors">
-      <div class="palette-board-wrap">
-        <canvas id="colorBoard" width="240" height="140"></canvas>
-        <span id="colorBoardMarker" class="color-board-marker"></span>
-      </div>
-      <div class="hsl-sliders">
-        <span class="hsl-label">色相</span>
-        <div class="hsl-slider" data-hsl="h"><span class="hsl-handle" id="hslHandleH"></span></div>
-        <span class="hsl-label">饱和度</span>
-        <div class="hsl-slider" data-hsl="s"><span class="hsl-handle" id="hslHandleS"></span></div>
-        <span class="hsl-label">亮度</span>
-        <div class="hsl-slider" data-hsl="l"><span class="hsl-handle" id="hslHandleL"></span></div>
-        <span class="hsl-label">透明度</span>
-        <div class="hsl-slider" data-hsl="a"><span class="hsl-handle" id="hslHandleA"></span></div>
-      </div>
-    </div>
-    <div class="palette-foot">
-      <span>正在设置：<b id="palettePickLabel" style="color:#fff">主题色</b></span>
-      <span style="display:flex;align-items:center;gap:5px;">当前<span id="palettePickPreview"></span></span>
-    </div>
-  </div>
-</div>
-
 <!-- 谱面管理弹窗 -->
 
 </body>

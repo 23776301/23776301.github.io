@@ -186,14 +186,15 @@ MIDI不载声响，是二进制的乐思底稿。
 
 - 自定义色由四个端点 + 主题色构成：`paletteEditColors = { wl, wh, bl, bh, theme }`（白键最轻/最重、黑键最轻/最重、主题色）。
 - `buildCustomPalette(wl, wh, bl, bh)` 对每个端点做线性插值（`ramp` + `lerp`），生成 5 级色阶。
-- 弹窗顶部右侧为**主题色**按钮（与标题「自定义配色」平齐），点击即把编辑目标切到主题色；`PALETTE_TARGET_LABELS` 提供五个目标名称。
+- 面板顶部右侧为**主题色**按钮（与标题「自定义配色」平齐），点击即把编辑目标切到主题色；`PALETTE_TARGET_LABELS` 提供五个目标名称。
 - 弹窗用**黑白键力度图**（`renderPaletteEndpoints`）替代原四个目标按钮：上下两条**直角梯形**色带（与配色方案菜单同形）——左竖直边高为右竖直边的一半，直观表达「轻→重」；「白键 / 黑键」覆盖在各自色带左侧、「力度」居中覆盖，与配色面板的力度图一致。
 - 力度条两端共四个**端点色块**，采用与右上角主题色按钮相同的形式：外层圆角描边框 + 内层色块（`.pe-box` / `.sw`），点击选择目标，选中时圆角框跟随主题色高亮。
 - 取色板顶部预置常用品牌色（`PALETTE_PRESETS`），左侧竖排「常用」二字（`writing-mode:vertical-rl`）；每色下方标注名称（字号 7px，三字总宽约等于色块宽度）：哔哩粉 `#fb7299`、网抑红 `#c20c0c`、小书红 `#ff2442`、Q音绿 `#31c27c`、酷安绿 `#11aa66`、钉钉蓝 `#0089ff`、美团黄 `#ffc300`；点按即把当前目标色设为该色并实时应用。
 - 取色区左半为 **2D 色板**（x=色相、y=明度，按当前饱和度渲染），右半为**色相 / 饱和度 / 亮度 / 透明度 四个滑块**（HSLA），每个滑块左侧标注中文名称（第三个滑块按用户习惯显示为「亮度」而非色彩学标准的「明度」）；2D 板圆点与四个滑块共五个手柄通过 `_syncEditHSL` / `_commitEditHSL` / `_updateSliderUI` 完全同步——拖动任一控件，其余控件与 2D 板同步跟随。
 - **术语**：CSS/色彩模型的标准中文为 Hue=**色相**、Saturation=**饱和度**、Lightness=**明度**、Alpha=**透明度**。UI 上第三个滑块标注为更通俗的「**亮度**」。日常口语里的「色度」通常指 chroma、「亮度」通常指 brightness/luminance，与 HSL 的 H、L 并不等价。
 - **透明度 A**：颜色以 8 位 hex（`#rrggbbaa`）存储，`_hexAlpha` 解析、`_hslaToHex` 生成；`applyTheme` 会把 `--accent-a18/a28` 与 `_themeAccentRgba` 的 alpha 按主题透明度等比缩放；`buildCustomPalette` 的 `lerp` 也会插值 alpha，使黑白键色阶同样支持透明。透明度滑块轨道用棋盘格 + 渐变叠加表示。
-- **实时生效**：任何取色/预置色都经 `_applyCustomLive()` 立即重建 `PALETTES.custom`、`applyTheme()` 并持久化；因此弹窗**没有**叉号、取消、保存按钮，点遮罩空白处即可关闭。
+- **实时生效**：任何取色/预置色都经 `_applyCustomLive()` 立即重建 `PALETTES.custom`、`applyTheme()` 并持久化；因此选色面板**没有**叉号、取消、保存按钮，再点「自定义」按钮或点击面板外即可收起。
+- **选色面板（非弹窗）**：`#paletteEditor` 是 `.palette-editor` 下拉面板，挂在 `#paletteRow` 内、位于「自定义」按钮下方；**背景纯黑 `#000` 绝对不透明**（`backdrop-filter:none`，且**不在** `_panelTargets()` 里，因此**不共享**设置/调试/配色行的透明度与模糊），保证肉眼取色精准。点击「自定义」按钮 `paletteEditBtn` 切换展开/收起，按钮图标在收起时旋转 180°（已加入 `DROP_TOGGLE_MAP`）。
 - 取色板圆点滑块（`_positionBoardMarker`）按 `_editHSL` 的色相/明度定位、透明度同步到圆点 opacity，点预置色或手动取色都会同步移动。
 - 自定义结果保存为 `localStorage.paletteCustom`（含 `theme`），启动时 `loadCustomPalette()` 恢复并注册 `PALETTES.custom`。
 
@@ -360,7 +361,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ## 9.3 弹窗与 Toast
 
-- **自定义配色弹窗** `paletteModal`：目标选择 + 全彩取色板 + 预览 + 保存/取消。
+- **自定义配色面板** `paletteEditor`（在配色行内、「自定义」按钮下方展开）：目标选择 + 全彩取色板 + 实时预览，无保存/取消。
 - **谱面管理弹窗** `manageModal`：列出用户上传与内置谱面；全部用 `createElement` + `textContent` 构建，避免文件名 XSS。
 - **Toast**：`window.showToast(msg)` 顶部居中提示，4s 自动消失；用于谱面加载/解析失败与音色回退提示。
 
@@ -437,8 +438,8 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **按钮**：A/B/C/自定义四个 `.pal-btn` 为 **27px** 圆形；A/B/C 使用 **Google Sans 常规字重**（`@font-face` 来自 `fonts.googleapis.com`，`font-weight:400`，回退 Product Sans / 系统字体）；**始终为不透明主题紫底白字**（无白圈/半透明）。已删除「配色方案」竖排文字标签。
 - **力度图不换行 + 标签叠加**：`paletteRow` 改为 `flex-wrap:nowrap`，`#paletteSwatch` 用 `flex:1 1 0;min-width:0` 自适应收缩，两张力度图不再被挤到下一行；原左侧「白键 / 黑键」独立列已删除，改为把 `白键`/`黑键`/`力度` 用 `_swatchLabel()` **叠加**在梯形渐变图上（白字 + 黑色描边阴影），节省横向空间。
 - **自动收起提示**：A/B/C/自定义按钮下方有一行小字「无操作2s自动收起配色面板」（`.pal-hint`，9px），提示播放中的自动收起行为。
-- **自动收起**：播放中若 2s 内未操作配色面板（点按面板或切换配色会重置计时），自动收起（`schedulePaletteAutoCollapse`，仅在 `isPlaying` 且面板展开时生效）；暂停时取消计时。
-- **四个下拉按钮的旋转动画**：`manageBtn` / `settingsBtn` / `paletteToggleBtn` / `debugToggleBtn` 的图标在各自面板**收起时旋转 180°、展开时转回**（`.drop-trigger svg{transition:transform .2s}`），展开/收起双向都有动画；由 `syncDropToggleIcons()` 依据面板 `.open` 状态集中同步，并在 `_closeDropPanelsOnly()` 末尾调用，因此**打开其他面板**或**点击面板外区域**导致收起时图标同样会旋转。
+- **自动收起**：播放中若 2s 内未操作配色面板（点按面板或切换配色会重置计时），自动收起（`schedulePaletteAutoCollapse`，仅在 `isPlaying` 且面板展开时生效）；暂停时取消计时。**当选色面板 `#paletteEditor` 展开时，不启用 2s 自动收起**（`_paletteEditorOpen()` 守卫），方便慢慢调色；收起配色面板时会一并收起选色面板。
+- **五个下拉按钮的旋转动画**：`manageBtn` / `settingsBtn` / `paletteToggleBtn` / `paletteEditBtn`（选色面板）/ `debugToggleBtn` 的图标在各自面板**收起时旋转 180°、展开时转回**（`.drop-trigger svg{transition:transform .2s}`），展开/收起双向都有动画；由 `syncDropToggleIcons()` 依据面板 `.open` 状态集中同步，并在 `_closeDropPanelsOnly()` 末尾调用，因此**打开其他面板**或**点击面板外区域**导致收起时图标同样会旋转。
 
 ## 9.10 谱面管理面板（下拉浮层）
 
@@ -868,6 +869,7 @@ midi_player/
 ## 2026-09 键型与移动端按钮网格
 | 变更 | 说明 | 提交 |
 | --- | --- | --- |
+| 选色面板 | 自定义配色由居中弹窗改为配色行内下拉面板 `#paletteEditor`（纯黑不透明、不共享透明度），「自定义」按钮旋转 180° 展开；选色面板打开时禁用配色面板 2s 自动收起 | `_pending_` |
 | 73 键音域修正 | 73 键由越界 E2–E8（40–112）改为标准 E1–E7（28–100），缩放 1.209×、偏移 44.49% 正常（原偏移被钳到 100%） | `31a2a1d` |
 | 移动端按钮网格 | 第一行与第二行统一网格：左右间距 = 上下间距 = 6px，10 个圆形按钮 `aspect-ratio:1` 等比缩放（修复椭圆拉伸），第二行 8 个恰好填满整宽且第一行最左/最右与第二行对齐 | `31a2a1d` |
 | 门户描述 | 主页 MIDI 播放器卡片描述新增「多种键型钢琴 / 音游模式 / CDN竞速」 | `b898f8b` |
