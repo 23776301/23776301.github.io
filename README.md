@@ -11,6 +11,7 @@
 | `/midi_player/` | 在线 MIDI 播放器，多种键型钢琴 · 音游模式 · CDN竞速 |
 | `/library/` | 资源库，按类型分类：rules / tools / skills / plugins / guides |
 | `/links/` | 外部在线工具导航 |
+| `/ui-kit/` | 可复用 UI 组件归档：圆形按钮 / 配色面板 / 调试面板（纯 CSS + 演示） |
 
 ## 目录结构
 
@@ -21,11 +22,12 @@
 │   ├── catalog.json        # 资源库数据
 │   └── links.json          # 外部链接数据
 ├── music_visualization/    # 音频可视化页面（index.html + app.css + app.js）
-├── midi_player/            # MIDI 播放器页面（index.html + app.css + app.js）
-│   ├── index.html
+├── midi_player/            # MIDI 播放器页面（样式内联于 index.html + app.js）
+│   ├── index.html          #   含内联 <style id="appCss">
 │   └── midi/               # MIDI 谱子目录
 │       ├── list.json       # 谱子列表配置
 │       └── *.mid           # MIDI 文件
+├── ui-kit/                 # UI 组件归档（ui-kit.css + index.html 演示 + README）
 ├── library/                # 资源库页面
 ├── links/                  # 外部链接页面
 ├── tools/                  # 工具源文件
@@ -43,6 +45,7 @@
 - 音频可视化：<https://down2.top/music_visualization/>
 - 资源库：<https://down2.top/library/>
 - 外部链接：<https://down2.top/links/>
+- UI Kit：<https://down2.top/ui-kit/>
 
 ## 技术要点
 

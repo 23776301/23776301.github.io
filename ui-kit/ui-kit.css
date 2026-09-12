@@ -1,0 +1,276 @@
+/* ============================================================================
+ * UI Kit —— 圆形按钮 / 配色面板 / 调试面板
+ * 抽取自 midi_player（down2.top）。纯 CSS，零依赖、零外部字体，可直接复制复用。
+ *
+ * 用法：
+ *   1) <link rel="stylesheet" href="ui-kit.css">
+ *   2) 在 :root 覆盖 --accent 等令牌即可换肤（见第 0 节）
+ *   3) 按第 2/4/5 节注释里的 HTML 结构搭骨架
+ *   可运行示例见同目录 index.html。
+ *
+ * 目录：
+ *   0. 设计令牌
+ *   1. 基础与按下反馈
+ *   2. 圆形控制按钮 .ctl-btn（10 钮系统 + 移动端等比网格）
+ *   3. 下拉浮层 .drop-panel
+ *   4. 配色面板（.pal-btn / .palette-* / HSL / 色板）
+ *   5. 调试面板（.debug-panel / .dbg-*）
+ *   6. 滑动开关 .switch
+ *   7. 浮动圆钮 .fab-group / .menu-btn / .debug-fab
+ *   8. 全屏悬浮圆钮 .fs-float-btn
+ *   9. 图标按钮 .icon-btn
+ * ========================================================================== */
+
+/* ---- 0. 设计令牌（覆盖这些即可换肤）------------------------------------ */
+:root{
+  --bg:#0d0d14;
+  --panel:#16161f;
+  --border:#2a2a3a;
+  --text:#e8e8f0;
+  --dim:#8a8aa0;
+  --accent:#c20c0c;                  /* 主题色：主按钮 / 选中 / 滑块 / 开关 */
+  --accent-a18:rgba(194,12,12,.18);  /* 主题色 18% 透明（悬停底色） */
+  --accent-a28:rgba(194,12,12,.28);  /* 主题色 28% 透明（选中底色） */
+  --ctl-size:32px;                   /* 圆钮基准尺寸（桌面） */
+  --ctl-gap:clamp(3px,1.2vw,8px);    /* 圆钮间距：随视口收缩但有上下限 */
+}
+
+/* ---- 1. 基础与按下反馈 ------------------------------------------------ */
+/* 去掉移动端默认点击高亮（矩形），改用随圆角裁切的按下反馈 */
+*{-webkit-tap-highlight-color:transparent}
+button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
+
+/* ---- 2. 圆形控制按钮 .ctl-btn -----------------------------------------
+ * 设计要点：
+ *   · 所有圆钮 aspect 相同（1:1），图标用百分比随钮缩放，DPI/视口变化时不变形；
+ *   · 行内两组用 .ctl-spacer 撑开，左右各自成组；
+ *   · 移动端（<=600px）第二行 8 钮 flex:1 1 0 + aspect-ratio:1 恰好铺满整宽，
+ *     第一行圆钮宽度取 calc((100% - 42px)/8) 与第二行对齐（42px = 8 钮间的 6px 间隙合计）。
+ * --------------------------------------------------------------------- */
+/* 2.1 行布局 */
+.control-row{display:flex;align-items:center;gap:var(--ctl-gap);margin-top:6px;flex-wrap:nowrap;position:relative}
+.ctl-group{display:flex;align-items:center;gap:inherit;flex:0 0 auto}
+.ctl-spacer{flex:1 1 0;min-width:0}
+.control-row > .ctl-group > .ctl-btn{flex:0 0 auto;width:var(--ctl-size);height:var(--ctl-size)}
+
+/* 2.2 圆钮本体 */
+.ctl-btn{
+  width:var(--ctl-size);height:var(--ctl-size);flex-shrink:0;padding:0;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+  border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--text);
+  transition:background .15s,color .15s;
+}
+.ctl-btn:hover{background:rgba(255,255,255,.1)}
+.ctl-btn:active{background:rgba(255,255,255,.18);opacity:1}
+.ctl-btn:disabled{opacity:.4;cursor:not-allowed}
+/* 2.3 主色按钮（播放/下一首/循环/上传/设置/配色/调试…） */
+.ctl-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.ctl-btn.primary:hover{box-shadow:inset 0 0 0 999px rgba(0,0,0,.15)}
+/* 2.4 图标随钮缩放：桌面 16px，行内改用百分比（跟随圆钮尺寸） */
+.ctl-btn svg{width:16px;height:16px}
+.control-row .ctl-btn svg{width:52%;height:52%}
+#settingsBtn svg,#paletteToggleBtn svg,#uploadBtn svg{width:58%;height:58%}
+#replayBtn svg{width:30px;height:30px}
+
+/* 2.5 第一行（重播 + 选谱 + 全屏）：与第二行左右边缘对齐 */
+.top-bar-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.top-bar select{padding:4px 8px;font-size:12px;border-radius:10px;width:140px;flex:0 0 auto;flex-shrink:0;min-height:28px}
+
+/* 2.6 移动端 / 低 DPI：10 个圆钮统一网格，等比缩放不溢出 */
+@media(max-width:600px){
+  .top-bar-row{flex-wrap:nowrap;gap:6px}
+  .top-bar-row > select{width:auto;flex:1 1 auto;min-width:0}
+  .top-bar-row > .ctl-btn{flex:0 0 calc((100% - 42px)/8);width:auto;height:auto;aspect-ratio:1}
+  .control-row{gap:6px;padding:0;margin-top:6px;flex-wrap:nowrap}
+  .ctl-spacer{display:none}
+  .control-row > .ctl-group{flex:1 1 0;gap:6px;min-width:0}
+  .control-row > .ctl-group > .ctl-btn{flex:1 1 0;min-width:0;max-width:none;width:auto;height:auto;aspect-ratio:1;padding:0}
+  .ctl-btn svg{width:52%;height:52%}
+  #replayBtn svg{width:75%;height:75%}
+  #settingsBtn svg,#paletteToggleBtn svg,#uploadBtn svg{width:58%;height:58%}
+}
+
+/* ---- 3. 下拉浮层 .drop-panel ------------------------------------------
+ * 从控制行下方展开，浮在内容之上，最大高度约视口 2/3；毛玻璃半透明。
+ * 需要父元素 position:relative（.control-row 已是）。
+ * --------------------------------------------------------------------- */
+.drop-panel{
+  position:absolute;top:100%;right:0;z-index:10050;display:none;
+  width:min(92vw,460px);max-height:66.67vh;overflow-y:auto;margin-top:6px;
+  border:1px solid var(--border);border-radius:12px;padding:12px;
+  box-shadow:0 14px 44px rgba(0,0,0,.55);
+  background:rgba(0,0,0,0);
+  backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
+}
+.drop-panel.open{display:block}
+/* 触发按钮上的图标展开时旋转 */
+.drop-trigger svg{transition:transform .2s}
+
+/* ---- 4. 配色面板 ------------------------------------------------------
+ * 4.1 圆形配色钮 A/B/C/编辑：与播放控制钮同观感、略小（27px）
+ * 4.2 配色行：左列 A/B/C + 提示，中间色带，右侧自定义面板
+ * 4.3 自定义面板：纯黑不透明（便于精准取色），含端点、预设、色板 + HSL、页脚
+ * --------------------------------------------------------------------- */
+.pal-btn{
+  width:27px;height:27px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  padding:0;border:none;cursor:pointer;
+  background:var(--accent);color:#fff;
+  font-size:12px;font-weight:400;
+  transition:background .15s,box-shadow .15s;
+}
+.pal-btn.active{background:var(--accent);color:#fff}
+.pal-btn:hover{box-shadow:inset 0 0 0 999px rgba(0,0,0,.15)}
+.pal-btn:active{box-shadow:inset 0 0 0 999px rgba(0,0,0,.28);opacity:1}
+.pal-btn:focus{outline:none}
+.pal-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+.palette-row{display:none;align-items:center;gap:8px;flex-wrap:nowrap;min-width:230px}
+.palette-row.open{display:flex}
+.pal-grid{display:flex;gap:6px;flex-shrink:0}
+.pal-col{display:flex;flex-direction:column;gap:3px;flex-shrink:0}
+.pal-hint{font-size:9px;line-height:1;color:#888;white-space:nowrap}
+#paletteToggleIcon{transition:transform .2s}
+
+.palette-editor{display:none;position:absolute;top:100%;left:0;margin-top:6px;
+  width:min(92vw,400px);max-height:66.67vh;overflow-y:auto;
+  background:#000;border:1px solid var(--border,#333);border-radius:12px;padding:12px;
+  box-shadow:0 14px 44px rgba(0,0,0,.55);
+  backdrop-filter:none;-webkit-backdrop-filter:none;z-index:10060}
+.palette-editor.open{display:block}
+#paletteRow{overflow:visible;max-height:none}
+.palette-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.palette-head h3{margin:0;color:#fff;font-size:13px;font-weight:600}
+.palette-theme-btn{display:flex;align-items:center;gap:5px;padding:2px 8px;border-radius:6px;cursor:pointer;
+  border:1px solid #333;background:rgba(255,255,255,.04);color:#ddd;font-size:11px}
+.palette-theme-btn.active{border-color:var(--accent);background:var(--accent-a18,rgba(139,92,246,.18));color:#fff}
+.palette-theme-btn .sw{width:14px;height:14px;border-radius:3px;border:1px solid #555}
+#paletteEndpoints{position:relative;display:flex;flex-direction:column;gap:4px;margin-bottom:6px}
+.pe-row{display:flex;align-items:center;gap:6px}
+.pe-bar{position:relative;flex:1;height:20px;min-width:0}
+.pe-bar svg{display:block;width:100%;height:100%}
+.pe-box{width:22px;height:22px;border-radius:6px;border:1px solid #333;background:rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex:0 0 auto}
+.pe-box .sw{width:14px;height:14px;border-radius:3px;border:1px solid #555}
+.pe-box.sel{border-color:var(--accent);background:var(--accent-a18,rgba(194,12,12,.18))}
+.palette-preset-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.pp-title{writing-mode:vertical-rl;text-orientation:upright;font-size:9px;color:#aaa;letter-spacing:1px;line-height:1;flex:0 0 auto}
+.palette-presets{flex:1;display:flex;justify-content:space-between;gap:4px;min-width:0}
+.pp-item{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;cursor:pointer;padding:0;flex:1;min-width:0}
+.pp-swatch{width:22px;height:22px;border-radius:5px;border:1px solid rgba(255,255,255,.25);display:block;transition:transform .1s}
+.pp-item:hover .pp-swatch{transform:scale(1.1)}
+.pp-item:active .pp-swatch{transform:scale(.94)}
+.pp-name{font-size:7px;line-height:1;color:#aaa;white-space:nowrap;width:22px;text-align:center}
+.palette-colors{display:flex;gap:8px;height:108px;margin-bottom:6px}
+.palette-board-wrap{position:relative;flex:0 0 50%;height:100%}
+.palette-board-wrap canvas{width:100%;height:100%;border-radius:6px;cursor:crosshair;touch-action:none;display:block}
+.hsl-sliders{flex:1;display:grid;grid-template-columns:auto 1fr;grid-auto-rows:1fr;column-gap:5px;row-gap:3px;align-items:center;min-width:0;height:100%}
+.hsl-label{font-size:9px;color:#aaa;text-align:right;white-space:nowrap;line-height:1}
+.hsl-slider{position:relative;height:100%;min-height:0;border-radius:5px;cursor:pointer;border:1px solid #333;touch-action:none}
+.hsl-slider[data-hsl="a"]{background:repeating-conic-gradient(#3a3a44 0% 25%, #26262e 0% 50%) 0 0 / 8px 8px}
+.hsl-handle{position:absolute;top:50%;left:0;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #222;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 3px rgba(0,0,0,.8)}
+.color-board-marker{position:absolute;width:12px;height:12px;border-radius:50%;border:2px solid #fff;
+  transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 4px rgba(0,0,0,.85)}
+.palette-foot{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#ccc}
+.palette-foot #palettePickPreview{display:inline-block;width:22px;height:13px;border-radius:3px;border:1px solid #555;vertical-align:middle}
+
+/* ---- 5. 调试面板 ------------------------------------------------------
+ * 5.1 面板容器 5.2 头部工具条/开关/重置按钮 5.3 动作图标行 5.4 日志区
+ * --------------------------------------------------------------------- */
+.debug-panel{display:none;flex-direction:column;overflow:hidden}
+.debug-panel.open{display:flex}
+.dbg-section{margin-top:18px;padding-top:12px;border-top:1px solid var(--border)}
+.dbg-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:10px;color:var(--dim);margin-bottom:6px}
+.dbg-toolbar label{display:flex;align-items:center;gap:4px;cursor:pointer}
+.dbg-toolbar input[type=range]{width:64px}
+.appearance-sliders{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.appearance-sliders .pct{min-width:2.5em;text-align:right;font-variant-numeric:tabular-nums}
+.dbg-header{flex:0 0 auto}
+.dbg-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+.dbg-actions button{background:#333;color:#fff;border:none;width:26px;height:26px;padding:0;cursor:pointer;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+.dbg-actions button svg{width:14px;height:14px}
+.dbg-actions button:hover{background:#444}
+.dbg-reset-btn{display:inline-flex;align-items:center;gap:5px;background:#7f1d1d;color:#fff;border:1px solid #b91c1c;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;opacity:1;backdrop-filter:none;-webkit-backdrop-filter:none;flex:0 1 auto;min-width:0;white-space:nowrap}
+.dbg-toolbar .dbg-reset-btn:first-of-type{margin-left:auto}
+.dbg-actions #debugCopyBtn{margin-left:auto}
+.dbg-reset-btn:hover{background:#991b1b;color:#fff}
+.dbg-reset-btn:active{background:#6b1616}
+.dbg-reset-btn svg{width:14px;height:14px}
+.dbg-log{
+  flex:1;min-height:0;overflow-y:auto;padding:4px 8px;line-height:1.4;
+  font-family:monospace;font-size:11px;
+  background:rgba(0,0,0,.35);border:1px solid #333;border-radius:6px;
+}
+.dbg-off .dbg-body{display:none}
+.dbg-off .dbg-off-hint{display:block}
+.dbg-off-hint{display:none;font-size:11px;color:var(--dim);padding:6px 2px}
+
+/* ---- 6. 滑动开关 .switch（替代勾选框）-------------------------------- */
+.switch{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--dim);user-select:none}
+.switch input{position:absolute;opacity:0;width:0;height:0}
+.switch .track{position:relative;width:34px;height:18px;border-radius:9px;background:#c9ccd6;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);transition:background .15s;flex-shrink:0}
+.switch .knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.4);transition:transform .15s}
+.switch input:checked + .track{background:var(--accent)}
+.switch input:checked + .track .knob{transform:translateX(16px)}
+.switch input:focus-visible + .track{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- 7. 浮动圆钮（移动端菜单/调试，可拖拽、自动淡出）----------------- */
+.fab-group{
+  position:fixed;left:0;top:67%;transform:translateY(-50%);
+  z-index:10000;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  transition:opacity .4s ease, transform .4s ease, left .3s ease;
+  opacity:1;
+}
+.fab-group.faded{opacity:0.5}
+.fab-group.hidden-btn{display:none !important}
+.menu-btn{
+  display:none;
+  width:44px;height:44px;
+  border-radius:50%;
+  background:rgba(22,22,31,.85);border:1px solid var(--border);
+  color:#2fbf6f;font-size:18px;cursor:grab;
+  align-items:center;justify-content:center;
+  backdrop-filter:blur(8px);
+  touch-action:none;user-select:none;
+  flex:0 0 auto;
+}
+.menu-btn.faded{opacity:0.5}
+.menu-btn:active{cursor:grabbing}
+.menu-btn.hidden-btn{display:none !important}
+@media(max-width:800px){.menu-btn{display:flex}}
+.debug-fab{
+  display:flex;
+  width:44px;height:44px;
+  border-radius:50%;
+  background:rgba(22,22,31,.85);border:1px solid var(--border);
+  color:#2fbf6f;font-family:monospace;font-size:9px;font-weight:bold;letter-spacing:.5px;
+  align-items:center;justify-content:center;cursor:pointer;
+  backdrop-filter:blur(8px);user-select:none;
+  flex:0 0 auto;
+}
+
+/* ---- 8. 全屏悬浮圆钮 .fs-float-btn（活跃内缩、空闲吸附半露）---------- */
+.fs-float-btn{
+  position:absolute;z-index:5;width:42px;height:42px;border-radius:50%;padding:0;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  border:1px solid var(--accent);background:var(--accent);color:#fff;
+  opacity:.5;transition:opacity .3s, transform .3s;
+}
+.fs-float-btn:active{opacity:.7}
+.fs-float-btn svg{width:20px;height:20px}
+.fs-settings{top:0;left:0;transform:translate(14px,14px)}
+.fs-exit{top:0;right:0;transform:translate(-14px,14px)}
+.fs-overlay.faded .fs-float-btn{opacity:.2}
+.fs-overlay.faded .fs-settings{transform:translate(-30%,-30%)}
+.fs-overlay.faded .fs-exit{transform:translate(30%,-30%)}
+
+/* ---- 9. 图标按钮 .icon-btn ------------------------------------------- */
+.icon-btn{background:none;border:none;color:var(--dim);cursor:pointer;padding:4px;display:inline-flex;align-items:center;border-radius:6px}
+.icon-btn:hover{color:var(--text);background:rgba(255,255,255,.08)}
+.icon-btn.del:hover{color:#ff6b6b}
+.icon-btn.dl:hover{color:var(--accent)}
+.icon-btn svg{width:16px;height:16px}
+.icon-btn:disabled{opacity:.85;cursor:default;background:none}
+.icon-btn.loading svg{animation:_spin .8s linear infinite}
+.icon-btn .btn-pct{font-size:10px;font-weight:600;color:var(--accent)}
+@keyframes _spin{to{transform:rotate(360deg)}}
