@@ -317,7 +317,8 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **解析**：使用 `@tonejs/midi` 解析，汇总所有轨道的音符为 `{midi, time, duration, velocity}` 并按时间排序，计算总时长与密度。
 - **内置谱**：`midi/list.json` 描述 `name`/`file`，通过 `fetchFresh` 获取最新列表。
-- **默认音色映射**：`songDefaultTimbre` 将谱面文件名映射到默认音色（如 `Rush E 3.mid → clavinet`）。
+- **默认音色映射**：`songDefaultTimbre` 将谱面文件名映射到默认音色（如 `Rush E 3.mid → clavinet`，`The Sound of Silence.mid → __synth__`）。
+- **默认音色应用与自动切换**（`_applySongDefaultTimbre`）：切到内置谱时按配置处理——① 配置为合成钢琴（如 The Sound of Silence）即正常使用合成钢琴，**不当作「加载失败回退」**；② 默认音色已缓存则直接切换；③ 默认音色本地不存在时提示 `谱面[X]默认使用音色[T]。音色[T]本地不存在，回滚到合成钢琴`，先回滚合成钢琴并**后台下载**（`switchCurrent:false`，不阻塞播放），把「切到 T」作为待办（`_timbreAutoSwitch` + `_timbreGen`）。下载成功后仅当**用户未主动切其他音色**（手动切换会 `_invalidateTimbreAutoSwitch()`）且**当前谱面未播完**（`_songEnded` / `currentSongKey`）时，才记录 `音色[T]下载成功，谱面[X]音色自动切换到[T]` 并自动切换；否则作废待办。
 - **用户上传**：文件读取后立即解析播放，同时写入 IndexedDB `user-songs`，支持在「谱面管理」弹窗中删除；全部本地，不涉及服务器。**非 `.mid/.midi` 文件直接拒绝并 `console.warn`；是 MIDI 但解析失败/无音符也打 warn**（`[AudioDebug][WARN] ...`）。
 - **偏好持久化**：配色（`paletteV2`/`paletteCustom`）、面板位置（`menuBtnPos`）、降级弹窗（`dbgAutoOpen`）。
 
@@ -370,7 +371,8 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.6 PC 布局与全屏
 
 - **视口自适应**：PC 端整页锁定视口高度（`height:100dvh` + `overflow:hidden`），`.layout` 用 `flex:1` 撑满，`.visual-panel` 与 Canvas 以 `flex:1` 占满——**钢琴键始终贴在屏幕底部，无需滚动页面**；菜单面板为浮层，不再挤压绘制区。
-- **顶栏两行**：第一行 `重播 / 选谱列表 / 全屏`（重播在左、全屏在右）；第二行 `播放·暂停 / 下一首 / 循环 / 上传谱面 /（靠右）谱面管理 / 设置 / 配色 / 调试`。进度条与统计信息仍单独置底。
+- **顶栏两行**：第一行 `重播 / 选谱列表 / 全屏`（重播在左、全屏在右）；第二行 `播放·暂停 / 下一首 / 循环 / 上传谱面 / 谱面管理 / 设置 / 配色 / 调试` 共 8 个按钮。进度条与统计信息仍单独置底。
+- **第二行自适应排满宽度**：`.control-row` 为 `flex-wrap:nowrap; justify-content:space-between`，8 个 `.ctl-btn` 用 `flex:0 1 32px; aspect-ratio:1`（不换行、按需收缩），图标用百分比尺寸（`.control-row > .ctl-btn svg{width:52%}`，设置/配色/上传 58%），间距 `clamp(3px,1.2vw,8px)`。这样在窄屏或 DPI 异常（有效 CSS 宽度偏小）时，按钮与图标一起等比缩小，8 个按钮始终恰好排满整行，不会溢出或重叠。
 - **下一首**：`nextSong()` 切到列表下一首，到底回到第一首；`#nextBtn` 在谱面加载后启用。
 - **按钮**：全部为圆形 `.ctl-btn.primary`；上传 `arcticons:folder-upload`、管理 `fluent:text-bullet-list-edit-20-filled`、设置 `solar:settings-minimalistic-bold`、配色 `ic:round-color-lens`、调试 `carbon:debug`、重播 `hugeicons:replay`、全屏 `solar:maximize/minimize-linear`；循环为**列表（`bi:repeat`）/ 单曲（`bi:repeat-1`）/ 不循环（`mdi:repeat-off`）三态**。谱面管理/设置/配色/调试**靠右对齐**（管理按钮 `margin-left:auto`）。设置/配色/上传三个按钮的 SVG 放大到 **18px**（其余仍 16px）。
 - **全屏按钮**：第一行最右，对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。全屏内另有悬浮控件（见 9.11）。
@@ -800,6 +802,8 @@ midi_player/
 | 浮动控件重构 | 锁定按钮普通+全屏常驻（左右、顶部2/5、默认锁定、黑底50%、Toast）；所有悬浮按钮 2s 未点击淡到 10%、锁按钮吸附边缘露一半，仅点按钮才重置；调试面板独立（`carbon:debug` 按钮，配色左侧）；菜单/调试/配色/选谱/管理面板共享透明度；配色面板独立浮层、按钮 32px、播放中 2s 自动收起；软键盘/配色展开不改变渲染区高度 | `244c1dc` |
 | 面板与版型交互 | 谱面管理二次点击收起；删除设置/音色大标题、音色行加「音色选择」标签；键数版型改 6 档滑块并为六种标准音域配置默认缩放/偏移（首键对齐最左）；音色列表加垃圾桶/下载按钮+百分比、未下载不可切换、删除「已就绪」提示；调试面板自动展开开关移最左、最右加重置所有设置按钮、底边对齐设置面板；重播改 `hugeicons:replay` | `cbe84ee` |
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
+| 第二行按钮自适应 | `.control-row` 改 `nowrap + space-between`，8 个按钮 `flex:0 1 32px; aspect-ratio:1`、图标百分比缩放、间距 `clamp`；窄屏 / DPI 异常时按钮与图标等比缩小，恰好排满整行不溢出 | `_pending_` |
+| 默认音色自动切换 | 谱面配置合成钢琴不再视为失败回退；默认音色本地不存在时提示并回滚合成钢琴、后台下载，下载完成后仅在用户未主动切音色且谱面未播完时自动切回并打日志 | `_pending_` |
 | 内置谱表刷新与废弃归类 | `_getBuiltinList` 改联网刷新（`fetchFresh` no-store）+ 旧缓存回退，老用户可拿到最新内置谱表；对比新旧列表，把「之前存在、后来废弃」且用户缓存过的内置谱复制为「我的上传」用户谱（`_migrateDeprecatedBuiltins`），不主动删除任何用户缓存 | `0b0f158` |
 | 横竖屏默认钢琴高度 | 竖屏（渲染区高>宽，移动端竖屏）默认 15%，横屏（PC / 全屏旋转）默认 25%；方向变化自动切换，用户手动值按方向分别记忆 | `_pending_` |
 | 媒体来源日志修正 | 默认谱面与后台预取改走缓存优先的 `fetchMedia`（命中打印「从缓存加载成功」，未命中才走 jsDelivr→Pages）；`fetchMedia` 命中缓存补打来源日志；音色 `_doLoad` 来源日志不再被 `onProgress` 门控；`AudioContext状态变化` 降为 INFO | `3f0ff8b` |
