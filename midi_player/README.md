@@ -445,7 +445,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.12 调试面板（独立浮层）
 
 - 控制行内新增圆形 `.ctl-btn.primary` 调试按钮（`debugToggleBtn`，图标 `carbon:debug`），位于**配色按钮左侧**；点击 `toggleDebugPanel()` 切换 `.debug-panel.open`，面板从控制行**向下展开**（统一 `.drop-panel`，绝对定位），浮在渲染区之上，**不改变渲染区高度**。
-- 面板顶部工具行为：**启用调试开关（左）……重置所有选项按钮（右上角，红色警示样式，含文字「重置所有选项」+ `fluent:arrow-reset-20-regular` 图标，`resetAllSettings()` 清除 `panelTransparency` / `panelBlur` / `dbgAutoOpen` / `deletedBuiltin` 后刷新）**。第二行为日志操作按钮：**降级自动展开开关（最左，每次开启调试默认打开）→ 复制 → 下载日志 → 清空 → 置顶 → 置底**（圆形 SVG 图标）；日志区 200px 可滚动。面板底边通过 `_syncDebugPanelHeight()` 与设置面板实际高度对齐。**透明 / 模糊滑块已移除**（只在设置面板保留）。
+- 面板顶部工具行为：**启用调试开关（左）……重置所有选项按钮（右上角，红色警示样式，含文字「重置所有选项」+ `fluent:arrow-reset-20-regular` 图标，`resetAllSettings()` 清除全部设置项（`panelTransparency` / `panelBlur` / `dbgAutoOpen` / `debugEnabled` / `menuBtnPos` / `paletteCustom` / `paletteV2`）后刷新，但**不触碰用户数据**：`deletedBuiltin`、IndexedDB 用户谱面、资产缓存均保留）**。第二行为日志操作按钮：**降级自动展开开关（最左，每次开启调试默认打开）→ 复制 → 下载日志 → 清空 → 置顶 → 置底**（圆形 SVG 图标）；日志区 200px 可滚动。面板底边通过 `_syncDebugPanelHeight()` 与设置面板实际高度对齐。**透明 / 模糊滑块已移除**（只在设置面板保留）。
 - **开启调试即降耗**：每次勾选「启用调试」自动把透明度设为 **20%**（较暗）、模糊 **0%** 并提示。
 - 调试总开关默认开启；关闭后 `body.dbg-off` 隐藏 `.dbg-body`、停止采集与监控。
 - 面板背景与设置 / 配色 / 选谱 / 管理面板共享同一透明度与模糊（见 9.7、9.9）。
@@ -561,6 +561,10 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - 调试总开关默认开启，关闭后停止全部调试采集、监控与降级自动展开。
 - 日志分级配色：`[INFO]` 蓝（下载/加载）、`[OK]` 绿（恢复）、黄 warn、红 error；同类告警 1.5s 折叠，DOM 行数上限 300。
 - 降级/恢复文案：`最近 2s出现N次性能问题，分别是丢帧、积压、停摆、时间戳，触发渲染降级` / `性能问题已缓解，恢复完整渲染。`
+- **详细日志不打印 `[AudioDebug]` 前缀**：调试信息本就只含音频调试，`_appendDebug` 统一剥掉 `[AudioDebug]`（保留 `[INFO]`/`[WARN]`/`[OK]` 等级）；状态区镜像再去掉等级前缀，只留正文。
+- **统一资源标签**：下载/加载/删除等日志用「显示名（中文）-[原始文件名]」，如 `音色[古钢琴]-[clavinet]`、`谱面[Rush E 3]-[Rush E 3.mid]`（`_timbreLabel` / `_songLabel` / `_songId`）。
+- **主动暂停/切后台不误报**：页面隐藏时音频被浏览器挂起属正常（自动暂停），停摆与输出静音判定均加 `!document.hidden` 门控；`visibilitychange` 冻结/恢复时把 `lastLoudTime` 拉到现在并 `resetClocks()`，避免恢复后误报「静音 Ns / 长时间停摆」。`stopAll` 统计文案统一为「停止了 N 个 note」。
+- **重置所有选项**：清空全部设置项并刷新；**不触碰用户数据**（`deletedBuiltin`、IndexedDB 用户谱面、资产缓存），既不恢复用户删过的谱面，也不删掉用户未主动删除的谱面。
 
 # 十二、测试与验证方法
 
@@ -599,8 +603,8 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 | 帧间隔 | >80ms 告警并追赶 | 瞬时卡顿 |
 | 帧率 | <30fps 告警（预期 60fps） | 渲染压力 |
 | `renderCapacity` | peak > 0.9 或 underrun > 0.02 | 音频线程过载 |
-| 音频时钟 | wall > 1200ms 且 audio < 30% | 时钟停摆 |
-| RMS | 播放中且触发过音符但静音 > 1.5s | 输出静音 |
+| 音频时钟 | wall > 1200ms 且 audio < 30%（页面可见时） | 时钟停摆 |
+| RMS | 播放中且触发过音符但静音 > 1.5s（页面可见时） | 输出静音 |
 | 节点 | `created - ended > 500` 且增长 > 200 | 节点泄漏 |
 | 存活节点 | 较上次 +50 连续 3 次 | 泄漏趋势 |
 | 跳过音符 | > 0 | 音符积压 |
@@ -792,6 +796,7 @@ midi_player/
 | 浮动控件重构 | 锁定按钮普通+全屏常驻（左右、顶部2/5、默认锁定、黑底50%、Toast）；所有悬浮按钮 2s 未点击淡到 10%、锁按钮吸附边缘露一半，仅点按钮才重置；调试面板独立（`carbon:debug` 按钮，配色左侧）；菜单/调试/配色/选谱/管理面板共享透明度；配色面板独立浮层、按钮 32px、播放中 2s 自动收起；软键盘/配色展开不改变渲染区高度 | `244c1dc` |
 | 面板与版型交互 | 谱面管理二次点击收起；删除设置/音色大标题、音色行加「音色选择」标签；键数版型改 6 档滑块并为六种标准音域配置默认缩放/偏移（首键对齐最左）；音色列表加垃圾桶/下载按钮+百分比、未下载不可切换、删除「已就绪」提示；调试面板自动展开开关移最左、最右加重置所有设置按钮、底边对齐设置面板；重播改 `hugeicons:replay` | `cbe84ee` |
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
+| 调试信息统一整改 | 详细日志去掉 `[AudioDebug]` 前缀（保留等级）；下载/加载/删除统一为「中文名-[原始文件名]」（`_timbreLabel`/`_songLabel`）；`stopAll` 文案「个节点」→「个 note」；切后台（自动暂停）不再误报静音/停摆（`!document.hidden` 门控 + `visibilitychange` 重置基线）；重置所有选项真正清空全部设置项（含调试开关/配色/菜单位置）但保留用户谱面与缓存 | `_pending_` |
 | 暂停停摆误报 | 主动暂停后恢复播放的首帧不再误报「检测到长时间停摆 xxxms」：`resetClocks()` 除音频时钟基线外，同时清空 `AudioDebugMonitor.lastFrameAudioTime`，与 `visibilitychange` 回前台处理一致 | `bf0c642` |
 | 开关与流量 | 滑动开关关闭态由深灰 `#444` 改为浅灰 `#c9ccd6`（不再像被冻结），knob 加阴影；`The Sound of Silence` 后台预取改走 jsDelivr，减少 Pages 流量 | `0aef5ba` |
 | 谱面面板字号 | 谱面列表正文 14px→12px 与设置/调试面板一致，标题 15px→14px 稍大一号，空态 13px→12px | `297935f` |

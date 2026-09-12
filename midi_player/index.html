@@ -590,6 +590,12 @@ function timbreDisplayName(id){
   }
   return id;
 }
+// 统一资源标签：显示名（中文）-[原始文件名]
+function _baseName(file){ return String(file).split('/').pop(); }
+function _songDisplayName(file){ return _baseName(file).replace(/\.[^.]+$/, ''); }
+function _timbreLabel(id){ return '音色[' + timbreDisplayName(id) + ']-[' + id + ']'; }
+function _songId(file){ return '[' + _songDisplayName(file) + ']-[' + _baseName(file) + ']'; }
+function _songLabel(file){ return '谱面' + _songId(file); }
 
 function _fmtArgs(args){
   return args.map(a => {
@@ -619,21 +625,22 @@ function setStatus(text, sticky){
   if(text && !sticky){ _statusTimer = setTimeout(() => { el.textContent = ''; }, 3500); }
 }
 function _appendDebug(msg, type) {
-  // 调试面板未展开时，把最新日志精简后显示到状态区（去掉 [AudioDebug][LEVEL] 前缀）
+  // 调试信息本就只有音频调试：详细日志不再打印 [AudioDebug] 前缀（保留 [INFO]/[WARN]/[OK] 等级）
+  const clean = String(msg).replace(/\[AudioDebug\]\s*/g, '');
+  // 调试面板未展开时，把最新 INFO 日志精简后显示到状态区（再去掉等级前缀）
   const _dp = document.getElementById('debugPanel');
-  // 仅把 INFO 日志镜像到状态区（去掉前缀），避免性能告警等噪声刷屏
   if(type === 'log' && (!_dp || !_dp.classList.contains('open'))){
-    setStatus(String(msg).replace(/^\[AudioDebug\](\[[A-Za-z]+\])?\s*/, ''));
+    setStatus(clean.replace(/^\[[A-Za-z]+\]\s*/, ''));
   }
   if(!_debugContentEl) {
     _debugContentEl = document.getElementById('debugTerminalContent');
   }
   const time = new Date().toLocaleTimeString();
-  const color = _debugColor(type, msg);
+  const color = _debugColor(type, clean);
   const line = document.createElement('div');
   line.style.color = color;
   line.style.wordBreak = 'break-all';
-  line.textContent = '[' + time + '] ' + msg;
+  line.textContent = '[' + time + '] ' + clean;
   if(_debugContentEl) {
     // 仅当用户原本就在底部附近时才自动跟随；否则保持当前位置，不打断查看历史
     const atBottom = _debugContentEl.scrollHeight - _debugContentEl.scrollTop - _debugContentEl.clientHeight < 40;
@@ -1053,8 +1060,10 @@ const AudioDebugMonitor = {
     const at = audioCtx ? audioCtx.currentTime : 0;
     const wallDelta = now - this.lastWall;
     const audioDeltaMs = (at - this.lastAudioTime) * 1000;
+    // 页面隐藏时音频被浏览器挂起属正常（相当于自动暂停），不做时钟停摆/输出静音判定
+    const visible = (typeof document === 'undefined') || !document.hidden;
     // 音频时钟停摆检测：真实时间在走，但 audioCtx.currentTime 几乎不前进
-    if(wallDelta > 1200 && audioDeltaMs < wallDelta * 0.3){
+    if(visible && wallDelta > 1200 && audioDeltaMs < wallDelta * 0.3){
       this.audioStalls++;
       console.warn('[AudioDebug] 音频时钟疑似停摆! wall+' + wallDelta.toFixed(0) +
         'ms 但 audioTime+' + audioDeltaMs.toFixed(0) + 'ms state=' + (audioCtx ? audioCtx.state : 'null'));
@@ -1073,7 +1082,7 @@ const AudioDebugMonitor = {
     const playing = (typeof isPlaying !== 'undefined') && isPlaying;
     const autoSounding = _autoSoundingMode();
     const silentSec = this.lastLoudTime ? (now - this.lastLoudTime) / 1000 : 0;
-    if(autoSounding && playing && this.notesTriggered > 0 && silentSec > 1.5){
+    if(autoSounding && playing && visible && this.notesTriggered > 0 && silentSec > 1.5){
       console.warn('[AudioDebug] ★输出静音 ' + silentSec.toFixed(1) + 's 但仍在触发音符! rms=' +
         this.rmsLast.toFixed(6) + ' minRms=' + this.rmsMinWindow.toFixed(6) +
         ' state=' + (audioCtx ? audioCtx.state : 'null') +
@@ -1311,7 +1320,6 @@ const SoundfontLoader = {
   // 读取音色文本：优先缓存（内容校验通过），否则走网络并回写缓存
   async _fetchSoundfontText(name, urls, absUrl, cache, onProgress){
     if(typeof urls === 'string') urls = [urls];
-    const disp = timbreDisplayName(name);
     if(cache){
       try{
         const cached = await cache.match(absUrl, {ignoreSearch: true});
@@ -1320,7 +1328,7 @@ const SoundfontLoader = {
           if(this._isSoundfontText(t, name)){ if(onProgress) onProgress(1); return { text: t, fromCache: true, source: '缓存' }; }
           // 坏缓存：删除该条，强制走网络，避免永久命中
           await cache.delete(absUrl);
-          console.warn('[AudioDebug] 检测到损坏的音色缓存并已清除: ' + name);
+          console.warn('[AudioDebug] 检测到损坏的音色缓存并已清除: ' + _timbreLabel(name));
         }
       }catch(e){}
     }
@@ -1333,7 +1341,7 @@ const SoundfontLoader = {
         lastErr = new Error('下载失败 HTTP ' + r.status);
       }catch(e){ lastErr = e; }
       const next = urls[i + 1] ? ('，尝试从' + ((i + 1 === 1) ? 'Pages' : '备用源') + '直取…') : '';
-      console.log('[AudioDebug][INFO] 音色[' + disp + ']从' + src + '下载失败' + next);
+      console.log('[AudioDebug][INFO] ' + _timbreLabel(name) + '从' + src + '下载失败' + next);
     }
     if(!resp) throw lastErr || new Error('下载失败');
     const _total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
@@ -1427,7 +1435,7 @@ const SoundfontLoader = {
     this.cachedNames.add(name);
     // 正常播放音色相关每个谱只打一条：缓存命中 vs 网络下载
     if(onProgress){
-      console.log('[AudioDebug][INFO] 音色[' + timbreDisplayName(name) + ']' +
+      console.log('[AudioDebug][INFO] ' + _timbreLabel(name) +
         (res.fromCache ? '从缓存加载成功!' : '从' + (res.source || '网络') + '下载成功!'));
     }
     if(onProgress) onProgress(1, '音色加载完成');
@@ -1538,7 +1546,7 @@ const SoundfontLoader = {
         stopped++;
       }
     }
-    if(stopped > 0) console.log('[AudioDebug][INFO] stopAll停止了', stopped, '个节点');
+    if(stopped > 0) console.log('[AudioDebug][INFO] stopAll停止了', stopped, '个 note');
     // 合成钢琴分支的振荡器也必须停掉
     if(this.synthVoices.length){
       const n = this.synthVoices.length;
@@ -1546,7 +1554,7 @@ const SoundfontLoader = {
         try{ v.oscs.forEach(o => o.stop(t + 0.02)); }catch(e){}
       }
       this.synthVoices.length = 0;
-      console.log('[AudioDebug][INFO] stopAll停止了', n, '个合成钢琴voice');
+      console.log('[AudioDebug][INFO] stopAll停止了', n, '个 note（合成钢琴）');
     }
     this.activeSynth = {};
     this.activeVoices.length = 0;
@@ -2101,9 +2109,10 @@ let userGestureSeen = false;
   }
 
   // 并行启动：谱面与音色同时开始下载
-  console.log('[AudioDebug][INFO] 默认下载：谱面[' + DEFAULT_SONG + '][The Sound of Silence.mid] 音色[clavinet][acoustic_grand_piano][electric_piano_2]');
+  console.log('[AudioDebug][INFO] 默认下载：' + _songLabel('midi/' + DEFAULT_SONG) + ' ' +
+    ['clavinet', 'acoustic_grand_piano', 'electric_piano_2'].map(_timbreLabel).join(' '));
   console.log('[AudioDebug][INFO] 并行加载默认谱面与音色 midi/' + DEFAULT_SONG);
-  _fetchWithProgress('midi/' + DEFAULT_SONG, (p) => setStatus('谱面[' + DEFAULT_SONG + ']下载 ' + Math.round(p) + '%'))
+  _fetchWithProgress('midi/' + DEFAULT_SONG, (p) => setStatus('谱面[' + _songDisplayName(DEFAULT_SONG) + ']下载 ' + Math.round(p) + '%'))
   .then(blob => blob.arrayBuffer()).then(buf => {
     console.log('[AudioDebug][INFO] 默认谱面已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
     midiBuf = buf;
@@ -2194,8 +2203,7 @@ async function _getBuiltinList(){
 // 带进度的下载（jsDelivr -> Pages 回退），用于「重新下载」时在按钮上显示百分比
 async function _fetchWithProgress(relPath, onProgress){
   const absUrl = AssetCache._abs(relPath);
-  const base = String(relPath).split('/').pop();
-  const blob = await _fetchBlobWithProgress(_mediaUrls(relPath), onProgress, '谱面[' + base + ']');
+  const blob = await _fetchBlobWithProgress(_mediaUrls(relPath), onProgress, _songLabel(relPath));
   try{
     const cache = await caches.open(AssetCache.cacheName);
     await cache.put(absUrl, new Response(blob));
@@ -2343,8 +2351,11 @@ function toggleManageModal(){
 }
 // 重置所有设置：清空本站设置项并刷新
 function resetAllSettings(){
-  // 只重置「设置项」；deletedBuiltin 是用户的删除结果，不随重置恢复
-  const keys = ['panelTransparency', 'panelBlur', 'dbgAutoOpen'];
+  // 真正的重置：清空所有「设置项」（含调试总开关、配色、菜单按钮位置等）。
+  // 绝不触碰用户数据：deletedBuiltin（用户的删除结果）、IndexedDB 用户谱面、资产缓存均保留，
+  // 因此重置不会恢复用户删过的谱面，也不会删掉用户未主动删除的谱面。
+  const keys = ['panelTransparency', 'panelBlur', 'dbgAutoOpen', 'debugEnabled',
+                'menuBtnPos', 'paletteCustom', 'paletteV2'];
   try{ keys.forEach(k => localStorage.removeItem(k)); }catch(e){}
   try{ location.reload(); }catch(e){}
 }
@@ -2426,8 +2437,8 @@ async function deleteBuiltinSong(file){
       }
     }
   }catch(e){}
-  if(freed > 0) console.log('[AudioDebug][INFO] 谱面[' + file.split('/').pop() + ']已删除，释放本地缓存 ' + (freed/1024/1024).toFixed(2) + 'MB');
-  else console.log('[AudioDebug][INFO] 谱面[' + file.split('/').pop() + ']已删除（无本地缓存）');
+  if(freed > 0) console.log('[AudioDebug][INFO] ' + _songLabel(file) + ' 已删除，释放本地缓存 ' + (freed/1024/1024).toFixed(2) + 'MB');
+  else console.log('[AudioDebug][INFO] ' + _songLabel(file) + ' 已删除（无本地缓存）');
   await loadSongList();
 }
 async function redownloadBuiltinSong(file, onProgress){
@@ -2439,7 +2450,7 @@ async function redownloadBuiltinSong(file, onProgress){
 async function onSongChange(val){
   if(!val) return;
   stopPlay();
-  console.log('[AudioDebug][INFO] 切换谱面 ' + val);
+  console.log('[AudioDebug][INFO] 切换谱面 ' + _songId(String(val).replace(/^(builtin:|user:)/, '')));
   try{
     let buf, name;
     if(val.startsWith('builtin:')){
@@ -2448,12 +2459,12 @@ async function onSongChange(val){
       if(!resp.ok) throw new Error('加载失败 HTTP ' + resp.status);
       buf = await resp.arrayBuffer();
       name = file.split('/').pop();
-      console.log('[AudioDebug][INFO] 谱面 ' + name + ' 已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
+      console.log('[AudioDebug][INFO] ' + _songLabel(name) + ' 已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
     } else if(val.startsWith('user:')){
       name = val.substring(5);
       buf = await getUserSong(name);
       if(!buf) throw new Error('本地缓存中未找到');
-      console.log('[AudioDebug][INFO] 本地谱面 ' + name + ' 已读取 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
+      console.log('[AudioDebug][INFO] ' + _songLabel(name) + '（本地缓存）已读取 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
     }
     parseAndPlayMidi(buf, name);
     // 内置谱自动切换默认音色
@@ -2529,7 +2540,7 @@ function onMidiFile(event){
   const fname = file.name || '';
   // 非 .mid / .midi 格式：直接拒绝并告警
   if(!/\.midi?$/i.test(fname)){
-    console.warn('[AudioDebug][WARN] 上传文件非 MIDI 格式：[' + fname + ']');
+    console.warn('[AudioDebug][WARN] 上传文件非 MIDI 格式：' + _songId(fname));
     showToast('仅支持 .mid / .midi 文件');
     event.target.value = '';
     return;
@@ -2543,7 +2554,7 @@ function onMidiFile(event){
       if(!allNotes.length){
         throw new Error('谱面为空或格式错误（未解析到任何音符）');
       }
-      console.log('[AudioDebug][INFO] 谱面[' + fname + ']上传解析成功，共 ' + allNotes.length + ' 个音符');
+      console.log('[AudioDebug][INFO] ' + _songLabel(fname) + ' 上传解析成功，共 ' + allNotes.length + ' 个音符');
       // 上传后自动播放
       initAudio();
       if(audioCtx.state === 'suspended') audioCtx.resume();
@@ -2561,10 +2572,10 @@ function onMidiFile(event){
           }
         }
       }catch(err){
-        console.warn('保存到本地缓存失败:', err);
+        console.warn('[AudioDebug][WARN] 保存到本地缓存失败:', err);
       }
     }catch(err){
-      console.warn('[AudioDebug][WARN] 谱面解析失败：[' + fname + '] ' + (err && err.message ? err.message : err));
+      console.warn('[AudioDebug][WARN] ' + _songLabel(fname) + ' 解析失败：' + (err && err.message ? err.message : err));
       showToast('解析失败：' + err.message);
     }
   };
@@ -2850,6 +2861,9 @@ document.addEventListener('visibilitychange', () => {
     // 记录当前歌曲时间，并停掉已排程/正在发声的音符，避免回前台后重叠
     currentTime = (audioCtx.currentTime - playStartTime) * playSpeed;
     SoundfontLoader.stopAll();
+    // 后台冻结属正常：把“最近有声时间”拉到现在并重置诊断基线，避免恢复后误报静音/停摆
+    AudioDebugMonitor.lastLoudTime = performance.now();
+    AudioDebugMonitor.resetClocks();
     if(rafId) cancelAnimationFrame(rafId);
     rafId = null;
     return;
@@ -2862,7 +2876,8 @@ document.addEventListener('visibilitychange', () => {
   // 否则会用后台期间流逝的 audioCtx.currentTime 一次性跳播、丢掉中间谱面
   playStartTime = audioCtx.currentTime - currentTime / playSpeed;
   nextNoteIndex = lowerBound(allNotes, currentTime);
-  AudioDebugMonitor.lastFrameAudioTime = 0; // 避免把后台空档误判为严重丢帧
+  AudioDebugMonitor.lastLoudTime = performance.now();
+  AudioDebugMonitor.resetClocks(); // 清 lastFrameAudioTime/lastWall，避免把后台空档误判为丢帧/停摆
   // 安全兜底：若渲染循环已停止则重新拉起
   if(!rafId) rafId = requestAnimationFrame(playLoop);
 });
