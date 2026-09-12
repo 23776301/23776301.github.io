@@ -306,7 +306,8 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **音频图**：`AudioContext → masterGain → outputAnalyser → destination`，`masterGain` 负责总音量，`outputAnalyser`（FFT 2048）用于静音探测。
 - **音色加载**：Soundfont 以 `*-ogg.js` 形式提供，内部是 base64 音频；`_doLoad` 下载/读缓存后用 `new Function` 求值取数据，再经 `atob → Uint8Array → decodeAudioData` 得到 `AudioBuffer`。
-- **媒体源（多 CDN 并发择优 + Pages 兜底）**：音色、内置谱面、可视化示例音频同时向多个 jsDelivr 边缘节点（`cdn.jsdelivr.net` / `fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `testingcf.jsdelivr.net`，均 `gh/teecatt/teecatt.github.io@master/...`）发起请求，`_raceFetch()` 用 `Promise.any` 取**最先成功返回响应**的源，其余立即 `AbortController.abort()`（Happy Eyeballs 思路，既快又不浪费流量），全部失败才回退本站相对路径（同源 Pages）。GitHub Release 资产不发送 CORS 头，浏览器 `fetch` 无法读取，故未采用。
+- **媒体源（多 CDN 并发择优 + Pages 兜底）**：音色、内置谱面、可视化示例音频同时向多个 jsDelivr 边缘节点（`cdn.jsdelivr.net` / `fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `testingcf.jsdelivr.net`，均 `gh/teecatt/teecatt.github.io@master/...`）发起请求，全部失败才回退本站相对路径（同源 Pages）。GitHub Release 资产不发送 CORS 头，浏览器 `fetch` 无法读取，故未采用。
+- **完整下载竞速（默认开，设置面板可关）**：默认 `_raceDownloadFull()` 让所有镜像**同时完整下载**同一资源，`Promise.any` 取**最先完整下载完成**的源；胜出后立即 `AbortController.abort()` 暂停其余镜像并丢弃其不完整分片（`_downloadBlobFrom` 在中止/失败时把分片数组置 null）。关闭开关后改用 `_fetchByFirstByte()`（`_raceFetch` 只竞速首字节，胜出源再流式读取）。开关状态存于 `localStorage.raceFull`，默认 `true`。
 - **预解码**：`predecodeAll` 按每批 8 个解码 88 个音，避免一次性解码阻塞主线程与音频时间线。
 - **合成回退**：`__synth__` 分支用 3 个振荡器（triangle + 2×sine）叠加，指数包络收尾；仅在音色加载失败或 buffer 缺失时使用。
 - **增益**：`timbreGain` 对个别音色（三角钢琴、古钢琴）单独设增益，其余默认 3.0。
@@ -820,6 +821,7 @@ midi_player/
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
 | 调试面板滚动 | 日志区不再单独滚动，整个调试面板作为唯一滚动容器；滚动日志即滚动面板，避免日志滑到边界后底部仍被裁掉需二次滑动；自动跟随与置顶/置底改为滚动面板 | `36904c1` |
 | 调试终端滚动修正 | 终端 `.dbg-log` 恢复为唯一滚动容器；`_debugPanelScrollEl` 改回返回终端，修复置顶/置底按钮无效与自动展开不滚到最新；自动展开改用 requestAnimationFrame 等布局完成 | `397c5fc` |
+| 完整下载竞速开关 | 默认所有镜像同时完整下载、最快完成者胜出并 abort 其余（清理不完整分片）；设置面板「完整下载竞速」开关（默认开，`localStorage.raceFull`），关闭后回到首字节竞速 | `_pending_` |
 | 多 CDN 并发择优 | `_mediaUrls` 返回 jsDelivr 四节点（cdn/fastly/gcore/testingcf）+ 本站 Pages；新增 `_raceFetch`/`_promiseAny`/`_sourceLabel`，同时请求、最先响应者胜出并 abort 其余；音色与谱面下载全部走此路径 | `5411bf0` |
 | 谱面状态与实时更新 | 谱面管理初始按真实缓存显示（未下载=下载图标）；新增 `_onDownloadBuiltin` 与 `refreshManageRowState`；默认资源按序预取（Rush E3→古钢琴→Sound of Silence→三角钢琴→电钢琴2），每项下载完成实时刷新对应行/音色状态 | `4902ff2` |
 | 复制反馈矢量勾 | 调试面板复制按钮反馈由 `copied✓` 文字改为 lucide `copy-check` 矢量勾；修复反馈后图标不恢复的问题（改存 `innerHTML` 并在 1.2s 后还原） | `2b5dfc8` |

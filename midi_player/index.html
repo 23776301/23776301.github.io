@@ -536,6 +536,13 @@ select:focus{border-color:var(--accent)}
               <input type="range" id="keyboardPresetSlider" min="0" max="6" step="1" value="6" oninput="onKeyboardPresetChange()">
               <span class="val" id="keyboardPresetVal">88键</span>
             </div>
+            <div class="row">
+              <label title="开：所有镜像同时完整下载，最快完成者胜出；关：仅竞速首字节响应">完整下载竞速</label>
+              <label class="switch" style="margin-left:auto">
+                <input id="raceFullSw" type="checkbox" checked onchange="onRaceFullChange()">
+                <span class="track"><span class="knob"></span></span>
+              </label>
+            </div>
 
             <div class="row">
               <label>音色选择</label>
@@ -1388,6 +1395,21 @@ function _sourceLabel(url){
   for(const b of CDN_BASES){ if(u.indexOf(b.base) === 0) return b.name; }
   try{ return new URL(u).hostname; }catch(e){ return '备用源'; }
 }
+// 完整下载竞速开关（默认开）：开=所有镜像同时完整下载、最快完成者胜出；
+// 关=仅竞速首字节响应，胜出源再流式读取。
+let raceFullDownload = true;
+// 恢复开关状态（默认开）
+try{
+  const _rf = localStorage.getItem('raceFull');
+  if(_rf !== null) raceFullDownload = _rf === '1';
+  const _rfEl = document.getElementById('raceFullSw');
+  if(_rfEl) _rfEl.checked = raceFullDownload;
+}catch(e){}
+function onRaceFullChange(){
+  const cb = document.getElementById('raceFullSw');
+  raceFullDownload = !!(cb && cb.checked);
+  try{ localStorage.setItem('raceFull', raceFullDownload ? '1' : '0'); }catch(e){}
+}
 // Promise.any 兼容封装：返回最先成功的结果；全部失败时抛出含 errors 数组的对象
 function _promiseAny(ps){
   if(typeof Promise.any === 'function') return Promise.any(ps);
@@ -1419,7 +1441,7 @@ async function _raceFetch(urls){
   controllers.forEach((c, i) => { if(c && i !== winner.i){ try{ c.abort(); }catch(e){} } });
   return { resp: winner.resp, url: winner.url, index: winner.i, list };
 }
-// 流式读取响应为 Blob 并回报百分比
+// 流式读取响应为 Blob 并回报百分比（首字节竞速模式用）
 async function _readBlobWithProgress(resp, onProgress){
   const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
   if(!resp.body || !total || !resp.body.getReader){
@@ -1439,9 +1461,58 @@ async function _readBlobWithProgress(resp, onProgress){
   if(onProgress) onProgress(100);
   return blob;
 }
-// 并发择优下载：胜出源流式读取，若读取中途失败则按顺序回退其余候选
-async function _fetchBlobWithProgress(urls, onProgress, label, quiet){
-  const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+// 单源：完整下载为 Blob（流式回报百分比；中止/失败时丢弃已收分片）
+async function _downloadBlobFrom(url, onProgress, signal){
+  const resp = await fetch(url, signal ? { signal } : undefined);
+  if(!resp.ok) throw new Error('HTTP ' + resp.status);
+  const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
+  if(!resp.body || !total || !resp.body.getReader){
+    const blob = new Blob([await resp.arrayBuffer()]);
+    if(onProgress) onProgress(100);
+    return blob;
+  }
+  const reader = resp.body.getReader();
+  let chunks = []; let received = 0;
+  try{
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      chunks.push(value); received += value.length;
+      if(onProgress) onProgress(received / total * 100);
+    }
+  }catch(e){
+    chunks = null; // 中止/失败：清理该镜像的不完整分片
+    throw e;
+  }
+  if(onProgress) onProgress(100);
+  return new Blob(chunks);
+}
+// 完整下载竞速：所有镜像同时完整下载，最先完成者胜出；其余立即 abort 并丢弃不完整分片
+async function _raceDownloadFull(list, onProgress){
+  if(!list.length) throw new Error('无可用源');
+  const hasAbort = (typeof AbortController !== 'undefined');
+  const controllers = list.map(() => hasAbort ? new AbortController() : null);
+  const progresses = list.map(() => 0);
+  const report = () => { if(onProgress) onProgress(Math.max.apply(null, progresses)); };
+  const attempts = list.map((url, i) => _downloadBlobFrom(
+    url,
+    (p) => { progresses[i] = p; report(); },
+    controllers[i] ? controllers[i].signal : null
+  ).then(blob => ({ blob, i, url })));
+  let winner;
+  try{
+    winner = await _promiseAny(attempts);
+  }catch(agg){
+    const errs = (agg && agg.errors) || [];
+    const first = errs.find(e => e);
+    throw (first instanceof Error) ? first : new Error('全部源下载失败');
+  }
+  // 胜出：暂停其余镜像的下载并清理其不完整分片
+  controllers.forEach((c, i) => { if(c && i !== winner.i){ try{ c.abort(); }catch(e){} } });
+  return { blob: winner.blob, url: winner.url, index: winner.i };
+}
+// 首字节竞速（开关关闭时）：胜出源流式读取，若读取中途失败则按顺序回退其余候选
+async function _fetchByFirstByte(list, onProgress, label, quiet){
   const winner = await _raceFetch(list);
   const order = [winner.index, ...list.map((_, i) => i).filter(i => i !== winner.index)];
   let lastErr;
@@ -1459,6 +1530,21 @@ async function _fetchBlobWithProgress(urls, onProgress, label, quiet){
     }
   }
   throw lastErr || new Error('下载失败');
+}
+// 下载入口：默认「完整下载竞速」，可在设置面板关闭改用「首字节竞速」
+async function _fetchBlobWithProgress(urls, onProgress, label, quiet){
+  const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+  if(raceFullDownload){
+    try{
+      const res = await _raceDownloadFull(list, onProgress);
+      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + _sourceLabel(res.url) + '下载成功!');
+      return res.blob;
+    }catch(e){
+      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '全部镜像下载失败：' + (e && e.message ? e.message : e));
+      throw e;
+    }
+  }
+  return _fetchByFirstByte(list, onProgress, label, quiet);
 }
 
 const SoundfontLoader = {
@@ -1550,31 +1636,44 @@ const SoundfontLoader = {
         }
       }catch(e){}
     }
-    // 并发择优：同时请求所有候选源，最先返回响应的胜出
-    let resp = null, source = null;
-    try{
-      const winner = await _raceFetch(urls);
-      resp = winner.resp;
-      source = _sourceLabel(winner.url);
-    }catch(e){
-      console.warn('[AudioDebug][WARN] ' + _timbreLabel(name) + '全部源下载失败：' + (e && e.message ? e.message : e));
-      throw e;
-    }
-    const _total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
-    let text;
-    if(resp.body && resp.body.getReader && _total){
-      const reader = resp.body.getReader();
-      const chunks = []; let received = 0;
-      while(true){
-        const {done, value} = await reader.read();
-        if(done) break;
-        chunks.push(value); received += value.length;
-        if(onProgress) onProgress(received / _total);
+    // 并发择优：默认完整下载竞速，开关关闭时改首字节竞速
+    const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+    let text, source;
+    if(raceFullDownload){
+      try{
+        const res = await _raceDownloadFull(list, (p) => { if(onProgress) onProgress(p / 100); });
+        text = await res.blob.text();
+        source = _sourceLabel(res.url);
+        if(onProgress) onProgress(1);
+      }catch(e){
+        console.warn('[AudioDebug][WARN] ' + _timbreLabel(name) + '全部镜像下载失败：' + (e && e.message ? e.message : e));
+        throw e;
       }
-      text = await new Blob(chunks).text();
     } else {
-      text = await resp.text();
-      if(onProgress) onProgress(1);
+      let resp = null;
+      try{
+        const winner = await _raceFetch(list);
+        resp = winner.resp;
+        source = _sourceLabel(winner.url);
+      }catch(e){
+        console.warn('[AudioDebug][WARN] ' + _timbreLabel(name) + '全部源下载失败：' + (e && e.message ? e.message : e));
+        throw e;
+      }
+      const _total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
+      if(resp.body && resp.body.getReader && _total){
+        const reader = resp.body.getReader();
+        const chunks = []; let received = 0;
+        while(true){
+          const {done, value} = await reader.read();
+          if(done) break;
+          chunks.push(value); received += value.length;
+          if(onProgress) onProgress(received / _total);
+        }
+        text = await new Blob(chunks).text();
+      } else {
+        text = await resp.text();
+        if(onProgress) onProgress(1);
+      }
     }
     if(!this._isSoundfontText(text, name)){
       throw new Error('音色文件内容异常（非JS，可能被截断或网络返回错误页）: ' +
@@ -2796,7 +2895,7 @@ function toggleManageModal(){
 async function resetAllSettings(){
   // 重置所有设置项 + 恢复演示谱面标记 + 下载缺失的默认资源
   const keys = ['panelTransparency', 'panelBlur', 'dbgAutoOpen', 'debugEnabled',
-                'menuBtnPos', 'paletteCustom', 'paletteV2'];
+                'menuBtnPos', 'paletteCustom', 'paletteV2', 'raceFull'];
   try{ keys.forEach(k => localStorage.removeItem(k)); }catch(e){}
   // 恢复演示谱面（Rush E3）标记：从「已删除」集合中移除
   try{
