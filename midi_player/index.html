@@ -2189,15 +2189,61 @@ function saveDeletedBuiltin(set){
   try{ localStorage.setItem('deletedBuiltin', JSON.stringify([...set])); }catch(e){}
 }
 
-// 内置谱列表：内存 + Cache 优先，避免每次打开都联网拉取
+// 内置谱列表：每次会话联网刷新（no-store），失败回退缓存；并检测被废弃的内置谱
 let _builtinListCache = null;
 async function _getBuiltinList(){
   if(_builtinListCache) return _builtinListCache;
+  // 先取旧缓存列表，用于对比出「之前存在、后来废弃」的内置谱
+  let oldList = null;
   try{
-    const resp = await AssetCache.fetch('midi/list.json'); // cache-first
-    if(resp.ok){ _builtinListCache = await resp.json(); return _builtinListCache; }
+    const cache = await caches.open(AssetCache.cacheName);
+    const cached = await cache.match(AssetCache._abs('midi/list.json'), {ignoreSearch: true});
+    if(cached && cached.ok) oldList = await cached.clone().json();
   }catch(e){}
-  return _builtinListCache || [];
+  let list = null;
+  try{
+    // 联网刷新，帮老用户拿到最新内置谱表（绕过 HTTP 缓存）
+    const resp = await AssetCache.fetchFresh('midi/list.json');
+    if(resp.ok) list = await resp.json();
+  }catch(e){}
+  if(!list) list = oldList; // 离线/失败：沿用旧缓存
+  if(!list) return _builtinListCache || [];
+  _builtinListCache = list;
+  // 对比新旧列表：废弃的内置谱转入「我的上传」，绝不主动删除用户缓存中的谱面
+  if(oldList){
+    const oldFiles = new Set(oldList.map(s => s.file));
+    const newFiles = new Set(list.map(s => s.file));
+    const added = [...newFiles].filter(f => !oldFiles.has(f));
+    const removed = [...oldFiles].filter(f => !newFiles.has(f));
+    if(added.length || removed.length){
+      console.log('[AudioDebug][INFO] 内置谱表已更新：新增 ' + added.length + ' 首、废弃 ' + removed.length + ' 首');
+    }
+    const deleted = getDeletedBuiltin();
+    const deprecated = removed.filter(f => !deleted.has(f));
+    if(deprecated.length) await _migrateDeprecatedBuiltins(deprecated);
+  }
+  return list;
+}
+// 被废弃的内置谱：若用户本地缓存过，则复制为「我的上传」用户谱（保留原缓存，绝不删除）
+async function _migrateDeprecatedBuiltins(files){
+  let existing;
+  try{ existing = new Set((await getUserSongs()).map(s => s.name)); }catch(e){ existing = new Set(); }
+  for(const file of files){
+    const name = file.split('/').pop();
+    if(existing.has(name)) continue;
+    let buf = null;
+    try{
+      const cache = await caches.open(AssetCache.cacheName);
+      const cached = await cache.match(AssetCache._abs(file), {ignoreSearch: true});
+      if(cached && cached.ok) buf = await cached.clone().arrayBuffer();
+    }catch(e){}
+    if(!buf) continue; // 用户没缓存过：不主动下载废弃谱，也不新增记录
+    try{
+      await saveUserSong(name, buf);
+      existing.add(name);
+      console.log('[AudioDebug][INFO] ' + _songLabel(file) + ' 内置谱已废弃，已转入「我的上传」（原缓存保留，未删除）');
+    }catch(e){}
+  }
 }
 // 带进度的下载（jsDelivr -> Pages 回退），用于「重新下载」时在按钮上显示百分比
 async function _fetchWithProgress(relPath, onProgress, quiet){
