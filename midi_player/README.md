@@ -821,7 +821,7 @@ midi_player/
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
 | 调试面板滚动 | 日志区不再单独滚动，整个调试面板作为唯一滚动容器；滚动日志即滚动面板，避免日志滑到边界后底部仍被裁掉需二次滑动；自动跟随与置顶/置底改为滚动面板 | `36904c1` |
 | 调试终端滚动修正 | 终端 `.dbg-log` 恢复为唯一滚动容器；`_debugPanelScrollEl` 改回返回终端，修复置顶/置底按钮无效与自动展开不滚到最新；自动展开改用 requestAnimationFrame 等布局完成 | `397c5fc` |
-| 完整下载竞速开关 | 默认所有镜像同时完整下载、最快完成者胜出并 abort 其余（清理不完整分片）；设置面板「完整下载竞速」开关（默认开，`localStorage.raceFull`），关闭后回到首字节竞速 | `_pending_` |
+| 完整下载竞速开关 | 默认所有镜像同时完整下载、最快完成者胜出并 abort 其余（清理不完整分片）；设置面板「完整下载竞速」开关（默认开，`localStorage.raceFull`），关闭后回到首字节竞速 | `cda4960` |
 | 多 CDN 并发择优 | `_mediaUrls` 返回 jsDelivr 四节点（cdn/fastly/gcore/testingcf）+ 本站 Pages；新增 `_raceFetch`/`_promiseAny`/`_sourceLabel`，同时请求、最先响应者胜出并 abort 其余；音色与谱面下载全部走此路径 | `5411bf0` |
 | 谱面状态与实时更新 | 谱面管理初始按真实缓存显示（未下载=下载图标）；新增 `_onDownloadBuiltin` 与 `refreshManageRowState`；默认资源按序预取（Rush E3→古钢琴→Sound of Silence→三角钢琴→电钢琴2），每项下载完成实时刷新对应行/音色状态 | `4902ff2` |
 | 复制反馈矢量勾 | 调试面板复制按钮反馈由 `copied✓` 文字改为 lucide `copy-check` 矢量勾；修复反馈后图标不恢复的问题（改存 `innerHTML` 并在 1.2s 后还原） | `2b5dfc8` |
