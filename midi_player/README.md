@@ -563,6 +563,8 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - 降级/恢复文案：`最近 2s出现N次性能问题，分别是丢帧、积压、停摆、时间戳，触发渲染降级` / `性能问题已缓解，恢复完整渲染。`
 - **详细日志不打印 `[AudioDebug]` 前缀**：调试信息本就只含音频调试，`_appendDebug` 统一剥掉 `[AudioDebug]`（保留 `[INFO]`/`[WARN]`/`[OK]` 等级）；状态区镜像再去掉等级前缀，只留正文。
 - **统一资源标签**：下载/加载/删除等日志用「显示名（中文）-[原始文件名]」，如 `音色[古钢琴]-[clavinet]`、`谱面[Rush E 3]-[Rush E 3.mid]`（`_timbreLabel` / `_songLabel` / `_songId`）。
+- **媒体来源日志以缓存为准**：谱面统一走 `fetchMedia`（Cache API 优先），命中缓存打印 `从缓存加载成功!`，未命中才走 `_fetchWithProgress`（jsDelivr→Pages）并打印 `从jsDelivr/Pages下载成功!`；后台预取（The Sound of Silence）静默且同样缓存优先。修复了默认谱面/预取直接调用网络路径、导致每次都误报「从 jsDelivr 下载」的问题。音色 `_doLoad` 同样缓存优先，且不再因 `onProgress` 为空而隐藏来源日志（后台预取也会打印）。
+- **告警分级**：`AudioContext状态变化` 由 warn 降为 INFO；页面隐藏时的静音/停摆不告警（见上）。
 - **主动暂停/切后台不误报**：页面隐藏时音频被浏览器挂起属正常（自动暂停），停摆与输出静音判定均加 `!document.hidden` 门控；`visibilitychange` 冻结/恢复时把 `lastLoudTime` 拉到现在并 `resetClocks()`，避免恢复后误报「静音 Ns / 长时间停摆」。`stopAll` 统计文案统一为「停止了 N 个 note」。
 - **重置所有选项**：清空全部设置项并刷新；**不触碰用户数据**（`deletedBuiltin`、IndexedDB 用户谱面、资产缓存），既不恢复用户删过的谱面，也不删掉用户未主动删除的谱面。
 
@@ -796,6 +798,7 @@ midi_player/
 | 浮动控件重构 | 锁定按钮普通+全屏常驻（左右、顶部2/5、默认锁定、黑底50%、Toast）；所有悬浮按钮 2s 未点击淡到 10%、锁按钮吸附边缘露一半，仅点按钮才重置；调试面板独立（`carbon:debug` 按钮，配色左侧）；菜单/调试/配色/选谱/管理面板共享透明度；配色面板独立浮层、按钮 32px、播放中 2s 自动收起；软键盘/配色展开不改变渲染区高度 | `244c1dc` |
 | 面板与版型交互 | 谱面管理二次点击收起；删除设置/音色大标题、音色行加「音色选择」标签；键数版型改 6 档滑块并为六种标准音域配置默认缩放/偏移（首键对齐最左）；音色列表加垃圾桶/下载按钮+百分比、未下载不可切换、删除「已就绪」提示；调试面板自动展开开关移最左、最右加重置所有设置按钮、底边对齐设置面板；重播改 `hugeicons:replay` | `cbe84ee` |
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
+| 媒体来源日志修正 | 默认谱面与后台预取改走缓存优先的 `fetchMedia`（命中打印「从缓存加载成功」，未命中才走 jsDelivr→Pages）；`fetchMedia` 命中缓存补打来源日志；音色 `_doLoad` 来源日志不再被 `onProgress` 门控；`AudioContext状态变化` 降为 INFO | `_pending_` |
 | 调试信息统一整改 | 详细日志去掉 `[AudioDebug]` 前缀（保留等级）；下载/加载/删除统一为「中文名-[原始文件名]」（`_timbreLabel`/`_songLabel`）；`stopAll` 文案「个节点」→「个 note」；切后台（自动暂停）不再误报静音/停摆（`!document.hidden` 门控 + `visibilitychange` 重置基线）；重置所有选项真正清空全部设置项（含调试开关/配色/菜单位置）但保留用户谱面与缓存 | `f117dbd` |
 | 暂停停摆误报 | 主动暂停后恢复播放的首帧不再误报「检测到长时间停摆 xxxms」：`resetClocks()` 除音频时钟基线外，同时清空 `AudioDebugMonitor.lastFrameAudioTime`，与 `visibilitychange` 回前台处理一致 | `bf0c642` |
 | 开关与流量 | 滑动开关关闭态由深灰 `#444` 改为浅灰 `#c9ccd6`（不再像被冻结），knob 加阴影；`The Sound of Silence` 后台预取改走 jsDelivr，减少 Pages 流量 | `0aef5ba` |

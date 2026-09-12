@@ -894,7 +894,7 @@ function initAudio(){
   outputAnalyser.connect(audioCtx.destination);
   // 监听AudioContext状态变化
   audioCtx.addEventListener('statechange', () => {
-    console.warn('[AudioDebug] AudioContext状态变化:', audioCtx.state, '时间:', audioCtx.currentTime.toFixed(2));
+    console.log('[AudioDebug][INFO] AudioContext状态变化:', audioCtx.state, '时间:', audioCtx.currentTime.toFixed(2));
   });
   console.log('[AudioDebug][INFO] AudioContext已创建 sampleRate=' + audioCtx.sampleRate +
     ' baseLatency=' + (audioCtx.baseLatency != null ? (audioCtx.baseLatency * 1000).toFixed(1) + 'ms' : 'N/A') +
@@ -1208,7 +1208,7 @@ function _mediaUrls(relPath){
   return [cdnUrl('midi_player/' + clean), clean];
 }
 // 依次尝试候选源，流式下载并回报百分比（0-100）；label 用于日志（如 谱面[xx.mid]）
-async function _fetchBlobWithProgress(urls, onProgress, label){
+async function _fetchBlobWithProgress(urls, onProgress, label, quiet){
   let lastErr;
   for(let i = 0; i < urls.length; i++){
     const src = (i === 0) ? 'jsDelivr' : 'Pages';
@@ -1232,12 +1232,12 @@ async function _fetchBlobWithProgress(urls, onProgress, label){
         blob = new Blob(chunks);
         if(onProgress) onProgress(100);
       }
-      console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + src + '下载成功!');
+      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + src + '下载成功!');
       return blob;
     }catch(e){
       lastErr = e; if(onProgress) onProgress(0);
       const next = urls[i + 1] ? ('，尝试从' + ((i + 1 === 1) ? 'Pages' : '备用源') + '直取…') : '';
-      console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + src + '下载失败' + next);
+      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + src + '下载失败' + next);
     }
   }
   throw lastErr || new Error('下载失败');
@@ -1433,11 +1433,9 @@ const SoundfontLoader = {
     }
     this.loaded[name] = { raw: raw, buffers: {}, ready: true };
     this.cachedNames.add(name);
-    // 正常播放音色相关每个谱只打一条：缓存命中 vs 网络下载
-    if(onProgress){
-      console.log('[AudioDebug][INFO] ' + _timbreLabel(name) +
-        (res.fromCache ? '从缓存加载成功!' : '从' + (res.source || '网络') + '下载成功!'));
-    }
+    // 每个音色每次会话只打一条来源：缓存命中 vs 网络下载（含后台预取）
+    console.log('[AudioDebug][INFO] ' + _timbreLabel(name) +
+      (res.fromCache ? '从缓存加载成功!' : '从' + (res.source || '网络') + '下载成功!'));
     if(onProgress) onProgress(1, '音色加载完成');
   },
 
@@ -2108,12 +2106,13 @@ let userGestureSeen = false;
     }
   }
 
-  // 并行启动：谱面与音色同时开始下载
-  console.log('[AudioDebug][INFO] 默认下载：' + _songLabel('midi/' + DEFAULT_SONG) + ' ' +
-    ['clavinet', 'acoustic_grand_piano', 'electric_piano_2'].map(_timbreLabel).join(' '));
-  console.log('[AudioDebug][INFO] 并行加载默认谱面与音色 midi/' + DEFAULT_SONG);
-  _fetchWithProgress('midi/' + DEFAULT_SONG, (p) => setStatus('谱面[' + _songDisplayName(DEFAULT_SONG) + ']下载 ' + Math.round(p) + '%'))
-  .then(blob => blob.arrayBuffer()).then(buf => {
+  // 并行启动：谱面与音色同时开始加载（谱面走缓存优先）
+  console.log('[AudioDebug][INFO] 默认加载谱面与音色：' + _songLabel('midi/' + DEFAULT_SONG) + ' / ' +
+    ['clavinet', 'acoustic_grand_piano', 'electric_piano_2'].map(_timbreLabel).join(' / '));
+  fetchMedia('midi/' + DEFAULT_SONG, (p) => {
+    if(p < 100) setStatus('谱面[' + _songDisplayName(DEFAULT_SONG) + ']下载 ' + Math.round(p) + '%');
+  })
+  .then(resp => resp.arrayBuffer()).then(buf => {
     console.log('[AudioDebug][INFO] 默认谱面已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
     midiBuf = buf;
     parseAndPlayMidi(buf, DEFAULT_SONG);
@@ -2123,8 +2122,8 @@ let userGestureSeen = false;
     if(hint) hint.textContent = 'MIDI加载失败：' + e.message;
   });
 
-  // 仅再后台预取 The Sound of Silence；其余内置谱（并发测试谱）默认不下载，选到时才按需加载
-  _fetchWithProgress('midi/The Sound of Silence.mid').catch(() => {}); // 走 jsDelivr，避免 Pages 流量
+  // 仅再后台预取 The Sound of Silence（缓存优先、静默）；其余内置谱默认不下载，选到时才按需加载
+  fetchMedia('midi/The Sound of Silence.mid', null, true).catch(() => {});
 
   loadDefaultTimbre();
 })();
@@ -2201,9 +2200,9 @@ async function _getBuiltinList(){
   return _builtinListCache || [];
 }
 // 带进度的下载（jsDelivr -> Pages 回退），用于「重新下载」时在按钮上显示百分比
-async function _fetchWithProgress(relPath, onProgress){
+async function _fetchWithProgress(relPath, onProgress, quiet){
   const absUrl = AssetCache._abs(relPath);
-  const blob = await _fetchBlobWithProgress(_mediaUrls(relPath), onProgress, _songLabel(relPath));
+  const blob = await _fetchBlobWithProgress(_mediaUrls(relPath), onProgress, _songLabel(relPath), quiet);
   try{
     const cache = await caches.open(AssetCache.cacheName);
     await cache.put(absUrl, new Response(blob));
@@ -2211,14 +2210,19 @@ async function _fetchWithProgress(relPath, onProgress){
   return blob;
 }
 // 缓存优先 + CDN/Pages 回退：用于切歌等需要 Response 的场景
-async function fetchMedia(relPath, onProgress){
+// quiet=true 时（后台预取）不打印来源日志
+async function fetchMedia(relPath, onProgress, quiet){
   const absUrl = AssetCache._abs(relPath);
   try{
     const cache = await caches.open(AssetCache.cacheName);
     const cached = await cache.match(absUrl, {ignoreSearch: true});
-    if(cached){ if(onProgress) onProgress(100); return cached.clone(); }
+    if(cached){
+      if(onProgress) onProgress(100);
+      if(!quiet) console.log('[AudioDebug][INFO] ' + _songLabel(relPath) + '从缓存加载成功!');
+      return cached.clone();
+    }
   }catch(e){}
-  const blob = await _fetchWithProgress(relPath, onProgress);
+  const blob = await _fetchWithProgress(relPath, onProgress, quiet);
   return new Response(blob);
 }
 
