@@ -372,7 +372,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **视口自适应**：PC 端整页锁定视口高度（`height:100dvh` + `overflow:hidden`），`.layout` 用 `flex:1` 撑满，`.visual-panel` 与 Canvas 以 `flex:1` 占满——**钢琴键始终贴在屏幕底部，无需滚动页面**；菜单面板为浮层，不再挤压绘制区。
 - **顶栏两行**：第一行 `重播 / 选谱列表 / 全屏`（重播在左、全屏在右）；第二行 `播放·暂停 / 下一首 / 循环 / 上传谱面 / 谱面管理 / 设置 / 配色 / 调试` 共 8 个按钮。进度条与统计信息仍单独置底。
-- **第二行自适应排满宽度**：`.control-row` 为 `flex-wrap:nowrap; justify-content:space-between`，8 个 `.ctl-btn` 用 `flex:0 1 32px; aspect-ratio:1`（不换行、按需收缩），图标用百分比尺寸（`.control-row > .ctl-btn svg{width:52%}`，设置/配色/上传 58%），间距 `clamp(3px,1.2vw,8px)`。这样在窄屏或 DPI 异常（有效 CSS 宽度偏小）时，按钮与图标一起等比缩小，8 个按钮始终恰好排满整行，不会溢出或重叠。
+- **第二行按钮布局**：宽屏（PC / 横屏）保持默认32px 按钮大小，左4个（播放/下一首/循环/上传）左对齐、右4个（管理/设置/配色/调试）右对齐（`.ctl-group` + `.ctl-spacer`）。窄屏（`max-width:600px`）隐藏 spacer，两组按钮各 `flex:1` 均分宽度，按钮 `min-width:24px; max-width:32px` 按需缩小，始终排满整行不溢出。图标用百分比尺寸（`.control-row .ctl-btn svg{width:52%}`，设置/配色/上传 58%），间距 `clamp(3px,1.2vw,8px)`。
 - **下一首**：`nextSong()` 切到列表下一首，到底回到第一首；`#nextBtn` 在谱面加载后启用。
 - **按钮**：全部为圆形 `.ctl-btn.primary`；上传 `arcticons:folder-upload`、管理 `fluent:text-bullet-list-edit-20-filled`、设置 `solar:settings-minimalistic-bold`、配色 `ic:round-color-lens`、调试 `carbon:debug`、重播 `hugeicons:replay`、全屏 `solar:maximize/minimize-linear`；循环为**列表（`bi:repeat`）/ 单曲（`bi:repeat-1`）/ 不循环（`mdi:repeat-off`）三态**。谱面管理/设置/配色/调试**靠右对齐**（管理按钮 `margin-left:auto`）。设置/配色/上传三个按钮的 SVG 放大到 **18px**（其余仍 16px）。
 - **全屏按钮**：第一行最右，对 `.visual-panel` 调用 `requestFullscreen()`，仅放大绘制区（Esc 退出）；进入 / 退出时图标切换为向内箭头。全屏内另有悬浮控件（见 9.11）。
@@ -803,6 +803,7 @@ midi_player/
 | 面板与版型交互 | 谱面管理二次点击收起；删除设置/音色大标题、音色行加「音色选择」标签；键数版型改 6 档滑块并为六种标准音域配置默认缩放/偏移（首键对齐最左）；音色列表加垃圾桶/下载按钮+百分比、未下载不可切换、删除「已就绪」提示；调试面板自动展开开关移最左、最右加重置所有设置按钮、底边对齐设置面板；重播改 `hugeicons:replay` | `cbe84ee` |
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
 | 调试面板滚动 | 日志区不再单独滚动，整个调试面板作为唯一滚动容器；滚动日志即滚动面板，避免日志滑到边界后底部仍被裁掉需二次滑动；自动跟随与置顶/置底改为滚动面板 | `36904c1` |
+| 第二行按钮布局修正 | 宽屏保持默认32px按钮+左/右分组对齐（`.ctl-group`+`.ctl-spacer`）；窄屏（≤600px）隐藏spacer、按钮按需缩小（24–32px）；修复SVG选择器适配新结构 | `_pending_` |
 | 第二行按钮自适应 | `.control-row` 改 `nowrap + space-between`，8 个按钮 `flex:0 1 32px; aspect-ratio:1`、图标百分比缩放、间距 `clamp`；窄屏 / DPI 异常时按钮与图标等比缩小，恰好排满整行不溢出 | `31ba95b` |
 | 默认音色自动切换 | 谱面配置合成钢琴不再视为失败回退；默认音色本地不存在时提示并回滚合成钢琴、后台下载，下载完成后仅在用户未主动切音色且谱面未播完时自动切回并打日志 | `31ba95b` |
 | 内置谱表刷新与废弃归类 | `_getBuiltinList` 改联网刷新（`fetchFresh` no-store）+ 旧缓存回退，老用户可拿到最新内置谱表；对比新旧列表，把「之前存在、后来废弃」且用户缓存过的内置谱复制为「我的上传」用户谱（`_migrateDeprecatedBuiltins`），不主动删除任何用户缓存 | `0b0f158` |
