@@ -56,12 +56,12 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .lib-item svg{width:70%;height:70%}
 .lib-item .label{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:9px;color:var(--muted);background:linear-gradient(transparent,rgba(0,0,0,.7));padding:4px 2px 2px}
 
-.canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;min-height:0}
 .canvas-toolbar{height:40px;display:flex;align-items:center;padding:0 12px;gap:8px;border-bottom:1px solid var(--line);background:var(--panel);flex-shrink:0}
 .canvas-toolbar .tool-btn{background:transparent;border:1px solid transparent;color:var(--muted);padding:4px 8px;border-radius:5px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px}
 .canvas-toolbar .tool-btn:hover{background:var(--hover);color:var(--text)}
 .canvas-toolbar .tool-btn.active{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
-.canvas-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow:auto;padding:0;background:var(--panel)}
+.canvas-stage{flex:0 1 auto;min-height:0;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:0;background:var(--panel)}
 .stage-wrap{position:relative;box-shadow:none;border-radius:0;overflow:visible;flex-shrink:0;align-self:center}
 #mainCanvas{display:block;cursor:default;touch-action:none;transform-origin:0 0}
 
@@ -79,7 +79,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .player-bar .loop-btn:hover{color:var(--text);background:rgba(255,255,255,.08)}
 .player-bar .loop-btn.active{color:var(--accent)}
 
-.log-bar{width:100%;flex:1;min-height:0;overflow-y:auto;padding:4px 12px;font-size:10px;font-family:monospace;color:var(--muted);background:rgba(0,0,0,.3);border-top:1px solid var(--line)}
+.log-bar{width:100%;flex:1 1 auto;min-height:100px;overflow-y:auto;padding:4px 12px;font-size:10px;font-family:monospace;color:var(--muted);background:rgba(0,0,0,.3);border-top:1px solid var(--line)}
 .log-bar .log-line{line-height:1.5;white-space:pre-wrap;word-break:break-all}
 .log-bar .log-line.err{color:#ff6b6b}
 .log-bar .log-line.ok{color:#2fbf6f}
@@ -91,7 +91,8 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .log-toolbar .log-spacer{flex:1}
 .log-toolbar .log-hint{font-size:9px;color:var(--muted)}
 
-.props{width:310px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.props{width:310px;background:var(--panel);border-left:1px solid var(--line);display:none;flex-direction:column;flex-shrink:0;overflow:hidden}
+.props.open{display:flex}
 .props-header{padding:12px 14px;border-bottom:1px solid var(--line);font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px}
 .props-header .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
 .props-del-btn{margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;display:flex;align-items:center;border-radius:6px;transition:all .15s}
@@ -163,7 +164,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
   .log-toolbar .log-btn{padding:2px 4px}
   .log-toolbar .log-btn svg{width:10px;height:10px}
   .props{position:fixed;bottom:0;left:0;right:0;width:auto;z-index:100;background:var(--panel);max-height:0;border-top:1px solid var(--line);transition:max-height .3s ease;overflow:hidden}
-  .props.mobile-open{max-height:50vh}
+  .props.open,.props.mobile-open{display:flex;max-height:50vh}
   .props-header{padding:12px;font-size:13px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
   .props-body{overflow-y:auto;padding:10px;max-height:calc(50vh - 50px)}
   .props .close-btn{margin-left:auto;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px}
@@ -265,7 +266,8 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
       <div class="stage-wrap" id="stageWrap">
         <canvas id="mainCanvas" width="1280" height="720"></canvas>
       </div>
-      <div class="player-bar">
+    </div>
+    <div class="player-bar">
         <button class="play-btn" id="playBtn" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
         <span class="time" id="timeDisplay">00:00 / 00:00</span>
         <div class="seek-bar" id="seekBar"><div class="fill" id="seekFill"></div></div>
@@ -274,7 +276,6 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
         </div>
         <button class="loop-btn active" id="loopBtn"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 5.466V4H5a4 4 0 0 0-3.584 5.777a.5.5 0 1 1-.896.446A5 5 0 0 1 5 3h6V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192m3.81.086a.5.5 0 0 1 .67.225A5 5 0 0 1 11 13H5v1.466a.25.25 0 0 1-.41.192l-2.36-1.966a.25.25 0 0 1 0-.384l2.36-1.966a.25.25 0 0 1 .41.192V12h6a4 4 0 0 0 3.585-5.777a.5.5 0 0 1 .225-.67Z"/></svg></button>
       </div>
-    </div>
     <div class="log-toolbar" id="logToolbar">
       <button class="log-btn" onclick="logCopy()" title="复制日志"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
       <button class="log-btn" onclick="logClear()" title="清空日志"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg></button>
@@ -502,32 +503,12 @@ function scheduleSave(){
   _saveTimer = setTimeout(saveConfig, 300);
 }
 function saveConfig(){
-  try{
-    const data = {
-      canvas: {...CFG.canvas, bgImage:''}, // object URL 无法跨会话，不保存
-      elements: CFG.elements.map(e=>({ id:e.id, type:e.type, params:e.params })),
-      volume: CFG.volume, loop: CFG.loop, smoothing: CFG.smoothing,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }catch(e){}
+  // 不持久化：每次刷新都恢复默认（元素居中、画板 16:9），故不写入 localStorage
 }
 function loadConfig(){
-  let data;
-  try{ data = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); }catch(e){ return false; }
-  if(!data || !data.canvas) return false;
-  Object.assign(CFG.canvas, data.canvas, { bgImage:'' });
-  if(CFG.canvas.bgType==='image') CFG.canvas.bgType='solid'; // 图片无法恢复
-  if(typeof data.volume==='number') CFG.volume = data.volume;
-  if(typeof data.loop==='boolean') CFG.loop = data.loop;
-  if(typeof data.smoothing==='number') CFG.smoothing = data.smoothing;
-  if(Array.isArray(data.elements) && data.elements.length){
-    CFG.elements = data.elements.map(e=>({
-      id:e.id, type:e.type, params:{ ...defaultElementParams(e.type), ...e.params }, _env:null
-    }));
-    _eid = Math.max(...CFG.elements.map(e=>e.id), 0);
-    CFG.selectedId = CFG.elements[CFG.elements.length-1].id;
-  }
-  return true;
+  // 每次刷新都恢复默认：清除历史配置，不做恢复（元素/位置居中、画板比例回到 16:9）
+  try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+  return false;
 }
 
 const PLAY_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
@@ -573,16 +554,7 @@ function addElement(type){
   CFG.selectedId = el.id;
   scheduleSave();
   renderLibrary(); renderProps();
-  const lib=document.getElementById('library');
-  const propsPanel=document.querySelector('.props');
-  lib.classList.remove('mobile-open');
-  propsPanel.classList.remove('mobile-open');
-  void propsPanel.offsetHeight;
-  propsPanel.classList.add('mobile-open');
-  document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
-  document.querySelector('.ibtn[data-tool="props"]')?.classList.add('active');
-  _lastTool='props';
-  document.getElementById('mobilePreview').classList.remove('active');
+  // 默认不自动展开属性面板（保持关闭，由用户点「属性」按钮打开）
   return el;
 }
 function getSelected(){ return CFG.elements.find(e=>e.id===CFG.selectedId); }
@@ -1568,15 +1540,14 @@ function applyZoom(){
   document.getElementById('zoomLabel').textContent=Math.round(z*100)+'%';
 }
 function fitCanvas(){
+  // 优先等比例缩放到「宽度贴合左右控件边界」；高度超出时由 .canvas-stage 滚动，
+  // 进度条与终端始终位于绘制区下方并延伸到浏览器底部。
   const area=document.getElementById('canvasStage');
-  const barH=document.querySelector('.player-bar')?.offsetHeight||48;
-  const logH=document.querySelector('.log-toolbar')?.offsetHeight||28;
+  if(!area) return;
   const availW=area.clientWidth;
-  const availH=area.clientHeight-barH-logH;
-  if(availW<=0||availH<=0){CFG.canvas.zoom=1;applyZoom();return;}
+  if(availW<=0){ CFG.canvas.zoom=1; applyZoom(); return; }
   const zW=availW/canvas.width;
-  const zH=availH/canvas.height;
-  CFG.canvas.zoom=Math.max(0.1,Math.min(2,Math.min(zW,zH)));
+  CFG.canvas.zoom=Math.max(0.1,Math.min(2,zW));
   applyZoom();
 }
 /* ============================================================
@@ -1625,6 +1596,7 @@ document.querySelectorAll('.ibtn[data-tool]').forEach(b=>b.addEventListener('cli
   if(_panelTimer) clearTimeout(_panelTimer);
   if(isActive){
     lib.classList.remove('mobile-open');
+    propsPanel.classList.remove('open');
   }else{
     b.classList.add('active');
     _lastTool=tool;
@@ -1632,8 +1604,10 @@ document.querySelectorAll('.ibtn[data-tool]').forEach(b=>b.addEventListener('cli
       lib.classList.remove('mobile-open');
       void propsPanel.offsetHeight;
       renderProps();
+      propsPanel.classList.add('open');
       propsPanel.classList.add('mobile-open');
     }else{
+      propsPanel.classList.remove('open');
       lib.classList.remove('mobile-open');
       void lib.offsetHeight;
       _panelTimer=setTimeout(()=>{
@@ -1642,6 +1616,7 @@ document.querySelectorAll('.ibtn[data-tool]').forEach(b=>b.addEventListener('cli
       },30);
     }
   }
+  if(tool==='props') fitCanvas(); // 属性面板开合改变可用宽度，重新按宽度适配
   document.getElementById('mobilePreview').classList.remove('active');
 }));
 document.getElementById('mobilePreview').addEventListener('click',function(){
@@ -1651,6 +1626,7 @@ document.getElementById('mobilePreview').addEventListener('click',function(){
   lib.classList.remove('mobile-open');
   propsPanel.classList.remove('mobile-open');
   if(isOpen){
+    propsPanel.classList.remove('open');
     document.querySelectorAll('.ibtn').forEach(x=>x.classList.remove('active'));
     this.classList.add('active');
   }else{
@@ -1658,6 +1634,7 @@ document.getElementById('mobilePreview').addEventListener('click',function(){
     document.querySelector(`.ibtn[data-tool="${_lastTool}"]`)?.classList.add('active');
     if(_lastTool==='props'){
       renderProps();
+      propsPanel.classList.add('open');
       propsPanel.classList.add('mobile-open');
     }else{
       renderLibrary();
@@ -1665,6 +1642,7 @@ document.getElementById('mobilePreview').addEventListener('click',function(){
     }
     this.classList.remove('active');
   }
+  fitCanvas();
 });
 // 缩放按钮：点击+长按连续调整
 let zoomTimer=null, zoomInterval=null;
@@ -1703,18 +1681,19 @@ window.addEventListener('keydown',e=>{
 /* ============================================================
    初始化
    ============================================================ */
-const _restored = loadConfig();
+const _restored = loadConfig(); // 恒为 false：每次刷新都恢复默认
 setAspect(CFG.canvas.aspect || '16:9');
+document.getElementById('aspectSelect').value = CFG.canvas.aspect || '16:9';
 document.getElementById('volSlider').value = CFG.volume;
 document.getElementById('loopBtn').classList.toggle('active', CFG.loop);
 document.getElementById('loopBtn').innerHTML=CFG.loop?LIST_LOOP_ICON:NO_LOOP_ICON;
 renderLibrary();
-if(_restored && CFG.elements.length) renderProps();
-else addElement('bars');
+// 默认添加一个居中元素（x/y=50），但不自动展开属性面板
+addElement('bars');
 _lastTool=null;
-requestAnimationFrame(render);
+// 等布局完成后按宽度适配一次（PC 端绘制区宽度自动撑满左右控件边界）
+requestAnimationFrame(()=>{ render(); fitCanvas(); });
 window.addEventListener('resize',()=>fitCanvas());
-// 保持默认100%缩放，不自动适配（窗口尺寸变化不改缩放，避免默认被压到很小）
 
 // 自动加载演示音频
 _log('页面初始化完成, 开始加载demo音频...');

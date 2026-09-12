@@ -60,11 +60,11 @@
 
 - **多元素叠加**：可同时添加多个效果，按 `y` 排序绘制，支持选中/拖动/删除。
 - 画布比例预设：16:9（1280×720）、9:16、1:1、4:5、4:3。
-- 画布缩放（0.1×–2×）与「适配」按钮（重置为 100%）。
+- 画布缩放（0.1×–2×）与「适配」按钮（`fitCanvas()` 优先按**宽度贴合左右控件边界**等比缩放，高度超出由绘制区滚动）。
 - 画布内点击选中元素、拖动移动；选中时显示虚线框与四角手柄，可拖角自由（非等比）缩放，触摸端支持两指夹捏等比缩放。
 - 背景：纯色 / 线性渐变 / 径向渐变 / 图片（模糊 + 暗化）。
 - 配色：纯色 / 渐变 / 彩虹，渐变支持多色增删排序。
-- **配置持久化**：画布、元素、音量、循环、平滑等自动存 `localStorage`，刷新不丢。
+- **刷新即恢复默认**：不做配置持久化（`saveConfig` 为空实现，`loadConfig` 会清除历史键），每次刷新元素回到默认居中（x/y=50）、画板比例回到 16:9，属性面板默认不展开。
 
 ### 2.4 快捷键
 
@@ -170,7 +170,7 @@ index.html
 ├── <style>                     # 暗色主题、响应式、组件样式
 ├── AssetCache                  # Cache API 缓存（music-viz-assets-v1）
 ├── CFG                         # 全局配置（canvas / elements / audio）
-├── saveConfig / loadConfig     # localStorage 持久化（music-viz-config-v1）
+├── saveConfig / loadConfig     # 不做持久化：刷新恢复默认（清除 music-viz-config-v1）
 ├── VISUAL_STYLES               # 效果清单（id / name / cat）
 ├── defaultElementParams()      # 元素默认参数
 ├── 颜色工具                     # hexToRgb / rgbToHex / lerpColor / multiColor / elemColor
@@ -206,7 +206,7 @@ index.html
 - `DRAW` 是效果注册表：`DRAW[type] = function(ctx, p, W, H, el, dt)`。
 - 效果清单 `VISUAL_STYLES` 与 `DRAW` 分离，新增效果需同时登记两处。
 - 属性面板由参数声明式生成，不手写每个控件。
-- `saveConfig`/`loadConfig` 用 `localStorage` 持久化画布与元素（`scheduleSave` 防抖 300ms）；背景图片为 object URL，不跨会话保存。
+- `saveConfig` 为空实现、`loadConfig` 每次刷新清除 `music-viz-config-v1` 并返回 false，因此刷新后画布/元素/比例都恢复默认（元素居中、16:9）；`scheduleSave` 仍保留调用点但不再写盘。
 
 ---
 
@@ -261,7 +261,7 @@ index.html
 - **两指夹捏**：触摸端双指按距离比**等比**缩放选中元素（长宽同比）。
 - **选中反馈**：选中元素绘制虚线框与四角手柄；点击空白处取消选中。
 - **元素库/背景**：底部「背景」工具页配置画布背景。
-- **缩放**：工具栏 `− / + / ⛶ 适配`，标签实时显示百分比。
+- **缩放**：工具栏 `− / + / ⛶ 适配`，标签实时显示百分比；`fitCanvas()` 以「宽度贴合左右控件边界」为优先（`zoom = 可用宽度 / 画布宽度`），不再被高度限制；属性面板开合会重新适配。
 
 ---
 
@@ -335,3 +335,9 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 ## 附：缓存
 
 `AssetCache` 使用 Cache API，缓存名 `music-viz-assets-v1`，以绝对路径为键、`ignoreSearch` 提高命中率；缓存失败时回退到普通 `fetch`。目前仅用于演示音频 `demo.ogg`：`fetchDemo()` 先查缓存；未命中则由 `_raceDownloadDemo()` 同时向 4 个 jsDelivr 边缘节点（`cdn` / `fastly` / `gcore` / `testingcf`，均 `gh/teecatt/teecatt.github.io@master/music_visualization/demo.ogg`）+ 本地 `demo.ogg` 发起**完整下载**，`Promise.any` 取最先完整下载完成者，随后 `AbortController.abort()` 中止其余镜像并丢弃其不完整分片（`_downloadBlobDemo` 中止时把分片数组置 null）；终端日志实时显示竞速进度（领先镜像 + 速度）、胜出镜像（大小/耗时/平均速度）与清理信息。命中后写回缓存（CORS 可用且不消耗 Pages 带宽）。
+
+### 布局：绘制区 / 进度条 / 终端
+
+- `.canvas-area` 为纵向 flex：`.canvas-toolbar` → `.canvas-stage`（绘制区，按宽度等比缩放）→ `.player-bar`（进度条，紧挨绘制区下方）→ `.log-toolbar` → `.log-bar`（终端，`flex:1` 向下延伸到浏览器底部）。
+- `.canvas-stage` 为 `flex:0 1 auto; min-height:0; overflow:auto`：空间足够时高度贴合缩放后的画布，空间不足时收缩并滚动，保证进度条与终端始终可见、终端到底。
+- 属性面板 `.props` 默认 `display:none`（PC 与移动端一致），点「属性」按钮加 `.open` 展开，再点收起；打开时右侧占宽，`fitCanvas()` 会重新按新宽度适配。
