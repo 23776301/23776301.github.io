@@ -62,8 +62,8 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .canvas-toolbar .tool-btn:hover{background:var(--hover);color:var(--text)}
 .canvas-toolbar .tool-btn.active{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
 .canvas-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow:auto;padding:0;background:var(--panel)}
-.stage-wrap{position:relative;box-shadow:none;border-radius:0;overflow:hidden}
-#mainCanvas{display:block;cursor:default;touch-action:none}
+.stage-wrap{position:relative;box-shadow:none;border-radius:0;overflow:hidden;flex-shrink:0;max-width:100%}
+#mainCanvas{display:block;cursor:default;touch-action:none;max-width:100%;height:auto}
 
 .player-bar{width:100%;height:48px;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:1px solid rgba(255,255,255,.08);display:flex;align-items:center;padding:0 12px;gap:10px;z-index:5;flex-shrink:0}
 .player-bar .play-btn{width:32px;height:32px;border-radius:50%;background:linear-gradient(120deg,var(--accent),var(--accent2));border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0}
@@ -150,7 +150,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
   .canvas-toolbar{height:32px;padding:0 6px;flex-shrink:0}
   .canvas-toolbar .tool-btn{padding:2px 5px;font-size:10px}
   .canvas-stage{overflow:auto;padding:0;background:var(--panel)}
-  .stage-wrap{position:relative!important;width:100%!important;height:auto!important}
+  .stage-wrap{width:100%!important;height:auto!important}
   .stage-wrap canvas{width:100%!important;height:auto!important}
   .player-bar{height:36px;padding:0 6px;gap:6px}
   .player-bar .play-btn{width:28px;height:28px}
