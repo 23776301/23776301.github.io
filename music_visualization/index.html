@@ -68,6 +68,9 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 /* 全屏绘制区 */
 .canvas-area:fullscreen,.canvas-area:-webkit-full-screen{background:var(--bg);padding:0}
 .canvas-area:fullscreen .canvas-stage,.canvas-area:-webkit-full-screen .canvas-stage{flex:1 1 auto;min-height:0}
+/* 全屏只保留绘制区：隐藏进度条与终端 */
+.canvas-area:fullscreen .player-bar,.canvas-area:fullscreen .log-toolbar,.canvas-area:fullscreen .log-bar,
+.canvas-area:-webkit-full-screen .player-bar,.canvas-area:-webkit-full-screen .log-toolbar,.canvas-area:-webkit-full-screen .log-bar{display:none}
 .stage-wrap{position:relative;box-shadow:none;border-radius:0;overflow:visible;flex-shrink:0;align-self:center}
 #mainCanvas{display:block;cursor:default;touch-action:none;transform-origin:0 0}
 
@@ -1749,11 +1752,14 @@ function fitCanvas(){
   if(availW<=0){ CFG.canvas.zoom=1; applyZoom(); return; }
   // 可用高度 = 绘制区总高 - 进度条 - 日志工具条 - 终端最小高度
   const area=document.querySelector('.canvas-area');
+  const inFs=!!(document.fullscreenElement||document.webkitFullscreenElement);
   let availH=0;
   if(area){
     const player=area.querySelector('.player-bar');
     const lt=document.getElementById('logToolbar');
-    availH=area.clientHeight-(player?player.offsetHeight:0)-(lt?lt.offsetHeight:0)-100-1;
+    // 全屏时进度条/终端已隐藏，不再为其预留高度
+    const logMin=inFs?0:100;
+    availH=area.clientHeight-(player?player.offsetHeight:0)-(lt?lt.offsetHeight:0)-logMin-1;
   }
   const zW=availW/canvas.width;
   const zH=availH>0?availH/canvas.height:Infinity;
