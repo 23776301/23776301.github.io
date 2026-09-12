@@ -884,4 +884,4 @@ midi_player/
 | 移动端按钮网格 | 第一行与第二行统一网格：左右间距 = 上下间距 = 6px，10 个圆形按钮 `aspect-ratio:1` 等比缩放（修复椭圆拉伸），第二行 8 个恰好填满整宽且第一行最左/最右与第二行对齐 | `31a2a1d` |
 | 门户描述 | 主页 MIDI 播放器卡片描述新增「多种键型钢琴 / 音游模式 / CDN竞速」 | `b898f8b` |
 | 重代码外置 | 内联 CSS/JS 拆为 `app.css`/`app.js`；`index.html` 仅留骨架 + 关键 CSS + 竞速加载器（4 个 jsDelivr 边缘 + 同源兜底并发全量下载，最先完成者注入）；loading 转圈 + `sourceURL` 保断点 | `89a34a2` |
-| 谱面压缩传输 | 内置谱面提供 `.mid.br`/`.mid.gz` 预压缩变体；`_fetchMediaBlob` 按能力 `brotli → gzip → 原文` 选择，`_decompressBuffer` 客户端解压，`_looksLikeMidi` 校验 `MThd` 头；解压后按原路径入 Cache API；一套代码兼容 GitHub Pages 与 Cloudflare Pages。`Rush E 3.mid` 2.70 MB → 95 KB | `_pending_` |
+| 谱面压缩传输 | 内置谱面提供 `.mid.br`/`.mid.gz` 预压缩变体；`_fetchMediaBlob` 按能力 `brotli → gzip → 原文` 选择，`_decompressBuffer` 客户端解压，`_looksLikeMidi` 校验 `MThd` 头；解压后按原路径入 Cache API；一套代码兼容 GitHub Pages 与 Cloudflare Pages。`Rush E 3.mid` 2.70 MB → 95 KB | `48e632b` |
