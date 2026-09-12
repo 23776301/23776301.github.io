@@ -159,19 +159,6 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .ctl-group{display:flex;align-items:center;gap:inherit;flex:0 0 auto}
 .ctl-spacer{flex:1 1 0;min-width:0}
 .control-row > .ctl-group > .ctl-btn{flex:0 0 auto;width:32px;height:32px}
-@media(max-width:600px){
-  .ctl-spacer{display:none}
-  .top-bar-row{gap:4px}
-  .top-bar-row > select{width:75%;flex:0 0 75%}
-  .top-bar-row > .ctl-btn{flex:0 0 auto}
-  .control-row{gap:6px;padding:0 2px;margin-top:6px}
-  .control-row > .ctl-group{flex:1 1 0;gap:6px}
-  .control-row > .ctl-group:first-child{justify-content:flex-start}
-  .control-row > .ctl-group:last-child{justify-content:flex-end}
-  .control-row > .ctl-group > .ctl-btn{flex:1 1 0;min-width:0;max-width:none;height:32px;padding:0}
-  .dbg-toolbar .dbg-reset-btn{padding:2px 5px;font-size:10px;gap:3px}
-  .dbg-toolbar .dbg-reset-btn svg{width:12px;height:12px}
-}
 .ctl-btn{
   width:32px;height:32px;flex-shrink:0;padding:0;border-radius:50%;
   display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
@@ -402,6 +389,25 @@ select:focus{border-color:var(--accent)}
 .file-info{font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6}
 .file-info b{color:var(--text)}
 .timbre-hint{font-size:11px;color:var(--dim);margin-top:4px;min-height:16px}
+/* 移动端：第一行(重播/选谱/全屏)与第二行(8个按钮)统一按同一网格缩放。
+   左右间距 = 上下间距 = 6px；10 个圆形按钮 aspect-ratio:1 等比缩放，
+   第二行 8 个按钮恰好填满整宽，第一行最左/最右与第二行最左/最右对齐。
+   放在样式表末尾以覆盖基础 .top-bar / .top-bar select / .top-bar-row 规则。 */
+@media(max-width:600px){
+  .top-bar{padding-left:0;padding-right:0}
+  .top-bar-row{flex-wrap:nowrap;gap:6px}
+  .top-bar-row > select{width:auto;flex:1 1 auto;min-width:0}
+  .top-bar-row > .ctl-btn{flex:0 0 calc((100% - 42px)/8);width:auto;height:auto;aspect-ratio:1}
+  .control-row{gap:6px;padding:0;margin-top:6px;flex-wrap:nowrap}
+  .ctl-spacer{display:none}
+  .control-row > .ctl-group{flex:1 1 0;gap:6px;min-width:0}
+  .control-row > .ctl-group > .ctl-btn{flex:1 1 0;min-width:0;max-width:none;width:auto;height:auto;aspect-ratio:1;padding:0}
+  .ctl-btn svg{width:52%;height:52%}
+  #replayBtn svg{width:75%;height:75%}
+  #settingsBtn svg,#paletteToggleBtn svg,#uploadBtn svg{width:58%;height:58%}
+  .dbg-toolbar .dbg-reset-btn{padding:2px 5px;font-size:10px;gap:3px}
+  .dbg-toolbar .dbg-reset-btn svg{width:12px;height:12px}
+}
 </style>
 <script>
 /* 首屏主题色：在样式之后、渲染之前同步应用已保存的配色，避免「先紫后红」闪烁 */
@@ -4456,7 +4462,7 @@ const KEYBOARD_PRESETS = [
   { keys: 37, lo: 48, hi: 84,  label: '37键' }, // C3–C6
   { keys: 49, lo: 36, hi: 84,  label: '49键' }, // C2–C6
   { keys: 61, lo: 36, hi: 96,  label: '61键' }, // C2–C7
-  { keys: 73, lo: 40, hi: 112, label: '73键' }, // F1–F7
+  { keys: 73, lo: 28, hi: 100, label: '73键' }, // E1–E7（标准 73 键音域）
   { keys: 76, lo: 28, hi: 103, label: '76键' }, // E1–G7
   { keys: 88, lo: 21, hi: 108, label: '88键' }, // A0–C8 全尺寸
 ];
