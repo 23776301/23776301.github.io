@@ -558,7 +558,7 @@ const CFG = {
   elements: [], selectedId: null,
   audio: null, audioCtx: null, analyser: null, freq: null, wave: null,
   playing: false, loop: true, volume: 1, smoothing: 0.8,
-  fps: 60,
+  fps: 60, showFps: false,
 };
 window.__CFG = CFG;
 
@@ -931,6 +931,33 @@ function drawBackground(cfg){
    ============================================================ */
 let _lastFrameTime = 0;
 let _lastDraw = 0;
+// 实时渲染帧率（每 500ms 统计一次实际绘制帧数）
+let _fpsFrames = 0, _fpsWindowStart = 0, _fpsValue = 0;
+function _updateFps(now){
+  _fpsFrames++;
+  if(!_fpsWindowStart) _fpsWindowStart = now;
+  const elapsed = now - _fpsWindowStart;
+  if(elapsed >= 500){
+    _fpsValue = Math.round(_fpsFrames * 1000 / elapsed);
+    _fpsFrames = 0; _fpsWindowStart = now;
+  }
+}
+function _drawFps(){
+  const fs = Math.max(10, Math.round(canvas.height * 0.035));
+  const txt = _fpsValue + ' FPS';
+  const pad = Math.round(fs * 0.4);
+  const x = Math.round(fs * 0.6), y = Math.round(fs * 0.6);
+  ctx.save();
+  ctx.font = '600 ' + fs + 'px ui-monospace,Menlo,Consolas,monospace';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  const w = ctx.measureText(txt).width;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(x - pad, y - pad, w + pad * 2, fs + pad * 2);
+  ctx.fillStyle = '#39d353';
+  ctx.fillText(txt, x, y);
+  ctx.restore();
+}
 function render(){
   requestAnimationFrame(render);
   const now = performance.now();
@@ -938,6 +965,7 @@ function render(){
   const interval = 1000 / (CFG.fps || 60);
   if(now - _lastDraw < interval - 0.5) return;
   _lastDraw = now;
+  _updateFps(now);
   const dt = _lastFrameTime ? Math.min(0.1, (now-_lastFrameTime)/1000) : 0.016;
   _lastFrameTime = now;
 
@@ -985,6 +1013,7 @@ function render(){
     ctx.restore();
   }
   ctx.restore();
+  if(CFG.showFps) _drawFps();
   updateSeekUI();
 }
 
@@ -1259,20 +1288,22 @@ const FPS_PRESETS = [30,60,90,120,144,240];
 const RES_MIN = 100, RES_MAX_W = 4320, RES_MAX_H = 2160;
 const FPS_MIN = 30, FPS_MAX = 240;
 let _maxFps = 60;
-// 采样 requestAnimationFrame 间隔估算浏览器最大帧率，并归一到常见刷新率
+// 采样 requestAnimationFrame 间隔估算浏览器最大帧率。
+// 不做「常见刷新率」归一，保留 165/185/240 等非标值；取最快 25% 间隔的均值，
+// 避开页面初始化卡顿导致的低估。
 function _detectMaxFps(cb){
-  const times=[]; let n=0;
+  const times=[]; const warmup=5, samples=45;
   function tick(t){
     times.push(t);
-    if(++n < 12){ requestAnimationFrame(tick); return; }
-    let sum=0, cnt=0;
-    for(let i=1;i<times.length;i++){ const d=times[i]-times[i-1]; if(d>0){ sum+=d; cnt++; } }
-    const avg = cnt ? sum/cnt : 16.67;
-    const fps = avg>0 ? 1000/avg : 60;
-    const common=[30,60,75,90,120,144,165,240];
-    let best=common[0];
-    for(const c of common){ if(Math.abs(c-fps) < Math.abs(best-fps)) best=c; }
-    _maxFps = Math.max(FPS_MIN, Math.min(FPS_MAX, best));
+    if(times.length < warmup+samples){ requestAnimationFrame(tick); return; }
+    const deltas=[];
+    for(let i=1;i<times.length;i++){ const d=times[i]-times[i-1]; if(d>0) deltas.push(d); }
+    deltas.sort((a,b)=>a-b);
+    const k=Math.max(1, Math.floor(deltas.length*0.25));
+    const fast=deltas.slice(0,k);
+    const avg=fast.reduce((s,x)=>s+x,0)/fast.length;
+    const fps=avg>0?1000/avg:60;
+    _maxFps=Math.max(FPS_MIN, Math.min(FPS_MAX, Math.round(fps)));
     if(cb) cb();
   }
   requestAnimationFrame(tick);
@@ -1305,9 +1336,15 @@ function renderPerf(){
       </div>
       <div class="perf-hint">范围 ${FPS_MIN} ~ ${FPS_MAX}；超过浏览器上限 ${_maxFps} 自动取上限</div>
     </div>
+    <div class="field"><div class="toggle-row"><label style="margin-bottom:0">显示实时帧率</label><div class="toggle ${CFG.showFps?'on':''}" data-field="showFps"></div></div></div>
     <div class="perf-err" id="perfErr"></div>
   `;
   bindPerfFields();
+  // 打开面板时重新检测浏览器最大帧率（用户此刻在前台，采样更准）
+  _detectMaxFps(()=>{
+    const el=document.getElementById('perfFpsMax');
+    if(el) el.textContent='上限 '+_maxFps;
+  });
 }
 function bindPerfFields(){
   const body=document.getElementById('perfBody');
@@ -1337,6 +1374,8 @@ function bindPerfFields(){
   if(fEl) fEl.addEventListener('change',applyFps);
   body.querySelectorAll('#perfResPresets button').forEach(b=>b.addEventListener('click',()=>{ wEl.value=b.dataset.w; hEl.value=b.dataset.h; applyRes(); }));
   body.querySelectorAll('#perfFpsPresets button').forEach(b=>b.addEventListener('click',()=>{ fEl.value=b.dataset.fps; applyFps(); }));
+  const fpsToggle=body.querySelector('[data-field="showFps"]');
+  if(fpsToggle) fpsToggle.addEventListener('click',()=>{ CFG.showFps=!CFG.showFps; fpsToggle.classList.toggle('on',CFG.showFps); });
 }
 
 /* 多色渐变编辑器 HTML */
