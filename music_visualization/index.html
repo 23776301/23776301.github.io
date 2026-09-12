@@ -34,7 +34,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .topbar select:hover{border-color:var(--accent)}
 
 .main{flex:1;display:flex;overflow:hidden}
-.iconbar{display:none;background:var(--panel);border-right:1px solid var(--line);flex-direction:column;align-items:center;padding:8px 0;gap:4px;flex-shrink:0}
+.iconbar{display:flex;background:var(--panel);border-right:1px solid var(--line);flex-direction:column;align-items:center;padding:8px 0;gap:4px;flex-shrink:0}
 .iconbar .ibtn{width:44px;height:44px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--muted);transition:all .15s;border:none;background:transparent}
 .iconbar .ibtn:hover{background:var(--hover);color:var(--text)}
 .iconbar .ibtn.active{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
@@ -80,13 +80,11 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
 .player-bar .loop-btn.active{color:var(--accent)}
 
 .log-bar{width:100%;flex:1;min-height:0;overflow-y:auto;padding:4px 12px;font-size:10px;font-family:monospace;color:var(--muted);background:rgba(0,0,0,.3);border-top:1px solid var(--line)}
-.log-bar:empty{display:none}
 .log-bar .log-line{line-height:1.5;white-space:pre-wrap;word-break:break-all}
 .log-bar .log-line.err{color:#ff6b6b}
 .log-bar .log-line.ok{color:#2fbf6f}
 .log-bar .log-line.warn{color:#e8b64c}
-.log-toolbar{display:none;padding:3px 6px;gap:4px;align-items:center;background:var(--panel);border-top:1px solid var(--line);flex-shrink:0}
-.log-toolbar.open{display:flex}
+.log-toolbar{display:flex;padding:3px 6px;gap:4px;align-items:center;background:var(--panel);border-top:1px solid var(--line);flex-shrink:0}
 .log-toolbar .log-btn{background:transparent;border:1px solid var(--line);color:var(--muted);cursor:pointer;padding:3px 6px;border-radius:4px;display:flex;align-items:center;font-size:10px;transition:all .15s}
 .log-toolbar .log-btn:hover{background:var(--hover);color:var(--text)}
 .log-toolbar .log-btn svg{width:12px;height:12px}
@@ -164,7 +162,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
   .player-bar .loop-btn svg{width:14px;height:14px}
   .log-toolbar .log-btn{padding:2px 4px}
   .log-toolbar .log-btn svg{width:10px;height:10px}
-  .props{position:fixed;bottom:0;left:0;right:0;z-index:100;background:var(--panel);max-height:0;border-top:1px solid var(--line);transition:max-height .3s ease;overflow:hidden}
+  .props{position:fixed;bottom:0;left:0;right:0;width:auto;z-index:100;background:var(--panel);max-height:0;border-top:1px solid var(--line);transition:max-height .3s ease;overflow:hidden}
   .props.mobile-open{max-height:50vh}
   .props-header{padding:12px;font-size:13px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
   .props-body{overflow-y:auto;padding:10px;max-height:calc(50vh - 50px)}
@@ -234,7 +232,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
       <span>背景</span>
     </button>
-    <button class="ibtn active" data-tool="props" title="属性">
+    <button class="ibtn" data-tool="props" title="属性">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
       <span>属性</span>
     </button>
@@ -321,7 +319,6 @@ const AssetCache = {
 
 /* 日志工具 */
 const _logBar = document.getElementById('logBar');
-const _logToolbar = document.getElementById('logToolbar');
 function _log(msg, cls){
   const t = new Date().toLocaleTimeString();
   const line = document.createElement('div');
@@ -333,7 +330,6 @@ function _log(msg, cls){
     while(_logBar.childElementCount > 500) _logBar.removeChild(_logBar.firstChild);
     if(atBottom) _logBar.scrollTop = _logBar.scrollHeight;
   }
-  if(_logToolbar) _logToolbar.classList.add('open');
   console.log('[MusicViz] ' + msg);
 }
 function logCopy(){
@@ -414,8 +410,35 @@ async function fetchDemo(){
   let blob = null;
   try {
     const { r, url } = await _raceFetchDemo(DEMO_URLS);
-    blob = await r.blob();
-    _log('demo.ogg: 下载成功 ' + (blob.size/1024).toFixed(0) + 'KB via ' + _demoSourceLabel(url), 'ok');
+    const source = _demoSourceLabel(url);
+    const total = parseInt(r.headers.get('content-length') || '0', 10);
+    if(r.body && typeof r.body.getReader === 'function'){
+      const reader = r.body.getReader();
+      const chunks = []; let received = 0;
+      const t0 = performance.now();
+      let lastLog = t0;
+      _log('demo.ogg: 开始下载 (' + (total > 0 ? (total/1024).toFixed(0) + 'KB' : '未知大小') + ') via ' + source);
+      while(true){
+        const {done, value} = await reader.read();
+        if(done) break;
+        chunks.push(value);
+        received += value.byteLength;
+        const now = performance.now();
+        if(now - lastLog >= 500){
+          lastLog = now;
+          const elapsed = (now - t0) / 1000;
+          const speed = received / elapsed / 1024;
+          const pct = total > 0 ? (received / total * 100).toFixed(1) + '%' : (received/1024).toFixed(0) + 'KB';
+          _log('demo.ogg: ' + pct + ' ' + speed.toFixed(0) + 'KB/s');
+        }
+      }
+      blob = new Blob(chunks);
+      const elapsed = (performance.now() - t0) / 1000;
+      _log('demo.ogg: 下载完成 ' + (blob.size/1024).toFixed(0) + 'KB, 耗时' + elapsed.toFixed(1) + 's, 平均' + (blob.size/1024/elapsed).toFixed(0) + 'KB/s via ' + source, 'ok');
+    } else {
+      blob = await r.blob();
+      _log('demo.ogg: 下载成功 ' + (blob.size/1024).toFixed(0) + 'KB via ' + source, 'ok');
+    }
   } catch(e) {
     _log('demo.ogg: 请求失败 (' + e.message + ')', 'err');
   }
@@ -1659,8 +1682,7 @@ document.getElementById('loopBtn').innerHTML=CFG.loop?LIST_LOOP_ICON:NO_LOOP_ICO
 renderLibrary();
 if(_restored && CFG.elements.length) renderProps();
 else addElement('bars');
-_lastTool='props';
-document.querySelector('.props').classList.add('mobile-open');
+_lastTool=null;
 requestAnimationFrame(render);
 // 保持默认100%缩放，不自动适配（窗口尺寸变化不改缩放，避免默认被压到很小）
 
