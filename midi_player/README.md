@@ -190,8 +190,8 @@ MIDI不载声响，是二进制的乐思底稿。
 - 弹窗用**黑白键力度图**（`renderPaletteEndpoints`）替代原四个目标按钮：上下两条**直角梯形**色带（与配色方案菜单同形）——左竖直边高为右竖直边的一半，直观表达「轻→重」；「白键 / 黑键」覆盖在各自色带左侧、「力度」居中覆盖，与配色面板的力度图一致。
 - 力度条两端共四个**端点色块**，采用与右上角主题色按钮相同的形式：外层圆角描边框 + 内层色块（`.pe-box` / `.sw`），点击选择目标，选中时圆角框跟随主题色高亮。
 - 取色板顶部预置常用品牌色（`PALETTE_PRESETS`），左侧竖排「常用」二字（`writing-mode:vertical-rl`）；每色下方标注名称（字号 7px，三字总宽约等于色块宽度）：哔哩粉 `#fb7299`、网抑红 `#c20c0c`、小书红 `#ff2442`、Q音绿 `#31c27c`、酷安绿 `#11aa66`、钉钉蓝 `#0089ff`、美团黄 `#ffc300`；点按即把当前目标色设为该色并实时应用。
-- 取色区左半为 **2D 色板**（x=色相、y=明度，按当前饱和度渲染），右半为**色相 / 饱和度 / 明度 / 透明度 四个滑块**（HSLA），每个滑块左侧标注中文名称；2D 板圆点与四个滑块共五个手柄通过 `_syncEditHSL` / `_commitEditHSL` / `_updateSliderUI` 完全同步——拖动任一控件，其余控件与 2D 板同步跟随。
-- **术语**：CSS/色彩模型的标准中文为 Hue=**色相**、Saturation=**饱和度**、Lightness=**明度**、Alpha=**透明度**。日常口语里的「色度」通常指 chroma、「亮度」通常指 brightness/luminance，与 HSL 的 H、L 并不等价。
+- 取色区左半为 **2D 色板**（x=色相、y=明度，按当前饱和度渲染），右半为**色相 / 饱和度 / 亮度 / 透明度 四个滑块**（HSLA），每个滑块左侧标注中文名称（第三个滑块按用户习惯显示为「亮度」而非色彩学标准的「明度」）；2D 板圆点与四个滑块共五个手柄通过 `_syncEditHSL` / `_commitEditHSL` / `_updateSliderUI` 完全同步——拖动任一控件，其余控件与 2D 板同步跟随。
+- **术语**：CSS/色彩模型的标准中文为 Hue=**色相**、Saturation=**饱和度**、Lightness=**明度**、Alpha=**透明度**。UI 上第三个滑块标注为更通俗的「**亮度**」。日常口语里的「色度」通常指 chroma、「亮度」通常指 brightness/luminance，与 HSL 的 H、L 并不等价。
 - **透明度 A**：颜色以 8 位 hex（`#rrggbbaa`）存储，`_hexAlpha` 解析、`_hslaToHex` 生成；`applyTheme` 会把 `--accent-a18/a28` 与 `_themeAccentRgba` 的 alpha 按主题透明度等比缩放；`buildCustomPalette` 的 `lerp` 也会插值 alpha，使黑白键色阶同样支持透明。透明度滑块轨道用棋盘格 + 渐变叠加表示。
 - **实时生效**：任何取色/预置色都经 `_applyCustomLive()` 立即重建 `PALETTES.custom`、`applyTheme()` 并持久化；因此弹窗**没有**叉号、取消、保存按钮，点遮罩空白处即可关闭。
 - 取色板圆点滑块（`_positionBoardMarker`）按 `_editHSL` 的色相/明度定位、透明度同步到圆点 opacity，点预置色或手动取色都会同步移动。
@@ -433,11 +433,12 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **下拉浮层**：`paletteRow` 使用统一 `.drop-panel` 样式（绝对定位在控制行下方），浮在渲染区之上，**不改变渲染区高度，也不影响进度条 / 统计信息位置**；背景与设置/调试/选谱/管理面板共享同一透明度与模糊（`_panelTargets` 含 `paletteRow`）。
 - **按钮**：A/B/C/自定义四个 `.pal-btn` 为 **27px** 圆形；A/B/C 使用 **Google Sans 常规字重**（`@font-face` 来自 `fonts.googleapis.com`，`font-weight:400`，回退 Product Sans / 系统字体）；**始终为不透明主题紫底白字**（无白圈/半透明）。已删除「配色方案」竖排文字标签。
 - **力度图不换行 + 标签叠加**：`paletteRow` 改为 `flex-wrap:nowrap`，`#paletteSwatch` 用 `flex:1 1 0;min-width:0` 自适应收缩，两张力度图不再被挤到下一行；原左侧「白键 / 黑键」独立列已删除，改为把 `白键`/`黑键`/`力度` 用 `_swatchLabel()` **叠加**在梯形渐变图上（白字 + 黑色描边阴影），节省横向空间。
+- **自动收起提示**：A/B/C/自定义按钮下方有一行小字「无操作2s自动收起配色面板」（`.pal-hint`，9px），提示播放中的自动收起行为。
 - **自动收起**：播放中若 2s 内未操作配色面板（点按面板或切换配色会重置计时），自动收起（`schedulePaletteAutoCollapse`，仅在 `isPlaying` 且面板展开时生效）；暂停时取消计时。
 
 ## 9.10 谱面管理面板（下拉浮层）
 
-- **统一样式**：`manageModal` 为 `.drop-panel.manage-panel`，从「管理谱面」按钮向下展开、最大高度 **65vh**（较 75% 上收 10%）；列表正文 `.manage-row .name` 为 **11px**，标题 `.manage-head h3` 稍大一号 **14px**（`.manage-empty` 也 12px）；**行距收紧**（行 `padding:2px 8px;margin-bottom:1px`、分节 `margin:6px 0 2px`、标题 `margin-bottom:8px`）以贴合设置面板的紧凑度；背景与设置/调试/配色/选谱面板共享同一透明度与模糊（`_panelTargets` 含 `manageModal`）。已移除独立卡片与「透明 / 模糊」滑块。**点击行即可切换到该谱面播放**：用户上传谱直接切歌；内置谱先查 `AssetCache.has()`，已下载则切换（若曾被标记删除先恢复）；未下载则 `_probeMediaSize()` 探测体积并弹窗「大小约 xxKB，是否立即下载并播放？」，确认后下载并切歌。操作按钮点击不会触发行播放。
+- **统一样式**：`manageModal` 为 `.drop-panel.manage-panel`，从「管理谱面」按钮向下展开、最大高度 **65vh**（较 75% 上收 10%）；列表正文 `.manage-row .name` 为 **11px**，标题 `.manage-head h3` 稍大一号 **14px**（`.manage-empty` 也 12px）；**行距收紧**（行 `padding:2px 8px;margin-bottom:1px`、分节 `margin:6px 0 2px`、标题 `margin-bottom:8px`）以贴合设置面板的紧凑度；背景与设置/调试/配色/选谱面板共享同一透明度与模糊（`_panelTargets` 含 `manageModal`）。已移除独立卡片与「透明 / 模糊」滑块。**点击行即可切换到该谱面播放**：用户上传谱直接切歌；内置谱先查 `AssetCache.has()`，已下载则切换（若曾被标记删除先恢复）；未下载则 `_probeMediaSize()` 探测体积并弹窗「大小约 xxKB，是否立即下载并播放？」，确认后下载并切歌。**下载 / 删除按钮属「管理动作」，不算直接点击谱面**：行点击监听用 `e.composedPath()`（派发时快照）判断事件是否来自 `BUTTON`，因为按钮处理器会调用 `_btnLoading` 替换 `innerHTML`，导致 `e.target` 脱离文档、`closest('button')` 失效（旧实现会误触发行点击的下载询问弹窗）。
 - **点击外部收起**：统一由 `closeAllDropPanels()`（document 捕获 pointerdown，排除 `.drop-panel` 与 `.drop-trigger`）处理。
 - **就地删除 / 重下**：行内只有名称 + 右侧垃圾桶/下载图标（无「内置 / 已删除 / 上传」文字标签）。点击后图标就地变为**加载中**（下载时若服务端给出 `content-length` 则显示百分比），完成后原地切换为另一图标，**不再重建并重新弹出整个面板**；`deleteBuiltinSong` / `redownloadBuiltinSong` 仅做操作并刷新选谱下拉。
 - **删除即真正清理空间**（Rush E3 除外）：`deleteBuiltinSong` 会遍历 Cache API 删除该谱面所有缓存键（按文件名匹配，兼容 CDN/Pages 键名），并释放其配置的默认音色缓存（若不再被其它未删除的内置谱使用且非当前音色），日志输出释放的 MB 数。删除状态存于 `deletedBuiltin`。**Rush E3 为演示谱面**：删除仅标记（`_SOFT_DELETE`），不删缓存，重置后自动恢复；其余谱面删除后不随重置恢复。
@@ -815,6 +816,7 @@ midi_player/
 | 进度面板与默认值 | 谱面管理行距收紧贴合设置面板；默认透明度 25%/模糊 0%；全屏时整块进度面板悬浮到渲染区顶部中央（绝对定位不影响布局），单击渲染区收起/显示，双击仍播放暂停 | `76402ea` |
 | 调试面板滚动 | 日志区不再单独滚动，整个调试面板作为唯一滚动容器；滚动日志即滚动面板，避免日志滑到边界后底部仍被裁掉需二次滑动；自动跟随与置顶/置底改为滚动面板 | `36904c1` |
 | 调试终端滚动修正 | 终端 `.dbg-log` 恢复为唯一滚动容器；`_debugPanelScrollEl` 改回返回终端，修复置顶/置底按钮无效与自动展开不滚到最新；自动展开改用 requestAnimationFrame 等布局完成 | `397c5fc` |
+| 亮度/提示/管理动作 | 取色面板「明度」改为「亮度」；A/B/C 下方加小字「无操作2s自动收起配色面板」；谱面管理的下载/删除按钮不再误触发「未下载谱面」询问弹窗（用 `composedPath` 判断按钮来源） | `_pending_` |
 | 修复力度图不显示 | `#paletteEndpoints` 由 `<svg>` 改为 `<div>`（此前 JS 注入 HTML 到 SVG 内被浏览器丢弃，导致力度条与四个端点色块不可见/不可点） | `7f58ba4` |
 | 网抑红与力度图细节 | 默认主题色与方案 B 主题色统一为网抑红 `#c20c0c`；预置色左侧竖排「常用」；预置色名缩小到与色块同宽；力度条四个端点色块改为圆角框+内色块（同主题色按钮）；白键/黑键/力度文字覆盖在力度条左侧与中间 | `2d0d249` |
 | HSLA 与滑块标签 | 新增透明度(A)滑块，配色改为 HSLA；四个滑块左侧标注「色相/饱和度/明度/透明度」；颜色以 8 位 hex 存储，alpha 贯通主题色与黑白键色阶 | `e6b6ef5` |

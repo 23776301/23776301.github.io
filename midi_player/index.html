@@ -150,6 +150,8 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 
 /* 配色方案按钮：与播放控制同尺寸（32px）、单行对齐 */
 .pal-grid{display:flex;gap:6px;flex-shrink:0}
+.pal-col{display:flex;flex-direction:column;gap:3px;flex-shrink:0}
+.pal-hint{font-size:9px;line-height:1;color:#888;white-space:nowrap}
 
 /* 控制行：播放控制 + 设置/调试/配色/全屏 */
 /* 第二行 8 个按钮：等分排满整行宽度；窄屏 / DPI 异常时按钮与图标一起自适应缩小，避免溢出或重叠 */
@@ -452,13 +454,16 @@ select:focus{border-color:var(--accent)}
           </div>
           <input type="file" id="midiFile" accept=".mid,.midi" style="display:none" onchange="onMidiFile(event)">
           <div id="paletteRow" class="palette-row drop-panel">
-            <div class="pal-grid">
+            <div class="pal-col">
+              <div class="pal-grid">
               <button class="pal-btn palette-btn" data-palette="A" onclick="setPalette('A')" title="纯紫">A</button>
               <button class="pal-btn palette-btn active" data-palette="B" onclick="setPalette('B')" title="青蓝×琥珀红">B</button>
               <button class="pal-btn palette-btn" data-palette="C" onclick="setPalette('C')" title="青绿×品红">C</button>
               <button class="pal-btn" id="paletteEditBtn" onclick="openPaletteModal()" title="自定义配色">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M8.203 2.004c1.261 0 2.304 1.103 2.476 2.538l8.483 8.484l-7.778 7.778a3 3 0 0 1-4.243 0L2.9 16.562a3 3 0 0 1 0-4.243l2.804-2.805V4.961c0-1.633 1.12-2.957 2.5-2.957m.5 2.957v1.553l-1 1V4.961c0-.327.224-.591.5-.591c.277 0 .5.264.5.591m0 5.914V9.342l-4.39 4.391a1 1 0 0 0 0 1.414l4.243 4.243a1 1 0 0 0 1.414 0l6.364-6.364l-5.63-5.63v3.48l-.003.128h-2.01a1 1 0 0 0 .012-.129" clip-rule="evenodd"/><path d="M16.859 16.875a3 3 0 1 0 4.242 0l-2.121-2.121z"/></svg>
               </button>
+              </div>
+              <div class="pal-hint">无操作2s自动收起配色面板</div>
             </div>
             <div id="paletteSwatch" style="flex:1 1 0;min-width:0;max-width:340px;height:44px;position:relative;"></div>
           </div>
@@ -2596,8 +2601,13 @@ function _makeManageRow(name, kind, file, isDeleted){
     _btnIcon(btn, TRASH_ICON, 'del', '删除', () => _onDeleteBuiltin(file, btn));
   }
   row.appendChild(btn);
-  // 点击行（非操作按钮）切换到该谱面播放；未下载则弹窗询问是否下载并播放
+  // 点击行（非操作按钮）切换到该谱面播放；未下载则弹窗询问是否下载并播放。
+  // 下载/删除属"管理动作"，不算直接点击谱面：按钮处理器会调用 _btnLoading
+  // 替换 innerHTML，使 e.target 脱离文档、closest('button') 失效，故用
+  // composedPath（派发时快照）判断是否来自按钮。
   row.addEventListener('click', (e) => {
+    const path = (e.composedPath && e.composedPath()) || [];
+    if(path.some(el => el && el.tagName === 'BUTTON')) return;
     if(e.target && e.target.closest && e.target.closest('button')) return;
     _onManageRowClick(name, kind, file, isDeleted);
   });
@@ -4430,7 +4440,7 @@ applyPanelAppearance();     // 统一菜单/调试/选谱/管理面板的透明�
         <div class="hsl-slider" data-hsl="h"><span class="hsl-handle" id="hslHandleH"></span></div>
         <span class="hsl-label">饱和度</span>
         <div class="hsl-slider" data-hsl="s"><span class="hsl-handle" id="hslHandleS"></span></div>
-        <span class="hsl-label">明度</span>
+        <span class="hsl-label">亮度</span>
         <div class="hsl-slider" data-hsl="l"><span class="hsl-handle" id="hslHandleL"></span></div>
         <span class="hsl-label">透明度</span>
         <div class="hsl-slider" data-hsl="a"><span class="hsl-handle" id="hslHandleA"></span></div>
