@@ -77,12 +77,18 @@ h1{font-size:22px;font-weight:700;margin-bottom:4px}
 #paletteEndpoints{display:block;width:100%;height:auto;margin-bottom:6px}
 .pe-dot{cursor:pointer}
 .pe-dot.sel{filter:drop-shadow(0 0 3px #fff)}
-.palette-presets{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px}
-.pp-swatch{width:22px;height:22px;border-radius:5px;border:1px solid rgba(255,255,255,.25);cursor:pointer;padding:0;transition:transform .1s}
-.pp-swatch:hover{transform:scale(1.1)}
-.pp-swatch:active{transform:scale(.94)}
-.palette-board-wrap{position:relative;margin-bottom:6px}
-.palette-board-wrap canvas{width:100%;height:132px;border-radius:6px;cursor:crosshair;touch-action:none;display:block}
+.palette-presets{display:flex;justify-content:space-between;gap:4px;margin-bottom:6px}
+.pp-item{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;cursor:pointer;padding:0;flex:1;min-width:0}
+.pp-swatch{width:22px;height:22px;border-radius:5px;border:1px solid rgba(255,255,255,.25);display:block;transition:transform .1s}
+.pp-item:hover .pp-swatch{transform:scale(1.1)}
+.pp-item:active .pp-swatch{transform:scale(.94)}
+.pp-name{font-size:9px;line-height:1;color:#aaa;white-space:nowrap}
+.palette-colors{display:flex;gap:8px;height:108px;margin-bottom:6px}
+.palette-board-wrap{position:relative;flex:0 0 50%;height:100%}
+.palette-board-wrap canvas{width:100%;height:100%;border-radius:6px;cursor:crosshair;touch-action:none;display:block}
+.hsl-sliders{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+.hsl-slider{position:relative;flex:1;border-radius:5px;cursor:pointer;border:1px solid #333;touch-action:none}
+.hsl-handle{position:absolute;top:50%;left:0;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #222;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 3px rgba(0,0,0,.8)}
 .color-board-marker{position:absolute;width:12px;height:12px;border-radius:50%;border:2px solid #fff;
   transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 4px rgba(0,0,0,.85)}
 .palette-foot{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#ccc}
@@ -3435,6 +3441,8 @@ let paletteEditTarget = 'theme';
 let _colorPicking = false;
 let _colorBoardBound = false;
 let _paletteModalBound = false;
+let _editHSL = { h: 0, s: 1, l: 0.5 };
+let _hslDragging = null;
 
 function buildCustomPalette(wl, wh, bl, bh){
   const lerp = (a, b, t) => {
@@ -3581,7 +3589,7 @@ function drawColorBoard(){
   for(let y = 0; y < h; y++){
     const l = 1 - y / (h - 1);
     for(let x = 0; x < w; x++){
-      const rgb = hslToRgb(x / (w - 1) * 360, 1, l);
+      const rgb = hslToRgb(x / (w - 1) * 360, _editHSL.s, l);
       const i = (y * w + x) * 4;
       img.data[i] = rgb[0]; img.data[i+1] = rgb[1]; img.data[i+2] = rgb[2]; img.data[i+3] = 255;
     }
@@ -3611,10 +3619,22 @@ function _pickColorAt(e){
   let y = (p.clientY - rect.top) / rect.height * cv.height;
   x = Math.max(0, Math.min(cv.width - 1, x));
   y = Math.max(0, Math.min(cv.height - 1, y));
-  paletteEditColors[paletteEditTarget] = hslToHex(x / (cv.width - 1) * 360, 1, 1 - y / (cv.height - 1));
-  _applyCustomLive(); // 实时生效
+  _editHSL.h = x / (cv.width - 1) * 360;
+  _editHSL.l = 1 - y / (cv.height - 1);
+  _commitEditHSL('hl');
+}
+// 由当前目标色反推 HSL，同步到 2D 板与三个滑块
+function _syncEditHSL(){
+  const hsl = _hexToHsl(paletteEditColors[paletteEditTarget] || '#8b5cf6');
+  _editHSL.h = hsl[0]; _editHSL.s = hsl[1]; _editHSL.l = hsl[2];
+}
+// 提交 HSL 改动：写回 hex、实时应用、同步四个滑块
+function _commitEditHSL(changed){
+  paletteEditColors[paletteEditTarget] = hslToHex(_editHSL.h, _editHSL.s, _editHSL.l);
+  _applyCustomLive();
   updatePalettePickUI();
   _positionBoardMarker();
+  if(changed === 's') drawColorBoard(); // 2D 板按当前饱和度重新渲染
 }
 // 实时应用自定义配色（主题色 + 黑白键色阶）并持久化
 function _applyCustomLive(){
@@ -3627,9 +3647,11 @@ function _applyCustomLive(){
 function _applyPresetColor(color){
   if(!color) return;
   paletteEditColors[paletteEditTarget] = color;
+  _syncEditHSL();
   _applyCustomLive();
   updatePalettePickUI();
   _positionBoardMarker();
+  drawColorBoard();
 }
 // HEX -> [h(0-360), s, l]
 function _hexToHsl(hex){
@@ -3647,51 +3669,96 @@ function _hexToHsl(hex){
   }
   return [h, sat, l];
 }
-// 取色板滑块定位到当前目标色的色相/明度位置
+// 2D 取色板圆点滑块定位（x=色相，y=明度）
 function _positionBoardMarker(){
   const marker = document.getElementById('colorBoardMarker');
   if(!marker) return;
-  const c = paletteEditColors[paletteEditTarget] || '#8b5cf6';
-  const hsl = _hexToHsl(c);
-  marker.style.left = (hsl[0] / 360 * 100) + '%';
-  marker.style.top = ((1 - hsl[2]) * 100) + '%';
-  marker.style.background = c;
+  marker.style.left = (_editHSL.h / 360 * 100) + '%';
+  marker.style.top = ((1 - _editHSL.l) * 100) + '%';
+  marker.style.background = paletteEditColors[paletteEditTarget];
 }
-// 黑白键力度图：上下两条渐变色带，左右端点可点击选择目标
+// 黑白键力度图：直角梯形（左底边=右底边一半，左轻右重），两端方形色块可点选目标
 function renderPaletteEndpoints(){
   const svg = document.getElementById('paletteEndpoints');
   if(!svg) return;
   const c = paletteEditColors;
   const p = buildCustomPalette(c.wl, c.wh, c.bl, c.bh);
-  const W = 320, bh = 15, gap = 6, y1 = 1, y2 = y1 + bh + gap;
-  const barX = 32, barW = W - barX - 10;
+  const W = 340, rh = 20, gap = 8, y1 = 0, y2 = y1 + rh + gap;
+  const labelW = 22, sq = 16, trapX = 48, trapW = 268;
   const stops = cols => cols.map((col, i) =>
     '<stop offset="' + (i / (cols.length - 1) * 100).toFixed(1) + '%" stop-color="' + col + '"/>').join('');
-  const dot = (t, cx, cy, col) => {
+  // 直角梯形：左竖直边高 rh/2，右竖直边高 rh
+  const trap = (y, fillId) =>
+    '<polygon points="' + trapX + ',' + (y + rh / 2) + ' ' + (trapX + trapW) + ',' + y + ' ' +
+    (trapX + trapW) + ',' + (y + rh) + ' ' + trapX + ',' + (y + rh) + '" fill="url(#' + fillId + ')"/>';
+  const sqBox = (t, x, y, col) => {
     const sel = paletteEditTarget === t;
-    return '<circle class="pe-dot' + (sel ? ' sel' : '') + '" data-target="' + t + '" cx="' + cx + '" cy="' + cy +
-      '" r="' + (sel ? 6.5 : 5) + '" fill="' + col + '" stroke="#fff" stroke-width="' + (sel ? 2 : 1.2) + '"/>';
+    return '<rect class="pe-dot' + (sel ? ' sel' : '') + '" data-target="' + t + '" x="' + x +
+      '" y="' + (y + (rh - sq) / 2) + '" width="' + sq + '" height="' + sq + '" rx="3" fill="' + col +
+      '" stroke="' + (sel ? '#fff' : 'rgba(255,255,255,.35)') + '" stroke-width="' + (sel ? 2 : 1) + '"/>';
   };
   svg.innerHTML =
     '<defs>' +
       '<linearGradient id="peW" x1="0" y1="0" x2="1" y2="0">' + stops(p.white) + '</linearGradient>' +
       '<linearGradient id="peB" x1="0" y1="0" x2="1" y2="0">' + stops(p.black) + '</linearGradient>' +
     '</defs>' +
-    '<text x="0" y="' + (y1 + bh * 0.75) + '" fill="#bbb" font-size="10">白键</text>' +
-    '<text x="0" y="' + (y2 + bh * 0.75) + '" fill="#bbb" font-size="10">黑键</text>' +
-    '<rect x="' + barX + '" y="' + y1 + '" width="' + barW + '" height="' + bh + '" rx="4" fill="url(#peW)"/>' +
-    '<rect x="' + barX + '" y="' + y2 + '" width="' + barW + '" height="' + bh + '" rx="4" fill="url(#peB)"/>' +
-    dot('wl', barX, y1 + bh / 2, c.wl) +
-    dot('wh', barX + barW, y1 + bh / 2, c.wh) +
-    dot('bl', barX, y2 + bh / 2, c.bl) +
-    dot('bh', barX + barW, y2 + bh / 2, c.bh);
+    '<text x="0" y="' + (y1 + rh * 0.72) + '" fill="#bbb" font-size="10">白键</text>' +
+    '<text x="0" y="' + (y2 + rh * 0.72) + '" fill="#bbb" font-size="10">黑键</text>' +
+    trap(y1, 'peW') + trap(y2, 'peB') +
+    sqBox('wl', labelW + 2, y1, c.wl) +
+    sqBox('wh', trapX + trapW + 6, y1, c.wh) +
+    sqBox('bl', labelW + 2, y2, c.bl) +
+    sqBox('bh', trapX + trapW + 6, y2, c.bh);
 }
 function renderPalettePresets(){
   const host = document.getElementById('palettePresets');
   if(!host) return;
   host.innerHTML = PALETTE_PRESETS.map(p =>
-    '<button type="button" class="pp-swatch" data-color="' + p.color + '" title="' + p.name +
-    '" style="background:' + p.color + '"></button>').join('');
+    '<button type="button" class="pp-item" data-color="' + p.color + '" title="' + p.name + '">' +
+    '<span class="pp-swatch" style="background:' + p.color + '"></span>' +
+    '<span class="pp-name">' + p.name + '</span></button>').join('');
+}
+// 三个 HSL 滑块（色相/明度/饱和度）与 2D 板滑块同步
+function _updateSliderUI(){
+  const h = _editHSL.h, s = _editHSL.s, l = _editHSL.l;
+  const set = (id, frac) => { const el = document.getElementById(id); if(el) el.style.left = (frac * 100) + '%'; };
+  set('hslHandleH', h / 360);
+  set('hslHandleS', s);
+  set('hslHandleL', l);
+  const elH = document.querySelector('.hsl-slider[data-hsl="h"]');
+  const elS = document.querySelector('.hsl-slider[data-hsl="s"]');
+  const elL = document.querySelector('.hsl-slider[data-hsl="l"]');
+  if(elH){
+    const st = [0, 60, 120, 180, 240, 300, 360].map(d =>
+      'hsl(' + d + ',100%,50%) ' + (d / 360 * 100) + '%').join(',');
+    elH.style.background = 'linear-gradient(to right,' + st + ')';
+  }
+  if(elS) elS.style.background = 'linear-gradient(to right, hsl(' + h + ',0%,' + (l * 100) + '%), hsl(' + h + ',100%,' + (l * 100) + '%))';
+  if(elL) elL.style.background = 'linear-gradient(to right, #000, hsl(' + h + ',' + (s * 100) + '%,50%), #fff)';
+}
+function _bindHSLSliders(){
+  document.querySelectorAll('.hsl-slider').forEach(el => {
+    const key = el.getAttribute('data-hsl');
+    el.addEventListener('pointerdown', e => {
+      _hslDragging = key;
+      try{ el.setPointerCapture(e.pointerId); }catch(_){}
+      _pickHSLAt(key, e, el);
+      e.preventDefault();
+    });
+    el.addEventListener('pointermove', e => { if(_hslDragging === key) _pickHSLAt(key, e, el); });
+    el.addEventListener('pointerup', () => { _hslDragging = null; });
+    el.addEventListener('pointercancel', () => { _hslDragging = null; });
+  });
+}
+function _pickHSLAt(key, e, el){
+  const rect = el.getBoundingClientRect();
+  const p = e.touches ? e.touches[0] : e;
+  let t = (p.clientX - rect.left) / rect.width;
+  t = Math.max(0, Math.min(1, t));
+  if(key === 'h') _editHSL.h = t * 360;
+  else if(key === 's') _editHSL.s = t;
+  else if(key === 'l') _editHSL.l = t;
+  _commitEditHSL(key);
 }
 function _renderPaletteThemeBtn(){
   const sw = document.getElementById('paletteThemeSwatch');
@@ -3702,8 +3769,10 @@ function _renderPaletteThemeBtn(){
 function selectPaletteTarget(k){
   if(!PALETTE_TARGET_LABELS[k]) return;
   paletteEditTarget = k;
+  _syncEditHSL();
   updatePalettePickUI();
   _positionBoardMarker();
+  drawColorBoard();
 }
 function updatePalettePickUI(){
   const label = document.getElementById('palettePickLabel');
@@ -3712,6 +3781,7 @@ function updatePalettePickUI(){
   if(prev) prev.style.background = paletteEditColors[paletteEditTarget];
   renderPaletteEndpoints();
   _renderPaletteThemeBtn();
+  _updateSliderUI();
 }
 function _bindPaletteModal(){
   if(_paletteModalBound) return;
@@ -3729,6 +3799,7 @@ function _bindPaletteModal(){
     const b = e.target.closest ? e.target.closest('[data-color]') : null;
     if(b) _applyPresetColor(b.getAttribute('data-color'));
   });
+  _bindHSLSliders();
 }
 function openPaletteModal(){
   const m = document.getElementById('paletteModal');
@@ -3743,6 +3814,7 @@ function openPaletteModal(){
   paletteEditTarget = 'theme';
   _bindColorBoard();
   _bindPaletteModal();
+  _syncEditHSL();
   drawColorBoard();
   renderPaletteEndpoints();
   renderPalettePresets();
@@ -4291,11 +4363,18 @@ applyPanelAppearance();     // 统一菜单/调试/选谱/管理面板的透明�
         <span class="sw" id="paletteThemeSwatch"></span><span>主题色</span>
       </button>
     </div>
-    <svg id="paletteEndpoints" viewBox="0 0 320 40"></svg>
+    <svg id="paletteEndpoints" viewBox="0 0 340 48"></svg>
     <div id="palettePresets" class="palette-presets"></div>
-    <div class="palette-board-wrap">
-      <canvas id="colorBoard" width="420" height="150"></canvas>
-      <span id="colorBoardMarker" class="color-board-marker"></span>
+    <div class="palette-colors">
+      <div class="palette-board-wrap">
+        <canvas id="colorBoard" width="240" height="140"></canvas>
+        <span id="colorBoardMarker" class="color-board-marker"></span>
+      </div>
+      <div class="hsl-sliders">
+        <div class="hsl-slider" data-hsl="h"><span class="hsl-handle" id="hslHandleH"></span></div>
+        <div class="hsl-slider" data-hsl="l"><span class="hsl-handle" id="hslHandleL"></span></div>
+        <div class="hsl-slider" data-hsl="s"><span class="hsl-handle" id="hslHandleS"></span></div>
+      </div>
     </div>
     <div class="palette-foot">
       <span>正在设置：<b id="palettePickLabel" style="color:#fff">主题色</b></span>
