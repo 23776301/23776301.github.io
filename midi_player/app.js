@@ -1381,10 +1381,25 @@ registerProcessor('synth-processor', SynthProcessor);
 let _synthWorkletNode = null;
 let _synthWorkletReady = false;
 let _synthWorkletLoading = null;
+let _synthWorkletFailed = false;
 let _synthWorkletVoices = 0;
+// 调试面板：显示当前合成钢琴实际走的是哪条路径
+function _updateSynthPathInfo(){
+  const el = document.getElementById('synthPathInfo');
+  if(!el) return;
+  let txt;
+  if(_synthWorkletReady) txt = 'AudioWorklet（每音符 0 节点，最抗卡顿）';
+  else if(_synthWorkletFailed) txt = '预渲染缓冲区（AudioWorklet 不可用，已回退）';
+  else if(_synthWorkletLoading) txt = 'AudioWorklet 加载中…（暂用预渲染缓冲区）';
+  else txt = '预渲染缓冲区（AudioWorklet 未初始化）';
+  el.textContent = '合成钢琴：' + txt;
+}
 function _initSynthWorklet(){
   if(_synthWorkletReady || _synthWorkletLoading) return _synthWorkletLoading;
-  if(!audioCtx || !audioCtx.audioWorklet) return null;
+  if(!audioCtx || !audioCtx.audioWorklet){
+    _synthWorkletFailed = true; _updateSynthPathInfo();
+    return null;
+  }
   _synthWorkletLoading = (async () => {
     const blob = new Blob([SYNTH_WORKLET_SRC], { type: 'application/javascript' });
     const url = URL.createObjectURL(blob);
@@ -1397,13 +1412,17 @@ function _initSynthWorklet(){
     node.connect(masterGain);
     _synthWorkletNode = node;
     _synthWorkletReady = true;
+    _updateSynthPathInfo();
     console.log('[AudioDebug][INFO] 合成钢琴 AudioWorklet 已启用（每音符 0 节点、无节点 churn）');
     return node;
   })().catch((e) => {
     console.warn('[AudioDebug][WARN] AudioWorklet 初始化失败，回退预渲染缓冲区方案：' + (e && e.message ? e.message : e));
+    _synthWorkletFailed = true;
     _synthWorkletLoading = null;
+    _updateSynthPathInfo();
     return null;
   });
+  _updateSynthPathInfo();
   return _synthWorkletLoading;
 }
 
@@ -2349,10 +2368,25 @@ const COLD_START = {
     }
   }
 
-  // 顺序冷启动：P0 谱面 -> （起播合成钢琴 + P1 古钢琴）-> P2 预配置必下资源
+  // 启动管线：P0 谱面 -> （起播合成钢琴 + P1 古钢琴）-> P2 预配置必下资源
+  // 冷启动 = 默认谱面本地无缓存（首次访问或清过缓存）；刷新命中缓存属热启动，不应再打「冷启动」。
   (async function coldStart(){
-    // ---- P0：独占下载默认谱面 ----
-    console.log('[AudioDebug][INFO] 冷启动 P0：独占下载默认谱面 ' + _songLabel(COLD_START.sheet));
+    // 以默认谱面是否已在本地缓存判定：谱面是阻塞起播的主资源，刷新后必然命中缓存
+    let isCold = true, sheetCached = false;
+    try{ sheetCached = await AssetCache.has(COLD_START.sheet); }catch(e){}
+    isCold = !sheetCached;
+    const tag = isCold ? '冷启动' : '热启动(缓存)';
+    const from = isCold ? '独占下载' : '读取缓存';
+
+    // 谱面未缓存（需解压）且原生不支持 br 时：WASM 解码器与默认谱面并行下载，
+    // 避免解压要等谱面下完才开始。谱面已缓存（热启动）则无需 WASM。
+    if(!sheetCached && !_NATIVE_BROTLI){
+      console.log('[AudioDebug][INFO] ' + tag + '：原生不支持 br，WASM 解码器与默认谱面并行下载');
+      _loadBrotliWasm().catch(() => {});
+    }
+
+    // ---- P0：默认谱面 ----
+    console.log('[AudioDebug][INFO] ' + tag + ' P0：' + from + '默认谱面 ' + _songLabel(COLD_START.sheet));
     try{
       const resp = await fetchMedia(COLD_START.sheet, (p) => {
         if(p < 100) setStatus('谱面[' + _songDisplayName(DEFAULT_SONG) + ']下载 ' + Math.round(p) + '%');
@@ -2368,15 +2402,15 @@ const COLD_START = {
       return; // 谱面失败则不继续下载音色
     }
 
-    // ---- P1：起播的同时，独占下载默认音色 ----
-    console.log('[AudioDebug][INFO] 冷启动 P1：独占下载默认音色 ' + _timbreLabel(COLD_START.timbre));
+    // ---- P1：起播的同时，下载默认音色 ----
+    console.log('[AudioDebug][INFO] ' + tag + ' P1：' + from + '默认音色 ' + _timbreLabel(COLD_START.timbre));
     await loadDefaultTimbre();
 
     // ---- P2：古钢琴就绪后，再下载预配置的内置必下音色与谱面 ----
     const sheets = COLD_START.mandatorySheets.filter(f => f !== COLD_START.sheet);
     const timbres = COLD_START.mandatoryTimbres.filter(t => t !== COLD_START.timbre);
     if(sheets.length || timbres.length){
-      console.log('[AudioDebug][INFO] 冷启动 P2：预配置必下资源（谱面 ' + sheets.length + ' / 音色 ' + timbres.length + '）');
+      console.log('[AudioDebug][INFO] ' + tag + ' P2：预配置必下资源（谱面 ' + sheets.length + ' / 音色 ' + timbres.length + '）');
     }
     for(const f of sheets){
       try{
@@ -4555,3 +4589,4 @@ setPalette(currentPalette); // 同步按钮选中态并按恢复的配色重绘
 updatePaletteToggleIcon();  // 配色栏默认展开，同步收起/展开按钮图标
 applyPanelAppearance();     // 统一菜单/调试/选谱/管理面板的透明度与模糊（含动态创建的 .csel-pop）
 _loadFpsCap();              // 恢复帧率上限设置
+_updateSynthPathInfo();     // 调试面板：合成钢琴当前路径（AudioWorklet / 预渲染缓冲区）

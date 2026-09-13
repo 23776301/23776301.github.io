@@ -309,7 +309,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **音频图**：`AudioContext → masterGain → outputAnalyser → destination`，`masterGain` 负责总音量，`outputAnalyser`（FFT 2048）用于静音探测。
 - **音色加载**：Soundfont 以 `*-ogg.js` 形式提供，内部是 base64 音频；`_doLoad` 下载/读缓存后用 `new Function` 求值取数据，再经 `atob → Uint8Array → decodeAudioData` 得到 `AudioBuffer`。
 - **媒体源（多镜像完整下载竞速 + 本站 Pages 兜底）**：`_mediaUrls()` 为每个资源生成候选源数组——4 个 jsDelivr 边缘（`cdn` / `fastly` / `gcore` / `testingcf`）、5 个国内常用 GitHub 加速镜像（`ghproxy.net` / `gh-proxy.com` / `ghfast.top` / `gh.llkk.cc` / `gh.xxooo.cf`）、`statically` / `githack`，外加本站同源 Pages。`_raceDownloadFull()` 让所有镜像**同时完整下载**同一资源，`Promise.any` 取**最先完整完成**者，胜出后立即 `abort()` 其余并丢弃其不完整分片。开关 `raceFull`（默认开）关闭时改用 `_fetchByFirstByte()`（只竞速首字节）。
-- **冷启动优先级管线**（`COLD_START` + `coldStart()`）：**同一时刻只竞速一个资源**，避免多资源互相抢带宽：**P0** 竞速下载默认谱面（`Rush E 3.mid.br`）；**P0 完成立即用合成钢琴起播**，同时进入 **P1** 竞速下载默认音色（古钢琴 `clavinet`），此期间不下载其它任何资源；**P2** 古钢琴就绪后，才下载 `mandatorySheets` / `mandatoryTimbres` 配置的预配置必下谱面与音色（默认 `The Sound of Silence`）。音色下载并预解码完成后只切 `current`，不打断正在发声的 voice。
+- **启动优先级管线**（`COLD_START` + `coldStart()`）：启动时先判定**冷/热启动**——以**默认谱面是否已在本地缓存**为准（谱面是阻塞起播的主资源，刷新后必然命中）：已缓存则为**热启动**（刷新即属此类），日志打 `热启动(缓存)` 且显示「读取缓存」；否则为**冷启动**，日志打 `冷启动` 且显示「独占下载」。管线本身：**同一时刻只处理一个资源**，避免多资源互相抢带宽：**P0** 默认谱面（`Rush E 3.mid.br`）；**P0 完成立即用合成钢琴起播**，同时进入 **P1** 默认音色（古钢琴 `clavinet`），此期间不下载其它任何资源；**P2** 古钢琴就绪后，才下载 `mandatorySheets` / `mandatoryTimbres` 配置的预配置必下谱面与音色（默认 `The Sound of Silence`）。音色下载并预解码完成后只切 `current`，不打断正在发声的 voice。**冷启动且浏览器原生不支持 br 时，WASM 解码器与默认谱面并行下载**（否则解压要等谱面下完才开始）；热启动谱面已在缓存中（解压后写入），无需 WASM。
 - **谱面压缩传输（只传 brotli）**：仓库**只保留 `.mid.br`**，原始 `.mid` 与 `.gz` 已删除，传输一律使用 br 压缩后的文件。`_fetchMediaBlob()` 取 `.br` 后解压：原生 `DecompressionStream('brotli')` 优先；不支持时**惰性加载自定义 WASM 解码器**（`vendor/brotli_dec_wasm.js` + `vendor/brotli_dec_wasm_bg.wasm`，`brotli-dec-wasm@2.3.2`）。以 `_looksLikeMidi()` 校验 `MThd`，兼容服务端已按 `Content-Encoding` 自动解压的情况。解压后的谱面按原路径写入 Cache API，回访不再下载也不再解压。`Rush E 3.mid` 2.70 MB → br **95 KB**。
 - **依赖本地化**：`@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`，不再依赖 jsDelivr；入口 `app.js` 仍同源优先加载。
 - **竞速日志（固化最后一行，不重复打「下载成功」）**：进行中 `_raceLog()` 每 0.5s 覆盖同一行显示领先镜像与速度；完成后 `_raceLogFinal()` 把该行固化为 `竞速[文件名] 完成 <- [镜像] 大小 用时Xs 平均YKB/s` 并**保留不删**，用于指示本次性能。失败时同样保留 `全部镜像失败`。竞速行已含来源/体积/速度/文件名，故不再额外打印 `xx下载成功` 的蓝色日志（缓存命中仍打印）。
@@ -788,6 +788,8 @@ midi_player/
 | 合成钢琴 AudioWorklet | 单节点合成器（Blob URL 内联、无额外请求），每音符 0 节点、零 churn；每八度限谐波波表防混叠，128 voice 池，就绪前/失败回退预渲染缓冲区方案 | `_pending_` |
 | 交互优化 | 设置开关只显示「音游模式」且默认关（=欣赏模式）；测试谱未下载不出现在选谱列表；管理/音色列表在按钮旁标注 br 传输体积；点击未下载的谱面/音色直接下载并切换（去掉二次确认）；`内置 WASM` 改称 `自定义 WASM`；密度日志改 2 位小数并解释算法；切歌日志合并为「切换: xxx.mid - xxx 音色」 | `_pending_` |
 | 帧率上限 | 设置面板新增帧率上限（不限/30/60/90/120）；渲染降级时临时压到 30fps，比仅抽帧 LOD 更平滑 | `_pending_` |
+| 冷/热启动区分 | 启动时按「默认谱面+默认音色是否已缓存」判定冷/热启动，刷新不再误报「冷启动」；冷启动且原生不支持 br 时 WASM 解码器与默认谱面并行下载 | `_pending_` |
+| 合成路径指示 | 调试面板新增「合成钢琴：AudioWorklet / 预渲染缓冲区」实时指示 | `_pending_` |
 
 ## 2026-09 首版与性能攻坚
 
