@@ -789,8 +789,12 @@ const AudioDebugMonitor = {
     if(playing && this.skippedNotes > 0){
       console.warn('[AudioDebug] 音符积压：跳过 ' + this.skippedNotes + ' 个');
     }
-    if(playing && this.frames > 0 && fps < 30){
-      console.warn('[AudioDebug][WARN] 帧率偏低 fps=' + fps.toFixed(0) + ' 预期60fps' +
+    // 帧率告警阈值随「帧率上限」自适应：未限速时仍以 30fps 为界，限速 30 时不会误报
+    const _fpsCap = _effectiveFpsCap();
+    const _fpsFloor = Math.min(30, (_fpsCap || 60) * 0.7);
+    if(playing && this.frames > 0 && fps < _fpsFloor){
+      console.warn('[AudioDebug][WARN] 帧率偏低 fps=' + fps.toFixed(0) +
+        ' 预期' + (_fpsCap || 60) + 'fps' +
         ' drawMs=' + (this.drawMsSum / this.frames).toFixed(1) +
         ' schedMs=' + (this.frameMsSum / this.frames).toFixed(1));
     }
