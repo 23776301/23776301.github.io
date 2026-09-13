@@ -307,11 +307,12 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **音频图**：`AudioContext → masterGain → outputAnalyser → destination`，`masterGain` 负责总音量，`outputAnalyser`（FFT 2048）用于静音探测。
 - **音色加载**：Soundfont 以 `*-ogg.js` 形式提供，内部是 base64 音频；`_doLoad` 下载/读缓存后用 `new Function` 求值取数据，再经 `atob → Uint8Array → decodeAudioData` 得到 `AudioBuffer`。
-- **媒体源（同源单源）**：迁移 Cloudflare Pages 后，音色、内置谱面等资源直接走**同源相对路径**（`_mediaUrls()` 仅返回同源 URL），GitHub Pages 与 Cloudflare Pages 双端一致。已移除多 jsDelivr 镜像竞速：多源同时下载会互相抢占带宽、浪费流量，与「冷启动独占带宽」目标相悖。
-- **下载入口**：`_fetchBlobWithProgress()` 单源流式下载并回报 0–100 百分比；底层 `_downloadBlobFrom()` 完整下载为 Blob，中止/失败时丢弃已收分片。
-- **冷启动优先级管线**（`COLD_START` + `coldStart()`）：进页面后**按优先级顺序、独占带宽**下载，避免并发抢占：**P0** 独占下载默认谱面（`Rush E 3.mid` 的 brotli 变体）；**P0 完成立即用合成钢琴起播**，同时进入 **P1** 独占下载默认音色（古钢琴 `clavinet`），此期间不下载其它任何资源；**P2** 古钢琴就绪后，才下载 `mandatorySheets` / `mandatoryTimbres` 配置的预配置必下谱面与音色（默认 `The Sound of Silence`）。音色下载并预解码完成后只切 `current`，不打断正在发声的 voice。
-- **谱面压缩传输（`.br` / `.gz` + 客户端解压）**：内置谱面在仓库内同时提供 `.mid.br`（brotli）与 `.mid.gz`（gzip）。`_fetchMediaBlob()` 按浏览器能力从优到劣选择：原生 `DecompressionStream('brotli')` → 原生 `DecompressionStream('gzip')` → 不压缩原文（旧浏览器）。解压用 `_decompressBuffer()`（写入与读取并发，避免背压死锁），并以 `_looksLikeMidi()` 校验 `MThd` 文件头、兼容服务端可能已自动解码的情况。解压后的谱面按原路径写入 Cache API，回访不再下载也不再解压。**一套代码同时适配 GitHub Pages 与 Cloudflare Pages，迁移托管无需改动**。`Rush E 3.mid` 2.70 MB → br **95 KB** / gz **315 KB**。
-- **依赖本地化**：`@tonejs/midi@2.0.28` 的 `Midi.js` 已内置于 `vendor/Midi.js`，不再依赖 jsDelivr；入口 `app.js` 仍同源优先加载。
+- **媒体源（多镜像完整下载竞速 + 本站 Pages 兜底）**：`_mediaUrls()` 为每个资源生成候选源数组——4 个 jsDelivr 边缘（`cdn` / `fastly` / `gcore` / `testingcf`）、5 个国内常用 GitHub 加速镜像（`ghproxy.net` / `gh-proxy.com` / `ghfast.top` / `gh.llkk.cc` / `gh.xxooo.cf`）、`statically` / `githack`，外加本站同源 Pages。`_raceDownloadFull()` 让所有镜像**同时完整下载**同一资源，`Promise.any` 取**最先完整完成**者，胜出后立即 `abort()` 其余并丢弃其不完整分片。开关 `raceFull`（默认开）关闭时改用 `_fetchByFirstByte()`（只竞速首字节）。
+- **冷启动优先级管线**（`COLD_START` + `coldStart()`）：**同一时刻只竞速一个资源**，避免多资源互相抢带宽：**P0** 竞速下载默认谱面（`Rush E 3.mid.br`）；**P0 完成立即用合成钢琴起播**，同时进入 **P1** 竞速下载默认音色（古钢琴 `clavinet`），此期间不下载其它任何资源；**P2** 古钢琴就绪后，才下载 `mandatorySheets` / `mandatoryTimbres` 配置的预配置必下谱面与音色（默认 `The Sound of Silence`）。音色下载并预解码完成后只切 `current`，不打断正在发声的 voice。
+- **谱面压缩传输（只传 brotli）**：仓库**只保留 `.mid.br`**，原始 `.mid` 与 `.gz` 已删除，传输一律使用 br 压缩后的文件。`_fetchMediaBlob()` 取 `.br` 后解压：原生 `DecompressionStream('brotli')` 优先；不支持时**惰性加载内置 WASM 解码器**（`vendor/brotli_dec_wasm.js` + `vendor/brotli_dec_wasm_bg.wasm`，`brotli-dec-wasm@2.3.2`）。以 `_looksLikeMidi()` 校验 `MThd`，兼容服务端已按 `Content-Encoding` 自动解压的情况。解压后的谱面按原路径写入 Cache API，回访不再下载也不再解压。`Rush E 3.mid` 2.70 MB → br **95 KB**。
+- **依赖本地化**：`@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`，不再依赖 jsDelivr；入口 `app.js` 仍同源优先加载。
+- **竞速日志（固化最后一行）**：进行中 `_raceLog()` 每 0.5s 覆盖同一行显示领先镜像与速度；完成后 `_raceLogFinal()` 把该行固化为 `竞速[文件名] 完成 <- [镜像] 大小 用时Xs 平均YKB/s` 并**保留不删**，用于指示本次性能。失败时同样保留 `全部镜像失败`。
+- **br 支持可观测**：启动时打印 `br 解压支持：原生 DecompressionStream(brotli)=true/false`，并在**调试面板**显示 `br 解压：原生支持 / 需 WASM 解码器`；WASM 解码器的加载过程也会逐条打印。
 - **预解码**：`predecodeAll` 按每批 8 个解码 88 个音，避免一次性解码阻塞主线程与音频时间线。
 - **合成回退**：`__synth__` 分支用 3 个振荡器（triangle + 2×sine）叠加，指数包络收尾；仅在音色加载失败或 buffer 缺失时使用。
 - **增益**：`timbreGain` 对个别音色（三角钢琴、古钢琴）单独设增益，其余默认 3.0。
@@ -500,29 +501,26 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 | 目录 | 文件数 | 体积 |
 | --- | --- | --- |
 | `midi_player/soundfonts/` | 56 个 `*-ogg.js` | **≈ 132.6 MB** |
-| `midi_player/midi/` | 25 个（8 谱面 + 8 `.br` + 8 `.gz` + `list.json`） | ≈ 3.4 MB |
-| `midi_player/index.html` | 1 | ≈ 29 KB（骨架 + 关键 CSS + 加载器） |
-| `midi_player/app.css` | 1 | ≈ 25 KB |
-| `midi_player/app.js` | 1 | ≈ 176 KB |
+| `midi_player/midi/` | 9 个（8 `.br` + `list.json`） | ≈ 132 KB |
+| `midi_player/index.html` | 1 | ≈ 30 KB（骨架 + 全量内联 CSS + 加载器） |
+| `midi_player/app.js` | 1 | ≈ 180 KB |
+| `midi_player/vendor/` | `Midi.js` + `brotli_dec_wasm.js` + `brotli_dec_wasm_bg.wasm` | ≈ 250 KB |
 
 - 单个音色文件约 2–4.5 MB（如 `lead_7_fifths-ogg.js` 4.5 MB、`violin-ogg.js` 3.6 MB）。
-- 默认加载：`Rush E 3.mid`（2.6 MB）+ 默认音色 `clavinet`（2.6 MB）≈ **5.2 MB**；若再后台预加载 `acoustic_grand_piano`（2.6 MB）与 `electric_piano_2`（2.3 MB），首次会话网络开销约 **10 MB**。
+- 默认加载：`Rush E 3.mid.br`（95 KB）+ 默认音色 `clavinet`（2.6 MB）≈ **2.7 MB**；其余音色仅在按需/配置时下载。
 
-**传输压缩实测（GitHub Pages / Fastly）**
+**传输压缩实测**
 
-| 资源 | 原始 | gzip 传输 | 说明 |
+| 资源 | 原始 | 传输 | 说明 |
 | --- | --- | --- | --- |
-| `index.html` | 29 KB | **8.6 KB** | 文本（重代码已外置），压缩约 3.4× |
-| `app.js` | 176 KB | **53 KB** | 文本，压缩约 3.3× |
-| `app.css` | 25 KB | **7 KB** | 文本，压缩约 3.6× |
+| `index.html` | 30 KB | **≈ 8.6 KB** | 文本，压缩约 3.4× |
+| `app.js` | 180 KB | **≈ 54 KB** | 文本，压缩约 3.3× |
 | `soundfonts/clavinet-ogg.js` | 2.67 MB | **1.73 MB** | base64 文本，压缩约 1.35× |
-| `midi/Rush E 3.mid` | 2.70 MB | 2.70 MB | 二进制；Pages 不压，故提供预压缩变体 |
-| `midi/Rush E 3.mid.br` | **95 KB** | 95 KB | 客户端 brotli 解压（实际传输量） |
-| `midi/Rush E 3.mid.gz` | **315 KB** | 315 KB | 客户端 gzip 解压（旧浏览器回退） |
+| `midi/Rush E 3.mid.br` | 2.70 MB（解压后） | **95 KB** | 仓库唯一谱面格式，客户端 brotli 解压 |
 | `*.ogg` | 1.58 MB | 1.58 MB | 二进制，几乎不可压 |
 
-- **HTML 快只是因为小且压得狠**，音色慢的根因是体积（2.67 MB），默认谱面本身也有 2.7 MB，二者量级相同。
-- GitHub Pages 支持 **gzip 但不支持 brotli**（请求 `br` 会回落到 identity）。
+- **HTML 快只是因为小且压得狠**，音色慢的根因是体积（2.67 MB）。
+- 谱面一律传 `.br`：Cloudflare 对 `audio/midi` 二进制**不会自动 brotli**（实测 `.mid` 原样 2.70 MB），故用预压缩 `.br` + 客户端解压；GitHub Pages 同理。
 - 把音色后缀从 `.js` 改成 `.html` **无收益**：压缩由内容/内容类型决定，与扩展名无关。
 - 若把 base64 还原成裸 OGG 二进制，虽省去 33% base64 膨胀，但 OGG 不可再压，反而比「gzip 后的 base64」（1.73 MB）更大，故当前方案在传输上并不吃亏。
 
@@ -558,7 +556,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 1. **精简仓库音色集**：只保留实际用到的音色，或提供「钢琴精简包」；132 MB 中大部分是长尾音色。
 2. **按需预加载 + 省流量模式**：读取 `navigator.connection.saveData` / `effectiveType`，在移动网络或省流量模式下跳过后台预加载。
-3. **音色外置（已实现）**：Soundfont / 内置谱面 / 示例音频由**同源**（`_mediaUrls`）提供，Cloudflare Pages 与 GitHub Pages 双端一致；缓存 key 用本站绝对路径以兼容旧缓存。早期多 jsDelivr 镜像竞速已移除（多源抢占带宽）。
+3. **音色外置（已实现）**：Soundfont / 内置谱面 / 示例音频由**多镜像完整下载竞速**提供（`_mediaUrls` 生成 4 jsDelivr + 5 个国内加速镜像 + statically/githack + 本站 Pages，`_raceDownloadFull` 同时完整下载、最先完成者胜出、其余 abort），缓存 key 仍用本站绝对路径以兼容旧缓存。
 4. **缓存已解码的 AudioBuffer**：把 `decodeAudioData` 结果存入 IndexedDB，跳过每次会话的 base64 解码与解码等待（当前解码在 `predecodeAll` 中完成）。
 5. **文件名哈希 + 长缓存**：对静态资源使用内容哈希命名并配合 `immutable` 语义，配合 `ignoreSearch` 精确失效。
 6. **资源提示**：对 CDN/音色目录加 `preconnect`/`prefetch`，缩短首字节时间。
@@ -595,7 +593,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - 降级/恢复文案：`最近 2s出现N次性能问题，分别是丢帧、积压、停摆、时间戳，触发渲染降级` / `性能问题已缓解，恢复完整渲染。`
 - **详细日志不打印 `[AudioDebug]` 前缀**：调试信息本就只含音频调试，`_appendDebug` 统一剥掉 `[AudioDebug]`（保留 `[INFO]`/`[WARN]`/`[OK]` 等级）；状态区镜像再去掉等级前缀，只留正文。
 - **统一资源标签**：下载/加载/删除等日志用「显示名（中文）-[原始文件名]」，如 `音色[古钢琴]-[clavinet]`、`谱面[Rush E 3]-[Rush E 3.mid]`（`_timbreLabel` / `_songLabel` / `_songId`）。
-- **媒体来源日志以缓存为准**：谱面统一走 `fetchMedia`（Cache API 优先），命中缓存打印 `从缓存加载成功!`，未命中才走同源 `_fetchWithProgress` 并打印 `下载成功!`；后台预取（The Sound of Silence）静默且同样缓存优先。音色 `_doLoad` 同样缓存优先，且不再因 `onProgress` 为空而隐藏来源日志（后台预取也会打印）。
+- **媒体来源日志以缓存为准**：谱面统一走 `fetchMedia`（Cache API 优先），命中缓存打印 `从缓存加载成功!`，未命中才走 `_fetchWithProgress` 多镜像竞速并打印 `从<镜像>下载成功!`；后台预取（The Sound of Silence）静默且同样缓存优先。音色 `_doLoad` 同样缓存优先，且不再因 `onProgress` 为空而隐藏来源日志（后台预取也会打印）。竞速完成后的最终性能行由 `_raceLogFinal` 保留。
 - **告警分级**：`AudioContext状态变化` 由 warn 降为 INFO；页面隐藏时的静音/停摆不告警（见上）。
 - **主动暂停/切后台不误报**：页面隐藏时音频被浏览器挂起属正常（自动暂停），停摆与输出静音判定均加 `!document.hidden` 门控；`visibilitychange` 冻结/恢复时把 `lastLoudTime` 拉到现在并 `resetClocks()`，避免恢复后误报「静音 Ns / 长时间停摆」。`stopAll` 统计文案统一为「停止了 N 个 note」。
 - **重置所有选项**（二次确认弹窗）：清空全部设置项并刷新；恢复 Rush E3 演示谱面标记（从 `deletedBuiltin` 移除）；自动检查并下载缺失的默认音色与谱面。The Sound of Silence 如重置前被删除，重置后自动启动下载。
@@ -744,14 +742,16 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 ```
 midi_player/
-├── index.html                 # 页面骨架 + 关键 CSS + 加载器（同源优先，CDN 兜底）
-├── app.css                    # 全部样式
+├── index.html                 # 页面骨架 + 全量内联 CSS + 加载器（同源优先，CDN 兜底）
 ├── app.js                     # 全部逻辑
 ├── README.md                  # 本文档
+├── vendor/
+│   ├── Midi.js                # @tonejs/midi@2.0.28（本地化）
+│   ├── brotli_dec_wasm.js     # WASM brotli 解码器（原生不支持时惰性加载）
+│   └── brotli_dec_wasm_bg.wasm
 ├── midi/
 │   ├── list.json              # 内置谱面列表（name / file）
-│   ├── *.mid                  # 内置 MIDI 谱面
-│   └── *.mid.br / *.mid.gz    # 预压缩谱面（客户端 DecompressionStream 解压）
+│   └── *.mid.br               # 唯一谱面格式：预压缩 brotli（客户端解压）
 └── soundfonts/
     └── <timbre>-ogg.js        # Soundfont 音色数据（56 个，约 132 MB）
 ```
@@ -767,13 +767,15 @@ midi_player/
 
 > 按主题归档，commit 为短 SHA。完整历史见仓库提交记录。
 
-## 2026-09 冷启动管线与同源化
+## 2026-09 冷启动管线、多镜像竞速与 br 单格式
 
 | 主题 | 摘要 | 代表 commit |
 | --- | --- | --- |
-| 同源化 | 移除多 jsDelivr 镜像并发择优与「完整下载竞速」开关（含 `_raceFetch`/`_raceDownloadFull`/`_raceLog`/`raceFullSw`）；`_mediaUrls` 仅返回同源 URL，`_fetchBlobWithProgress` 单源流式下载并回报百分比 | `_pending_` |
-| 冷启动管线 | `COLD_START` 三段式**顺序独占**下载：P0 独占下载 Rush E3 brotli 谱 → 完成即用合成钢琴起播 + P1 独占下载古钢琴 → P2 下载预配置必下音色与谱 | `_pending_` |
-| 依赖本地化 | `@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`，去除 jsDelivr 依赖与相关 preconnect/dns-prefetch | `_pending_` |
+| 镜像扩容 | 竞速镜像从 4 个 jsDelivr 扩到 4 jsDelivr + 5 个国内常用 GitHub 加速（ghproxy.net / gh-proxy.com / ghfast.top / gh.llkk.cc / gh.xxoo.cf）+ statically / githack + 本站 Pages；`CDN_BASES` 改为 `prefix` 统一拼接与来源识别 | `_pending_` |
+| 冷启动管线 | `COLD_START` 三段式，**同一时刻只竞速一个资源**：P0 竞速下载 Rush E3 br 谱 → 完成即用合成钢琴起播 + P1 竞速下载古钢琴 → P2 下载预配置必下音色与谱 | `_pending_` |
+| br 单格式 | 删除原始 `.mid` 与 `.gz`，只保留 `.mid.br`；解压原生优先，否则惰性加载内置 WASM 解码器 `vendor/brotli_dec_wasm.js`（brotli-dec-wasm@2.3.2） | `_pending_` |
+| 可观测性 | 调试面板显示浏览器 br 支持；启动打印 br 支持与 WASM 解码器加载过程；竞速日志完成后**固化为性能行**不再刷掉；日志含每个文件名 | `_pending_` |
+| 依赖本地化 | `@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`；CSS 全内联（`ui-kit` 页面已内联，无外部样式请求） | `_pending_` |
 
 ## 2026-09 首版与性能攻坚
 

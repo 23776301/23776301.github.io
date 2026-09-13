@@ -85,6 +85,55 @@ function _appendDebug(msg, type) {
   }
 }
 
+// ===== 公共 CDN 竞速日志能力 =====
+// 进行中每 0.5s 覆盖同一行；完成后由 _raceLogFinal 固化为最终结果行（保留，用于指示性能）。
+let _raceLogEl = null;
+function _raceLog(text){
+  if(!debugEnabled) return;
+  const term = document.getElementById('debugTerminalContent');
+  if(!term) return;
+  const line = '[' + new Date().toLocaleTimeString() + '] ' + text;
+  if(_raceLogEl && _raceLogEl.parentNode === term){
+    _raceLogEl.textContent = line; // 原地覆盖上一条竞速日志
+  } else {
+    _raceLogEl = document.createElement('div');
+    _raceLogEl.style.color = _debugColor('log', text);
+    _raceLogEl.style.wordBreak = 'break-all';
+    _raceLogEl.textContent = line;
+    const panel = _debugPanelScrollEl();
+    const atBottom = panel ? (panel.scrollHeight - panel.scrollTop - panel.clientHeight < 40) : true;
+    term.appendChild(_raceLogEl);
+    while(term.childElementCount > 300){ term.removeChild(term.firstChild); }
+    if(atBottom && panel) panel.scrollTop = panel.scrollHeight;
+  }
+}
+// 竞速结束：把进行中的行改写成最终结果并「固化」（下次竞速另起新行），不删除，用于指示性能
+function _raceLogFinal(text){
+  const term = document.getElementById('debugTerminalContent');
+  if(debugEnabled && term){
+    const line = '[' + new Date().toLocaleTimeString() + '] ' + text;
+    if(_raceLogEl && _raceLogEl.parentNode === term){
+      _raceLogEl.textContent = line;
+      _raceLogEl.style.color = _debugColor('log', text);
+    } else {
+      const el = document.createElement('div');
+      el.style.color = _debugColor('log', text);
+      el.style.wordBreak = 'break-all';
+      el.textContent = line;
+      term.appendChild(el);
+      while(term.childElementCount > 300){ term.removeChild(term.firstChild); }
+    }
+  }
+  _raceLogEl = null; // 固化：后续竞速另起一行
+}
+// 字节数格式化：3.6MB / 520KB / 800B
+function _fmtSize(n){
+  n = Number(n) || 0;
+  if(n >= 1024*1024) return (n/1024/1024).toFixed(1) + 'MB';
+  if(n >= 1024) return (n/1024).toFixed(0) + 'KB';
+  return n + 'B';
+}
+
 console.log = function(...args) {
   _origLog(...args);
   if(!debugEnabled) return;
@@ -705,13 +754,106 @@ try{
   }
 }catch(e){}
 
-// ===== 媒体源：同源（Cloudflare Pages / GitHub Pages 双端一致）=====
-// 迁移 Cloudflare 后，同源即可获得低延迟与完整压缩支持；不再并发多个 jsDelivr 镜像竞速，
-// 避免多源同时下载抢占带宽、浪费流量。所有资源默认单源顺序下载。
-// midi_player 内的相对路径 -> 同源 URL
+// ===== 媒体源：多个国内可用镜像 + 本站 Pages 兜底，完整下载竞速 =====
+// 中国大陆访问各镜像速度差异大：同一资源同时向所有镜像发起「完整下载」，最先完成者胜出，
+// 其余立即 abort 并丢弃不完整分片。冷启动管线保证同一时刻只竞速一个资源，避免多资源抢带宽。
+const REPO_GH = 'teecatt/teecatt.github.io';
+const REPO_REF = 'master';
+const RAW_BASE = 'https://raw.githubusercontent.com/' + REPO_GH + '/' + REPO_REF + '/';
+const _encPath = p => String(p).split('/').map(encodeURIComponent).join('/');
+// prefix 同时用于拼接与来源识别；资源 URL = prefix + encode('midi_player/' + 相对路径)
+const CDN_BASES = [
+  { name: 'jsDelivr',        prefix: 'https://cdn.jsdelivr.net/gh/' + REPO_GH + '@' + REPO_REF + '/' },
+  { name: 'jsDelivr-Fastly', prefix: 'https://fastly.jsdelivr.net/gh/' + REPO_GH + '@' + REPO_REF + '/' },
+  { name: 'jsDelivr-Gcore',  prefix: 'https://gcore.jsdelivr.net/gh/' + REPO_GH + '@' + REPO_REF + '/' },
+  { name: 'jsDelivr-CF',     prefix: 'https://testingcf.jsdelivr.net/gh/' + REPO_GH + '@' + REPO_REF + '/' },
+  { name: 'ghproxy.net',     prefix: 'https://ghproxy.net/' + RAW_BASE },
+  { name: 'gh-proxy.com',    prefix: 'https://gh-proxy.com/' + RAW_BASE },
+  { name: 'ghfast.top',      prefix: 'https://ghfast.top/' + RAW_BASE },
+  { name: 'gh.llkk.cc',      prefix: 'https://gh.llkk.cc/' + RAW_BASE },
+  { name: 'gh.xxooo.cf',     prefix: 'https://gh.xxooo.cf/' + RAW_BASE },
+  { name: 'statically',      prefix: 'https://cdn.statically.io/gh/' + REPO_GH + '/' + REPO_REF + '/' },
+  { name: 'githack',         prefix: 'https://raw.githack.com/' + REPO_GH + '/' + REPO_REF + '/' },
+];
+// midi_player 内的相对路径 -> [各镜像..., 本站同源 Pages 兜底]
 function _mediaUrls(relPath){
   const clean = String(relPath).replace(/^\.\//, '');
-  return [clean];
+  const enc = _encPath('midi_player/' + clean);
+  const urls = CDN_BASES.map(b => b.prefix + enc);
+  urls.push(clean);
+  return urls;
+}
+// 从 URL 推断可读来源名（用于日志/状态区）
+function _sourceLabel(url){
+  const u = String(url);
+  if(u.indexOf('://') < 0) return 'Pages';
+  for(const b of CDN_BASES){ if(u.indexOf(b.prefix) === 0) return b.name; }
+  try{ return new URL(u).hostname; }catch(e){ return '备用源'; }
+}
+// 完整下载竞速开关（默认开）：开=所有镜像同时完整下载、最快完成者胜出；
+// 关=仅竞速首字节响应，胜出源再流式读取。
+let raceFullDownload = true;
+try{
+  const _rf = localStorage.getItem('raceFull');
+  if(_rf !== null) raceFullDownload = _rf === '1';
+  const _rfEl = document.getElementById('raceFullSw');
+  if(_rfEl) _rfEl.checked = raceFullDownload;
+}catch(e){}
+function onRaceFullChange(){
+  const cb = document.getElementById('raceFullSw');
+  raceFullDownload = !!(cb && cb.checked);
+  try{ localStorage.setItem('raceFull', raceFullDownload ? '1' : '0'); }catch(e){}
+}
+// Promise.any 兼容封装：返回最先成功的结果；全部失败时抛出含 errors 数组的对象
+function _promiseAny(ps){
+  if(typeof Promise.any === 'function') return Promise.any(ps);
+  return new Promise((resolve, reject) => {
+    let pending = ps.length; const errs = [];
+    if(!pending) return reject(new Error('无可用源'));
+    ps.forEach((p, i) => Promise.resolve(p).then(resolve, e => { errs[i] = e; if(--pending === 0) reject({ errors: errs }); }));
+  });
+}
+// 并发择优：同时请求所有候选源，最先成功返回响应的胜出，其余候选 abort（首字节竞速模式用）
+async function _raceFetch(urls){
+  const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+  if(!list.length) throw new Error('无可用源');
+  const hasAbort = (typeof AbortController !== 'undefined');
+  const controllers = list.map(() => hasAbort ? new AbortController() : null);
+  const attempts = list.map((url, i) => (async () => {
+    const resp = await fetch(url, controllers[i] ? { signal: controllers[i].signal } : undefined);
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    return { resp, i, url };
+  })());
+  let winner;
+  try{
+    winner = await _promiseAny(attempts);
+  }catch(agg){
+    const errs = (agg && agg.errors) || [];
+    const first = errs.find(e => e);
+    throw (first instanceof Error) ? first : new Error('全部源下载失败');
+  }
+  controllers.forEach((c, i) => { if(c && i !== winner.i){ try{ c.abort(); }catch(e){} } });
+  return { resp: winner.resp, url: winner.url, index: winner.i, list };
+}
+// 流式读取响应为 Blob 并回报百分比（首字节竞速模式用）
+async function _readBlobWithProgress(resp, onProgress){
+  const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
+  if(!resp.body || !total || !resp.body.getReader){
+    const blob = new Blob([await resp.arrayBuffer()]);
+    if(onProgress) onProgress(100);
+    return blob;
+  }
+  const reader = resp.body.getReader();
+  const chunks = []; let received = 0;
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    chunks.push(value); received += value.length;
+    if(onProgress) onProgress(received / total * 100);
+  }
+  const blob = new Blob(chunks);
+  if(onProgress) onProgress(100);
+  return blob;
 }
 // 单源：完整下载为 Blob（流式回报 (received, total)；中止/失败时丢弃已收分片）
 async function _downloadBlobFrom(url, onProgress, signal){
@@ -733,52 +875,146 @@ async function _downloadBlobFrom(url, onProgress, signal){
       if(onProgress) onProgress(received, total);
     }
   }catch(e){
-    chunks = null; // 中止/失败：清理不完整分片
+    chunks = null; // 中止/失败：清理该镜像的不完整分片
     throw e;
   }
   if(onProgress) onProgress(received, total > 0 ? total : received);
   return new Blob(chunks);
 }
-// 下载入口：同源流式下载并回报进度（onProgress 收到 0..100 百分比）
+// 完整下载竞速（公共能力）：所有镜像同时完整下载，最先完成者胜出；其余立即 abort 并丢弃不完整分片。
+// 进行中每 0.5s 覆盖一行进度；完成后由 _raceLogFinal 固化为最终性能行（保留，不被刷掉）。
+async function _raceDownloadFull(list, onProgress, label){
+  if(!list.length) throw new Error('无可用源');
+  const hasAbort = (typeof AbortController !== 'undefined');
+  const controllers = list.map(() => hasAbort ? new AbortController() : null);
+  const states = list.map(url => ({ src: _sourceLabel(url), received: 0, total: 0, failed: false }));
+  const tag = label || '文件';
+  const t0 = performance.now();
+  let lastLog = 0, bestPct = 0, done = false;
+  const report = () => {
+    if(done) return;
+    const now = performance.now();
+    if(now - lastLog < 500) return; // 每 0.5s 一次
+    lastLog = now;
+    let lead = null;
+    for(const s of states){ if(!s.failed && (!lead || s.received > lead.received)) lead = s; }
+    if(!lead || lead.received <= 0) return;
+    const elapsed = Math.max((now - t0) / 1000, 0.001);
+    const speed = lead.received / elapsed / 1024;
+    const pctTxt = lead.total > 0 ? (lead.received / lead.total * 100).toFixed(0) + '%' : '?';
+    _raceLog('竞速[' + tag + '] 领先: [' + lead.src + '] ' + _fmtSize(lead.received) + '/' +
+      (lead.total > 0 ? _fmtSize(lead.total) : '?') + ' ~ ' + pctTxt + ' 平均' + speed.toFixed(0) + 'KB/s');
+  };
+  const attempts = list.map((url, i) => _downloadBlobFrom(
+    url,
+    (received, total) => {
+      states[i].received = received; states[i].total = total;
+      if(total > 0){
+        const pct = received / total * 100;
+        if(pct > bestPct){ bestPct = pct; if(onProgress) onProgress(bestPct); }
+      }
+      report();
+    },
+    controllers[i] ? controllers[i].signal : null
+  ).then(blob => ({ blob, i, url }), err => { states[i].failed = true; throw err; }));
+  let winner;
+  try{
+    winner = await _promiseAny(attempts);
+  }catch(agg){
+    done = true;
+    _raceLogFinal('竞速[' + tag + '] 全部镜像失败');
+    const errs = (agg && agg.errors) || [];
+    const first = errs.find(e => e);
+    throw (first instanceof Error) ? first : new Error('全部源下载失败');
+  }
+  done = true;
+  controllers.forEach((c, i) => { if(c && i !== winner.i){ try{ c.abort(); }catch(e){} } });
+  if(onProgress) onProgress(100);
+  const secs = (performance.now() - t0) / 1000;
+  const avg = winner.blob.size / Math.max(secs, 0.001) / 1024;
+  _raceLogFinal('竞速[' + tag + '] 完成 <- [' + _sourceLabel(winner.url) + '] ' +
+    _fmtSize(winner.blob.size) + ' 用时' + secs.toFixed(2) + 's 平均' + avg.toFixed(0) + 'KB/s');
+  return { blob: winner.blob, url: winner.url, index: winner.i };
+}
+// 首字节竞速（开关关闭时）：胜出源流式读取，若读取中途失败则按顺序回退其余候选
+async function _fetchByFirstByte(list, onProgress, label, quiet){
+  const tag = label || '文件';
+  const winner = await _raceFetch(list);
+  const order = [winner.index, ...list.map((_, i) => i).filter(i => i !== winner.index)];
+  let lastErr;
+  const t0 = performance.now();
+  for(const idx of order){
+    try{
+      let resp;
+      if(idx === winner.index){ resp = winner.resp; }
+      else { resp = await fetch(list[idx]); if(!resp.ok) throw new Error('HTTP ' + resp.status); }
+      const blob = await _readBlobWithProgress(resp, onProgress);
+      const secs = (performance.now() - t0) / 1000;
+      if(!quiet) console.log('[AudioDebug][INFO] ' + tag + '从' + _sourceLabel(list[idx]) + '下载成功!');
+      _raceLogFinal('竞速[' + tag + '] 完成 <- [' + _sourceLabel(list[idx]) + '] ' +
+        _fmtSize(blob.size) + ' 用时' + secs.toFixed(2) + 's');
+      return blob;
+    }catch(e){
+      lastErr = e; if(onProgress) onProgress(0);
+      if(!quiet) console.log('[AudioDebug][INFO] ' + tag + '从' + _sourceLabel(list[idx]) + '下载失败');
+    }
+  }
+  _raceLogFinal('竞速[' + tag + '] 全部镜像失败');
+  throw lastErr || new Error('下载失败');
+}
+// 下载入口：默认「完整下载竞速」，可在设置面板关闭改用「首字节竞速」
 async function _fetchBlobWithProgress(urls, onProgress, label, quiet){
   const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
-  if(!list.length) throw new Error('无可用源');
-  let bestPct = 0;
-  const blob = await _downloadBlobFrom(list[0], (received, total) => {
-    if(total > 0){
-      const pct = received / total * 100;
-      if(pct > bestPct){ bestPct = pct; if(onProgress) onProgress(bestPct); }
+  if(raceFullDownload){
+    try{
+      const res = await _raceDownloadFull(list, onProgress, label);
+      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + _sourceLabel(res.url) + '下载成功!');
+      return res.blob;
+    }catch(e){
+      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '全部镜像下载失败：' + (e && e.message ? e.message : e));
+      throw e;
     }
-  }, null);
-  if(onProgress) onProgress(100);
-  if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '下载成功!');
-  return blob;
+  }
+  return _fetchByFirstByte(list, onProgress, label, quiet);
 }
 
-// ===== 谱面压缩传输：优先取 .br / .gz，客户端解压 =====
-// 一套代码同时适配 GitHub Pages（只能客户端解）与 Cloudflare Pages（同源静态文件），迁移托管无需改动。
-// 按浏览器能力从优到劣选择：原生 brotli -> 原生 gzip -> 不压缩原文（旧浏览器）。
-const _DECOMPRESS_FORMATS = (function(){
-  const out = [];
-  if(typeof DecompressionStream === 'undefined') return out;
-  for(const pair of [['br', 'brotli'], ['gz', 'gzip']]){
-    try{ new DecompressionStream(pair[1]); out.push({ ext: pair[0], fmt: pair[1] }); }catch(e){}
-  }
-  return out;
+// ===== 谱面压缩传输：只传 brotli（.mid.br），客户端解压 =====
+// 仓库已删除原始 .mid 与 .gz：传输一律使用 br 压缩后的文件（体积最小）。
+// 解压优先原生 DecompressionStream('brotli')；不支持时惰性加载内置 WASM 解码器。
+const _NATIVE_BROTLI = (function(){
+  try{ if(typeof DecompressionStream === 'function'){ new DecompressionStream('brotli'); return true; } }catch(e){}
+  return false;
 })();
-try{
-  console.log('[AudioDebug][INFO] 谱面压缩传输：' + (_DECOMPRESS_FORMATS.length
-    ? '支持 ' + _DECOMPRESS_FORMATS.map(function(v){ return '.' + v.ext; }).join(' / ')
-    : '不支持，回退原文'));
-}catch(e){}
+const _NATIVE_GZIP = (function(){
+  try{ if(typeof DecompressionStream === 'function'){ new DecompressionStream('gzip'); return true; } }catch(e){}
+  return false;
+})();
+let _brotliWasmMod = null;
+let _brotliWasmLoading = null;
+// 惰性加载内置 WASM brotli 解码器；返回模块（decompress(Uint8Array)->Uint8Array）
+async function _loadBrotliWasm(){
+  if(_brotliWasmMod) return _brotliWasmMod;
+  if(_brotliWasmLoading) return _brotliWasmLoading;
+  _brotliWasmLoading = (async () => {
+    console.log('[AudioDebug][INFO] br 解码器：原生不支持，开始加载内置 WASM 解码器 vendor/brotli_dec_wasm.js');
+    const mod = await import('./vendor/brotli_dec_wasm.js');
+    console.log('[AudioDebug][INFO] br 解码器：模块已加载，初始化 brotli_dec_wasm_bg.wasm …');
+    await mod.default();
+    _brotliWasmMod = mod;
+    console.log('[AudioDebug][INFO] br 解码器：WASM 解码器就绪');
+    return mod;
+  })();
+  try{ return await _brotliWasmLoading; }
+  finally{ _brotliWasmLoading = null; }
+}
 // 校验是否为 MIDI 文件头 "MThd"
 function _looksLikeMidi(buf){
   if(!buf || buf.byteLength < 4) return false;
   const b = new Uint8Array(buf, 0, 4);
   return b[0] === 0x4D && b[1] === 0x54 && b[2] === 0x68 && b[3] === 0x64;
 }
-// 用 DecompressionStream 解压 ArrayBuffer；写入与读取并发，避免背压死锁
-async function _decompressBuffer(ab, fmt){
+// 原生 DecompressionStream 解压；写入与读取并发，避免背压死锁
+async function _decompressNative(ab, fmt){
   const ds = new DecompressionStream(fmt);
   const writer = ds.writable.getWriter();
   const writeP = writer.write(new Uint8Array(ab)).then(() => writer.close());
@@ -794,25 +1030,34 @@ async function _decompressBuffer(ab, fmt){
   for(const c of chunks){ out.set(c, off); off += c.length; }
   return out.buffer;
 }
-// 谱面下载：优先压缩变体（.br -> .gz），全部失败再回退原文
+// brotli 解压：原生优先，否则 WASM
+async function _decompressBrotli(ab){
+  if(_NATIVE_BROTLI) return _decompressNative(ab, 'brotli');
+  const mod = await _loadBrotliWasm();
+  const out = mod.decompress(new Uint8Array(ab));
+  return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+}
+try{
+  console.log('[AudioDebug][INFO] br 解压支持：原生 DecompressionStream(brotli)=' + _NATIVE_BROTLI +
+    '，原生 gzip=' + _NATIVE_GZIP + (_NATIVE_BROTLI ? '（无需 WASM）' : '（将使用内置 WASM 解码器）'));
+  const _brEl = document.getElementById('brSupportInfo');
+  if(_brEl) _brEl.textContent = 'br 解压：' + (_NATIVE_BROTLI
+    ? '原生支持 DecompressionStream(brotli)'
+    : '原生不支持 → 使用内置 WASM 解码器');
+}catch(e){}
+// 谱面下载：只取 .mid.br，客户端解压（原文已删除，不再回退）
 async function _fetchMediaBlob(relPath, onProgress, quiet){
-  if(_DECOMPRESS_FORMATS.length && /\.midi?$/i.test(relPath)){
-    for(const v of _DECOMPRESS_FORMATS){
-      const label = _songLabel(relPath + '.' + v.ext);
-      try{
-        const blob = await _fetchBlobWithProgress(_mediaUrls(relPath + '.' + v.ext), onProgress, label, quiet);
-        const ab = await blob.arrayBuffer();
-        // 部分 CDN 可能已按扩展名自动解码：若已是 MIDI 直接用，避免二次解压
-        const out = _looksLikeMidi(ab) ? ab : await _decompressBuffer(ab, v.fmt);
-        if(!_looksLikeMidi(out)) throw new Error('解压结果不是有效 MIDI');
-        if(!quiet) console.log('[AudioDebug][INFO] ' + label + ' 已解压 (' + (out.byteLength / 1024).toFixed(0) + 'KB)');
-        return new Blob([out]);
-      }catch(e){
-        if(!quiet) console.log('[AudioDebug][INFO] ' + label + ' 不可用：' + (e && e.message ? e.message : e));
-      }
-    }
+  if(!/\.midi?$/i.test(relPath)){
+    return _fetchBlobWithProgress(_mediaUrls(relPath), onProgress, _songLabel(relPath), quiet);
   }
-  return _fetchBlobWithProgress(_mediaUrls(relPath), onProgress, _songLabel(relPath), quiet);
+  const label = _songLabel(relPath + '.br');
+  const blob = await _fetchBlobWithProgress(_mediaUrls(relPath + '.br'), onProgress, label, quiet);
+  const ab = await blob.arrayBuffer();
+  // 服务端若已按 Content-Encoding 自动解压，则已是 MIDI，直接用
+  const out = _looksLikeMidi(ab) ? ab : await _decompressBrotli(ab);
+  if(!_looksLikeMidi(out)) throw new Error('br 解压结果不是有效 MIDI');
+  if(!quiet) console.log('[AudioDebug][INFO] ' + label + ' 已解压 (' + (out.byteLength / 1024).toFixed(0) + 'KB)');
+  return new Blob([out]);
 }
 
 const SoundfontLoader = {
@@ -904,9 +1149,9 @@ const SoundfontLoader = {
         }
       }catch(e){}
     }
-    // 同源顺序下载音色文本（进度 0..1）
+    // 多镜像完整下载竞速获取音色文本（进度 0..1）
     const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
-    const source = '同源';
+    const source = '竞速镜像';
     let text;
     try{
       const blob = await _fetchBlobWithProgress(list, (p) => {
@@ -1919,10 +2164,10 @@ async function fetchMedia(relPath, onProgress, quiet){
 }
 // 探测未下载谱面的体积（HEAD 优先，失败回退 GET Range），用于下载前提示
 async function _probeMediaSize(relPath){
-  // 优先探测浏览器实际会用的压缩变体（.br -> .gz），再回退原文，使提示体积贴近真实传输量
+  // 谱面一律传 br 压缩变体，探测其体积最贴近真实传输量
   const candidates = [];
-  if(/\.midi?$/i.test(relPath)) for(const v of _DECOMPRESS_FORMATS) candidates.push(relPath + '.' + v.ext);
-  candidates.push(relPath);
+  if(/\.midi?$/i.test(relPath)) candidates.push(relPath + '.br');
+  else candidates.push(relPath);
   for(const p of candidates){
     const urls = _mediaUrls(p);
     for(const u of urls){
@@ -2161,7 +2406,7 @@ function toggleManageModal(){
 async function resetAllSettings(){
   // 重置所有设置项 + 恢复演示谱面标记 + 下载缺失的默认资源
   const keys = ['panelTransparency', 'panelBlur', 'dbgAutoOpen', 'debugEnabled',
-                'menuBtnPos', 'paletteCustom', 'paletteV2'];
+                'menuBtnPos', 'paletteCustom', 'paletteV2', 'raceFull'];
   try{ keys.forEach(k => localStorage.removeItem(k)); }catch(e){}
   // 恢复演示谱面（Rush E3）标记：从「已删除」集合中移除
   try{
