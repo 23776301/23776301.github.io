@@ -450,6 +450,8 @@ function initAudio(){
     ' outputLatency=' + (audioCtx.outputLatency != null ? (audioCtx.outputLatency * 1000).toFixed(1) + 'ms' : 'N/A') +
     ' state=' + audioCtx.state);
   if(debugEnabled) AudioDebugMonitor.init();
+  // 预热合成钢琴预渲染缓冲区（约 8ms），避免首个合成音符触发一次性主线程构建
+  setTimeout(() => { try{ _getSynthLoopBuffers(); }catch(e){} }, 0);
 }
 
 /* ============================================================
@@ -1079,20 +1081,69 @@ async function _fetchMediaBlob(relPath, onProgress, quiet){
   return new Blob([out]);
 }
 
-// 合成钢琴：把「三角波基频 + 2/3 次正弦泛音」预先合成为单个 PeriodicWave，
-// 每个音符只需 1 个振荡器（原为 3 个），显著降低高密度谱面的音频线程负载。
+// 合成钢琴「预渲染」：解析式预计算每个音高的无缝循环波形，直接作为 AudioBuffer
+// 交给 BufferSource 播放，与采样音色同构（每音符 1 Source + 1 Gain）。
+// 相比旧的「每音符 1 振荡器 + PeriodicWave」：
+//   ① 缓冲区采样率 = AudioContext.sampleRate，播放时零重采样
+//      （采样音色若为 44.1kHz 而 ctx 为 48kHz，则每个 voice 都要在音频线程重采样）；
+//   ② 单声道、全部 88 音仅约 130KB，无需 decodeAudioData、无需 OfflineAudioContext；
+//   ③ 每音高按 Nyquist 限制谐波数，天然无混叠；
+//   ④ 循环体内各谐波均为整数周期，循环点无缝，无爆音。
+// 力度/时长仍由动态包络 Gain 控制，音色与旧实现一致。
+const SYNTH_HARMONICS = 16;
+const SYNTH_LOOP_MIN_SAMPLES = 96; // 高音区保证每个循环至少这么多采样，降低相位量化误差
+let _synthLoopBuffers = null;      // midi -> AudioBuffer
+function _getSynthLoopBuffers(){
+  if(_synthLoopBuffers) return _synthLoopBuffers;
+  const sr = audioCtx.sampleRate;
+  const amp = new Float32Array(SYNTH_HARMONICS + 1);
+  // 三角波奇次谐波（幅度 ∝ 1/n²，符号交替），基频归一为 0.9
+  for(let n = 1; n <= SYNTH_HARMONICS; n += 2){
+    const sign = (n % 4 === 1) ? 1 : -1;
+    amp[n] += 0.9 * sign / (n * n);
+  }
+  // 叠加原实现的两个正弦泛音：2 次 0.35、3 次 0.18
+  amp[2] += 0.35;
+  amp[3] += 0.18;
+  const map = {};
+  const nyq = sr / 2;
+  const twoPi = 2 * Math.PI;
+  for(let midi = 21; midi <= 108; midi++){
+    const f = 440 * Math.pow(2, (midi - 69) / 12);
+    const period = sr / f;
+    const cycles = Math.max(1, Math.ceil(SYNTH_LOOP_MIN_SAMPLES / period));
+    const N = Math.max(8, Math.round(period * cycles));
+    const kmax = Math.min(SYNTH_HARMONICS, Math.floor(nyq / f));
+    const buf = audioCtx.createBuffer(1, N, sr);
+    const data = buf.getChannelData(0);
+    for(let i = 0; i < N; i++){
+      let s = 0;
+      for(let k = 1; k <= kmax; k++){
+        const a = amp[k];
+        if(a) s += a * Math.sin(twoPi * k * cycles * i / N);
+      }
+      data[i] = s;
+    }
+    map[midi] = buf;
+  }
+  _synthLoopBuffers = map;
+  let samples = 0;
+  for(const k in map) samples += map[k].length;
+  console.log('[AudioDebug][INFO] 合成钢琴预渲染完成：88 音，共 ' + (samples * 4 / 1024).toFixed(0) +
+    'KB 单声道 @ ' + (sr / 1000).toFixed(1) + 'kHz（与 AudioContext 同采样率，播放零重采样）');
+  return map;
+}
+
+// 兜底：极端情况下若无法创建 AudioBuffer，退回单振荡器 PeriodicWave 方案
 let _synthPeriodicWave = null;
 function _getSynthPeriodicWave(){
   if(_synthPeriodicWave) return _synthPeriodicWave;
-  const H = 16;
-  const real = new Float32Array(H + 1);
-  const imag = new Float32Array(H + 1);
-  // 三角波奇次谐波（幅度 ∝ 1/n²，符号交替），基频归一为 0.9
-  for(let n = 1; n <= H; n += 2){
+  const real = new Float32Array(SYNTH_HARMONICS + 1);
+  const imag = new Float32Array(SYNTH_HARMONICS + 1);
+  for(let n = 1; n <= SYNTH_HARMONICS; n += 2){
     const sign = (n % 4 === 1) ? 1 : -1;
     imag[n] += 0.9 * sign / (n * n);
   }
-  // 叠加原实现的两个正弦泛音：2 次 0.35、3 次 0.18
   imag[2] += 0.35;
   imag[3] += 0.18;
   // disableNormalization:true 保持与旧「三振荡器叠加」一致的谐波幅度
@@ -1109,7 +1160,7 @@ const SoundfontLoader = {
   loading: null,
   noteToMidi: {},
   activeSources: new Array(109).fill(null),
-  synthVoices: [], // 合成钢琴分支的振荡器，登记以便 stopAll 能停掉
+  synthVoices: [], // 合成钢琴分支的音源节点，登记以便 stopAll 能停掉
   activeSynth: {}, // midi -> synth voice，用于同音打断
   activeVoices: [], // 全局活跃voice（sample+synth），用于复音上限与抢占
   MAX_VOICES: 128,  // 全局复音上限，防止音频线程过载
@@ -1399,7 +1450,7 @@ const SoundfontLoader = {
       }
     }
     if(stopped > 0) console.log('[AudioDebug][INFO] stopAll停止了', stopped, '个 note');
-    // 合成钢琴分支的振荡器也必须停掉
+    // 合成钢琴分支的音源节点也必须停掉
     if(this.synthVoices.length){
       const n = this.synthVoices.length;
       for(const v of this.synthVoices){
@@ -1545,7 +1596,7 @@ const SoundfontLoader = {
     // 只有current为__synth__时才走合成钢琴
     if(!this.debug.synthWarned){
       this.debug.synthWarned = true;
-      console.log('[AudioDebug][INFO] 当前使用合成钢琴音色（current=__synth__，单振荡器 PeriodicWave），时间=', t.toFixed(2));
+      console.log('[AudioDebug][INFO] 当前使用合成钢琴音色（current=__synth__，预渲染循环波形），时间=', t.toFixed(2));
     }
     // 同音打断：与 sample 分支一致，避免同音叠加导致 voice 爆炸
     const prevS = this.activeSynth[midi];
@@ -1560,7 +1611,6 @@ const SoundfontLoader = {
       this._unregisterVoice(prevS);
       delete this.activeSynth[midi];
     }
-    const f = 440 * Math.pow(2, (midi - 69) / 12);
     const t0 = audioCtx.currentTime;
     const synthDur = Math.max(duration, 0.001); // 真实时长，仅 1ms epsilon
     const env = audioCtx.createGain();
@@ -1568,16 +1618,28 @@ const SoundfontLoader = {
     env.gain.linearRampToValueAtTime(0.4 * velocity, t0 + Math.min(0.008, synthDur * 0.5));
     env.gain.exponentialRampToValueAtTime(0.0008, t0 + synthDur);
     env.connect(masterGain);
-    // 单振荡器 + 预置 PeriodicWave（原为 3 个振荡器 + 3 个分音 Gain），
-    // 每音符节点数 7 -> 2，与采样分支持平，缓解高密度谱面的音频线程过载。
-    const o = audioCtx.createOscillator();
-    o.setPeriodicWave(_getSynthPeriodicWave());
-    o.frequency.value = f;
-    o.connect(env);
-    // 尾部仅保留 30ms 余量（原 200ms），缩短振荡器存活时间、降低活动 voice 数
-    o.start(t0); o.stop(t0 + synthDur + 0.03);
-    const oscs = [o];
-    // 登记 voice，并在结束时清理，避免振荡器累积
+    // 每音符节点数 7 -> 2：预渲染循环波形经 BufferSource 播放（与采样分支同构）。
+    // 播放时零重采样，音频线程开销低于采样音色，高密度谱面更不易卡顿。
+    let oscs;
+    const loopBuf = _getSynthLoopBuffers()[midi] || null;
+    if(loopBuf){
+      const src = audioCtx.createBufferSource();
+      src.buffer = loopBuf;
+      src.loop = true;
+      src.connect(env);
+      // 尾部仅保留 30ms 余量（原 200ms），缩短音源存活时间、降低活动 voice 数
+      src.start(t0); src.stop(t0 + synthDur + 0.03);
+      oscs = [src];
+    } else {
+      const f = 440 * Math.pow(2, (midi - 69) / 12);
+      const o = audioCtx.createOscillator();
+      o.setPeriodicWave(_getSynthPeriodicWave());
+      o.frequency.value = f;
+      o.connect(env);
+      o.start(t0); o.stop(t0 + synthDur + 0.03);
+      oscs = [o];
+    }
+    // 登记 voice，并在结束时清理，避免音源节点累积
     const voice = { kind: 'synth', midi, oscs, env };
     this.synthVoices.push(voice);
     this.activeSynth[midi] = voice;
