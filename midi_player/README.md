@@ -312,8 +312,10 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **冷启动优先级管线**（`COLD_START` + `coldStart()`）：**同一时刻只竞速一个资源**，避免多资源互相抢带宽：**P0** 竞速下载默认谱面（`Rush E 3.mid.br`）；**P0 完成立即用合成钢琴起播**，同时进入 **P1** 竞速下载默认音色（古钢琴 `clavinet`），此期间不下载其它任何资源；**P2** 古钢琴就绪后，才下载 `mandatorySheets` / `mandatoryTimbres` 配置的预配置必下谱面与音色（默认 `The Sound of Silence`）。音色下载并预解码完成后只切 `current`，不打断正在发声的 voice。
 - **谱面压缩传输（只传 brotli）**：仓库**只保留 `.mid.br`**，原始 `.mid` 与 `.gz` 已删除，传输一律使用 br 压缩后的文件。`_fetchMediaBlob()` 取 `.br` 后解压：原生 `DecompressionStream('brotli')` 优先；不支持时**惰性加载内置 WASM 解码器**（`vendor/brotli_dec_wasm.js` + `vendor/brotli_dec_wasm_bg.wasm`，`brotli-dec-wasm@2.3.2`）。以 `_looksLikeMidi()` 校验 `MThd`，兼容服务端已按 `Content-Encoding` 自动解压的情况。解压后的谱面按原路径写入 Cache API，回访不再下载也不再解压。`Rush E 3.mid` 2.70 MB → br **95 KB**。
 - **依赖本地化**：`@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`，不再依赖 jsDelivr；入口 `app.js` 仍同源优先加载。
-- **竞速日志（固化最后一行）**：进行中 `_raceLog()` 每 0.5s 覆盖同一行显示领先镜像与速度；完成后 `_raceLogFinal()` 把该行固化为 `竞速[文件名] 完成 <- [镜像] 大小 用时Xs 平均YKB/s` 并**保留不删**，用于指示本次性能。失败时同样保留 `全部镜像失败`。
-- **br 支持可观测**：启动时打印 `br 解压支持：原生 DecompressionStream(brotli)=true/false`，并在**调试面板**显示 `br 解压：原生支持 / 需 WASM 解码器`；WASM 解码器的加载过程也会逐条打印。
+- **竞速日志（固化最后一行，不重复打「下载成功」）**：进行中 `_raceLog()` 每 0.5s 覆盖同一行显示领先镜像与速度；完成后 `_raceLogFinal()` 把该行固化为 `竞速[文件名] 完成 <- [镜像] 大小 用时Xs 平均YKB/s` 并**保留不删**，用于指示本次性能。失败时同样保留 `全部镜像失败`。竞速行已含来源/体积/速度/文件名，故不再额外打印 `xx下载成功` 的蓝色日志（缓存命中仍打印）。
+- **压缩收益可观测**：`.mid.br` 解压后打印 `br解压 <压缩体积> -> <解压体积>（压缩比 N×，传输节省 X%）`；音色若被 HTTP 层压缩，也会打印 `HTTP压缩传输 <压缩后> -> <解压后>（压缩比 N×）`。
+- **WASM 二进制同样竞速**：WASM brotli 解码器（`vendor/brotli_dec_wasm_bg.wasm`）通过 `_fetchBlobWithProgress` 走多镜像完整下载竞速，其来源/体积/速度/文件名由竞速最终行打印。
+- **br 支持可观测**：启动时打印 `br 解压支持：原生 DecompressionStream(brotli)=true/false`，并在**调试面板**显示 `br 解压：原生支持 / 需 WASM 解码器`；WASM 解码器的加载过程（JS 模块加载 → WASM 竞速下载 → 初始化 → 就绪）逐条打印。
 - **预解码**：`predecodeAll` 按每批 8 个解码 88 个音，避免一次性解码阻塞主线程与音频时间线。
 - **合成回退**：`__synth__` 分支用**单个振荡器 + 预置 `PeriodicWave`**（把三角波奇次谐波与 2/3 次正弦泛音预先合成为频谱），指数包络收尾。相比早期「3 个振荡器 + 3 个分音 Gain」的每音符 7 节点，现为 2 节点，与采样分支持平，显著缓解高密度谱面的音频线程过载（无声）问题。仅在音色加载失败或 buffer 缺失时使用。合成钢琴本身**无任何音频文件**（0 字节），因此不需要下载。
 - **增益**：`timbreGain` 对个别音色（三角钢琴、古钢琴）单独设增益，其余默认 3.0。
@@ -483,7 +485,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - 自定义下拉（音色 / 谱面）弹层 `.csel-pop` 为 `position:fixed` 且挂到 `body`，直接遮挡渲染区；其背景/模糊同样纳入统一面板外观（`_panelTargets`）。
 - **不自动聚焦搜索框**：`open()` 不再调用 `search.focus()`，点击音色 / 谱面列表不会唤醒输入法；用户可手动点搜索框。
 - **全屏可弹出**：`.csel-pop` 默认挂在 `document.body`，而全屏只渲染全屏元素，故 `open()` 时若处于全屏则把弹层挂到全屏元素（`.visual-panel`）内，保证全屏状态下音色/谱面列表能正常显示。
-- **状态区**：进度条上方的 `.time-row` 中间新增 `#statusText`。**仅 INFO 日志（`type==='log'`）** 镜像到此处，**去掉时间戳与 `[AudioDebug]` 前缀**，只保留精确信息，名称用中括号包裹，如 `音色[古钢琴]下载成功!`、`谱面[Rush E 3.mid]下载成功!`、`音色[古钢琴]下载 42%`；性能告警（warn）不再刷入状态区。下载/进度/完成的通用提示（如「乐谱下载完成！」）已删除，避免覆盖精确信息。原顶部浮层 Toast 已移除。
+- **状态区**：进度条上方的 `.time-row` 中间新增 `#statusText`。**仅 INFO 日志（`type==='log'`）** 镜像到此处，**去掉时间戳与 `[AudioDebug]` 前缀**，只保留精确信息，名称用中括号包裹，如 `音色[古钢琴]下载 42%`、`谱面[Rush E 3.mid]下载 42%`；性能告警（warn）不再刷入状态区。下载/进度/完成的通用提示（如「乐谱下载完成！」）已删除，避免覆盖精确信息。原顶部浮层 Toast 已移除。
 - `viewport` 设 `interactive-widget=overlays-content`，并在 `visualViewport.resize` 中判断键盘高度差（`height < innerHeight-120`）时**跳过画布重算**，使软键盘 / 选谱弹层弹出时渲染区高度不变、由弹层直接遮挡。
 
 # 十、部署、流量与缓存策略（GitHub Pages）
@@ -578,7 +580,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 | 指标 | 采集方式 | 用途 |
 | --- | --- | --- |
-| `renderCapacity` | `AudioContext.renderCapacity.onupdate` | 直接反映音频渲染线程负载，判断「UI 不卡但声音卡」 |
+| `renderCapacity` | `AudioContext.renderCapacity.onupdate` | 直接反映音频渲染线程负载，判断「UI 不卡但声音卡」。这是实验性 Web Audio API（Chrome 116+ 支持），Firefox/Safari 及旧版 Chrome 没有；不支持的浏览器**静默跳过**（早期每次启动都会打印一条「不支持」，已移除以免刷屏） |
 | RMS 输出 | `AnalyserNode.getFloatTimeDomainData`（每 200ms） | 探测实际输出静音 |
 | 帧耗时 / 触发音符数 | `playLoop` 每帧 | 帧率与调度压力 |
 | 绘制耗时 | `drawScene` 计时 | 渲染瓶颈定位 |

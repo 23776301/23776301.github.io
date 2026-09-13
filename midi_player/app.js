@@ -540,10 +540,9 @@ const AudioDebugMonitor = {
           }
         };
         this.rc.start({updateInterval: 1});
-        console.log('[AudioDebug][INFO] renderCapacity 已启用');
-      } else {
-        console.log('[AudioDebug][INFO] 当前浏览器不支持 renderCapacity（建议Chrome 116+）');
+        console.log('[AudioDebug][INFO] renderCapacity 已启用（音频渲染线程负载监控，Chrome 116+）');
       }
+      // 不支持 renderCapacity 的浏览器静默跳过（Firefox/Safari 及旧版 Chrome），不再刷日志
     }catch(e){ console.warn('[AudioDebug] renderCapacity 启动失败:', e.message || e); }
 
     // 主线程长任务监控（>50ms），判断GC/解析是否阻塞主线程
@@ -934,6 +933,7 @@ async function _raceDownloadFull(list, onProgress, label){
   const avg = winner.blob.size / Math.max(secs, 0.001) / 1024;
   _raceLogFinal('竞速[' + tag + '] 完成 <- [' + _sourceLabel(winner.url) + '] ' +
     _fmtSize(winner.blob.size) + ' 用时' + secs.toFixed(2) + 's 平均' + avg.toFixed(0) + 'KB/s');
+  try{ winner.blob._netSize = states[winner.i].total || winner.blob.size; }catch(e){}
   return { blob: winner.blob, url: winner.url, index: winner.i };
 }
 // 首字节竞速（开关关闭时）：胜出源流式读取，若读取中途失败则按顺序回退其余候选
@@ -949,8 +949,12 @@ async function _fetchByFirstByte(list, onProgress, label, quiet){
       if(idx === winner.index){ resp = winner.resp; }
       else { resp = await fetch(list[idx]); if(!resp.ok) throw new Error('HTTP ' + resp.status); }
       const blob = await _readBlobWithProgress(resp, onProgress);
+      try{
+        const net = parseInt((resp.headers && resp.headers.get) ? (resp.headers.get('content-length') || '0') : '0', 10);
+        blob._netSize = net > 0 ? net : blob.size;
+      }catch(e){ blob._netSize = blob.size; }
       const secs = (performance.now() - t0) / 1000;
-      if(!quiet) console.log('[AudioDebug][INFO] ' + tag + '从' + _sourceLabel(list[idx]) + '下载成功!');
+      // 不再额外打「下载成功」蓝字：竞速最终行已含来源/体积/速度/文件名
       _raceLogFinal('竞速[' + tag + '] 完成 <- [' + _sourceLabel(list[idx]) + '] ' +
         _fmtSize(blob.size) + ' 用时' + secs.toFixed(2) + 's');
       return blob;
@@ -967,8 +971,8 @@ async function _fetchBlobWithProgress(urls, onProgress, label, quiet){
   const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
   if(raceFullDownload){
     try{
+      // 竞速最终行已含来源/体积/速度/文件名，不再重复打「下载成功」蓝字
       const res = await _raceDownloadFull(list, onProgress, label);
-      if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '从' + _sourceLabel(res.url) + '下载成功!');
       return res.blob;
     }catch(e){
       if(!quiet) console.log('[AudioDebug][INFO] ' + (label || '文件') + '全部镜像下载失败：' + (e && e.message ? e.message : e));
@@ -996,10 +1000,16 @@ async function _loadBrotliWasm(){
   if(_brotliWasmMod) return _brotliWasmMod;
   if(_brotliWasmLoading) return _brotliWasmLoading;
   _brotliWasmLoading = (async () => {
-    console.log('[AudioDebug][INFO] br 解码器：原生不支持，开始加载内置 WASM 解码器 vendor/brotli_dec_wasm.js');
+    console.log('[AudioDebug][INFO] br 解码器：原生不支持，开始加载内置 WASM 解码器');
     const mod = await import('./vendor/brotli_dec_wasm.js');
-    console.log('[AudioDebug][INFO] br 解码器：模块已加载，初始化 brotli_dec_wasm_bg.wasm …');
-    await mod.default();
+    console.log('[AudioDebug][INFO] br 解码器：JS 模块已加载，开始竞速下载 brotli_dec_wasm_bg.wasm');
+    // WASM 二进制同样走多镜像完整下载竞速（竞速结果会打印来源/体积/速度/文件名）
+    const wasmBlob = await _fetchBlobWithProgress(
+      _mediaUrls('vendor/brotli_dec_wasm_bg.wasm'), null,
+      'WASM[brotli_dec_wasm_bg.wasm]', true);
+    const wasmBuf = await wasmBlob.arrayBuffer();
+    console.log('[AudioDebug][INFO] br 解码器：初始化 WASM (' + _fmtSize(wasmBuf.byteLength) + ')…');
+    await mod.default({ module_or_path: wasmBuf });
     _brotliWasmMod = mod;
     console.log('[AudioDebug][INFO] br 解码器：WASM 解码器就绪');
     return mod;
@@ -1054,9 +1064,18 @@ async function _fetchMediaBlob(relPath, onProgress, quiet){
   const blob = await _fetchBlobWithProgress(_mediaUrls(relPath + '.br'), onProgress, label, quiet);
   const ab = await blob.arrayBuffer();
   // 服务端若已按 Content-Encoding 自动解压，则已是 MIDI，直接用
-  const out = _looksLikeMidi(ab) ? ab : await _decompressBrotli(ab);
+  if(_looksLikeMidi(ab)){
+    if(!quiet) console.log('[AudioDebug][INFO] ' + label + ' 服务端已自动解压，未压缩体积 ' + _fmtSize(ab.byteLength));
+    return new Blob([ab]);
+  }
+  const out = await _decompressBrotli(ab);
   if(!_looksLikeMidi(out)) throw new Error('br 解压结果不是有效 MIDI');
-  if(!quiet) console.log('[AudioDebug][INFO] ' + label + ' 已解压 (' + (out.byteLength / 1024).toFixed(0) + 'KB)');
+  if(!quiet){
+    const ratio = out.byteLength / ab.byteLength;
+    const saved = (1 - ab.byteLength / out.byteLength) * 100;
+    console.log('[AudioDebug][INFO] ' + label + ' br解压 ' + _fmtSize(ab.byteLength) + ' -> ' +
+      _fmtSize(out.byteLength) + '（压缩比 ' + ratio.toFixed(1) + '×，传输节省 ' + saved.toFixed(1) + '%）');
+  }
   return new Blob([out]);
 }
 
@@ -1173,11 +1192,12 @@ const SoundfontLoader = {
     // 多镜像完整下载竞速获取音色文本（进度 0..1）
     const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
     const source = '竞速镜像';
-    let text;
+    let text, netSize = 0;
     try{
       const blob = await _fetchBlobWithProgress(list, (p) => {
         if(onProgress) onProgress(p / 100);
       }, _timbreLabel(name), true);
+      netSize = blob._netSize || blob.size;
       text = await blob.text();
       if(onProgress) onProgress(1);
     }catch(e){
@@ -1204,7 +1224,7 @@ const SoundfontLoader = {
         }catch(e2){}
       }
     }
-    return { text: text, fromCache: false, source: source };
+    return { text: text, fromCache: false, source: source, netSize: netSize };
   },
 
   // 扫描音色缓存，重建 cachedNames 集合
@@ -1259,9 +1279,17 @@ const SoundfontLoader = {
     this.cachedNames.add(name);
     // 后台/前台下载完成：刷新设置面板音色列表的下载/删除状态
     if(typeof _onTimbreCached === 'function'){ try{ _onTimbreCached(name); }catch(e){} }
-    // 每个音色每次会话只打一条来源：缓存命中 vs 网络下载（含后台预取）
-    console.log('[AudioDebug][INFO] ' + _timbreLabel(name) +
-      (res.fromCache ? '从缓存加载成功!' : '从' + (res.source || '网络') + '下载成功!'));
+    // 网络下载的来源/体积/速度已由竞速最终行打印；这里只补缓存命中与压缩收益提示
+    if(res.fromCache){
+      console.log('[AudioDebug][INFO] ' + _timbreLabel(name) + '从缓存加载成功!');
+    } else if(res.netSize > 0){
+      const rawLen = res.text.length; // 音色为 ASCII base64，字符数≈字节数
+      if(res.netSize < rawLen * 0.98){
+        console.log('[AudioDebug][INFO] ' + _timbreLabel(name) + ' HTTP压缩传输 ' + _fmtSize(res.netSize) +
+          ' -> ' + _fmtSize(rawLen) + '（压缩比 ' + (rawLen / res.netSize).toFixed(1) + '×，传输节省 ' +
+          ((1 - res.netSize / rawLen) * 100).toFixed(1) + '%）');
+      }
+    }
     if(onProgress) onProgress(1, '音色加载完成');
   },
 
@@ -1546,7 +1574,8 @@ const SoundfontLoader = {
     o.setPeriodicWave(_getSynthPeriodicWave());
     o.frequency.value = f;
     o.connect(env);
-    o.start(t0); o.stop(t0 + synthDur + 0.2);
+    // 尾部仅保留 30ms 余量（原 200ms），缩短振荡器存活时间、降低活动 voice 数
+    o.start(t0); o.stop(t0 + synthDur + 0.03);
     const oscs = [o];
     // 登记 voice，并在结束时清理，避免振荡器累积
     const voice = { kind: 'synth', midi, oscs, env };
@@ -2002,7 +2031,6 @@ const COLD_START = {
         if(p < 100) setStatus('谱面[' + _songDisplayName(DEFAULT_SONG) + ']下载 ' + Math.round(p) + '%');
       });
       const buf = await resp.arrayBuffer();
-      console.log('[AudioDebug][INFO] 默认谱面已加载 (' + (buf.byteLength/1024).toFixed(0) + 'KB)');
       midiBuf = buf;
       parseAndPlayMidi(buf, DEFAULT_SONG);
       refreshManageRowState(COLD_START.sheet); // 下载完成，更新管理面板该行状态
