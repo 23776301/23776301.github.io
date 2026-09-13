@@ -54,7 +54,7 @@
 
 - 音频文件上传（点击顶部区域选择，或拖入）。
 - 播放/暂停、进度条拖拽 seek、音量、循环。
-- 自动加载演示音频 `demo.ogg`（多个 jsDelivr 边缘节点**并发完整下载竞速**，最先完成者胜出，其余立即中止并清理不完整分片，全部失败回退本站 Pages；可在终端顶部「完整竞速」开关关闭，改用首字节竞速）。
+- 自动加载演示音频 `demo.ogg`（与 MIDI 播放器共用的公共能力 `shared/cdn-race.js`：**11 个镜像 + 本站 Pages 兜底**并发完整下载竞速，最先完成者胜出，其余立即中止并清理不完整分片，全部失败回退本站 Pages；可在终端顶部「CDN竞速」开关关闭，改用首字节竞速）。竞速日志与 MIDI 播放器一致：进行中每 0.5s **覆盖同一行**显示领先镜像/速度，完成后**固化最终结果行并保留**，不被刷掉。
 
 ### 2.3 其它
 
@@ -342,7 +342,7 @@ DRAW['my-viz'] = function(ctx, p, W, H, el, dt){
 
 ## 附：缓存
 
-`AssetCache` 使用 Cache API，缓存名 `music-viz-assets-v1`，以绝对路径为键、`ignoreSearch` 提高命中率；缓存失败时回退到普通 `fetch`。目前仅用于演示音频 `demo.ogg`：`fetchDemo()` 先查缓存；未命中时按终端顶部「完整竞速」开关选择：开（默认）走 `_raceDownloadDemo()`，关则走 `_raceFirstByteDemo()`（同时请求、首个响应头胜出后再读 Blob）。`_raceDownloadDemo()` 同时向 4 个 jsDelivr 边缘节点（`cdn` / `fastly` / `gcore` / `testingcf`，均 `gh/teecatt/teecatt.github.io@master/music_visualization/demo.ogg`）+ 本地 `demo.ogg` 发起**完整下载**，`Promise.any` 取最先完整下载完成者，随后 `AbortController.abort()` 中止其余镜像并丢弃其不完整分片（`_downloadBlobDemo` 中止时把分片数组置 null）；终端日志实时显示竞速进度（领先镜像 + 速度）、胜出镜像（大小/耗时/平均速度）与清理信息。命中后写回缓存（CORS 可用且不消耗 Pages 带宽）。
+`AssetCache` 使用 Cache API，缓存名 `music-viz-assets-v1`，以绝对路径为键、`ignoreSearch` 提高命中率；缓存失败时回退到普通 `fetch`。目前仅用于演示音频 `demo.ogg`：`fetchDemo()` 先查缓存；未命中时按终端顶部「CDN竞速」开关选择：开（默认）走 `_raceDownloadDemo()`，关则走 `_raceFirstByteDemo()`（同时请求、首个响应头胜出后再读 Blob）。二者均委托公共能力 `shared/cdn-race.js`（与 MIDI 播放器共用同一份镜像列表与引擎）：`CDN_BASES` 共 **11 个镜像**（4 个 jsDelivr 边缘 + 5 个国内常用 GitHub 加速 + statically / githack），URL 由 `CdnRace.buildUrls('music_visualization', 'demo.ogg')` 生成（各镜像 + 本地 `demo.ogg`），`Promise.any` 取最先完整下载完成者，随后 `AbortController.abort()` 中止其余镜像并丢弃其不完整分片；竞速日志由 `CdnRace.makeLiveLogger()` 统一实现——进行中每 0.5s **覆盖同一行**（领先镜像 + 速度），完成后**固化最终结果行并保留**，与 MIDI 播放器完全一致。命中后写回缓存（CORS 可用且不消耗 Pages 带宽）。
 
 ### 布局：绘制区 / 进度条 / 终端
 

@@ -55,96 +55,24 @@ function logDownload(){
 function logScrollTop(){ if(_logBar) _logBar.scrollTop=0; }
 function logScrollBottom(){ if(_logBar) _logBar.scrollTop=_logBar.scrollHeight; }
 
-// 媒体源：多个 jsDelivr 边缘节点 + 本站 Pages 兜底，下载时并发择优
-const REPO_GH = 'teecatt/teecatt.github.io';
-const REPO_REF = 'master';
-const CDN_BASES = [
-  { name: 'jsDelivr',        base: 'https://cdn.jsdelivr.net/gh/' },
-  { name: 'jsDelivr-Fastly', base: 'https://fastly.jsdelivr.net/gh/' },
-  { name: 'jsDelivr-Gcore',  base: 'https://gcore.jsdelivr.net/gh/' },
-  { name: 'jsDelivr-CF',     base: 'https://testingcf.jsdelivr.net/gh/' },
-];
-const DEMO_URLS = CDN_BASES.map(b => b.base + REPO_GH + '@' + REPO_REF + '/music_visualization/demo.ogg');
-DEMO_URLS.push('demo.ogg');
-function _demoSourceLabel(url){
-  const u = String(url);
-  if(u.indexOf('://') < 0) return 'Pages';
-  for(const b of CDN_BASES){ if(u.indexOf(b.base) === 0) return b.name; }
-  try { return new URL(u).hostname; } catch(e) { return '备用源'; }
-}
-// 单源：完整下载为 Blob（流式回报进度；中止/失败时丢弃不完整分片）
-async function _downloadBlobDemo(url, onProgress, signal){
-  const r = await fetch(url, signal ? { signal } : undefined);
-  if(!r.ok) throw new Error('HTTP ' + r.status);
-  const total = parseInt((r.headers && r.headers.get && r.headers.get('content-length')) || '0', 10);
-  if(!r.body || typeof r.body.getReader !== 'function'){
-    const blob = await r.blob();
-    if(onProgress) onProgress(blob.size, total > 0 ? total : blob.size);
-    return blob;
-  }
-  const reader = r.body.getReader();
-  let chunks = []; let received = 0;
-  try {
-    while(true){
-      const {done, value} = await reader.read();
-      if(done) break;
-      chunks.push(value);
-      received += value.byteLength;
-      if(onProgress) onProgress(received, total);
-    }
-  } catch(e) {
-    chunks = null; // 中止/失败：清理该镜像的不完整分片
-    throw e;
-  }
-  if(onProgress) onProgress(received, total > 0 ? total : received);
-  return new Blob(chunks);
-}
+// 媒体源：镜像列表与竞速引擎来自公共能力 shared/cdn-race.js
+// （与 midi_player 共用同一份：11 个镜像 + 本站同源兜底，同时受益）
+const REPO_GH = CdnRace.REPO_GH;
+const REPO_REF = CdnRace.REPO_REF;
+const CDN_BASES = CdnRace.CDN_BASES;
+const DEMO_URLS = CdnRace.buildUrls('music_visualization', 'demo.ogg');
+// 竞速日志：进行中每 0.5s 覆盖同一行；完成后固化最终结果行并保留（与 midi_player 行为一致）
+const _raceLogger = CdnRace.makeLiveLogger(
+  () => document.getElementById('logBar'),
+  { maxLines: 500, className: 'log-line', color: () => '' }
+);
 // 完整下载竞速：所有镜像同时完整下载，最先完成者胜出；其余立即 abort 并清理不完整分片
 async function _raceDownloadDemo(urls){
-  const hasAbort = (typeof AbortController !== 'undefined');
-  const controllers = urls.map(() => hasAbort ? new AbortController() : null);
-  const t0 = performance.now();
-  const states = urls.map(u => ({ src: _demoSourceLabel(u), received: 0, total: 0, failed: false }));
-  let lastLog = 0;
-  const report = () => {
-    const now = performance.now();
-    if(now - lastLog < 500) return;
-    lastLog = now;
-    let lead = null;
-    for(const s of states){ if(!s.failed && (!lead || s.received > lead.received)) lead = s; }
-    if(!lead || lead.received <= 0) return;
-    const elapsed = (now - t0) / 1000;
-    const speed = lead.received / elapsed / 1024;
-    const pct = lead.total > 0 ? (lead.received / lead.total * 100).toFixed(1) + '%' : (lead.received/1024).toFixed(0) + 'KB';
-    _log('demo.ogg: 竞速进度 ' + pct + ' 领先[' + lead.src + '] ' + speed.toFixed(0) + 'KB/s');
-  };
-  const attempts = urls.map((url, i) => _downloadBlobDemo(url, (received, total) => {
-    states[i].received = received; states[i].total = total; report();
-  }, controllers[i] ? controllers[i].signal : null).then(
-    blob => ({ blob, i, url }),
-    err => { states[i].failed = true; throw err; }
-  ));
-  _log('demo.ogg: 完整下载竞速，同时请求 ' + urls.length + ' 个镜像');
-  let winner;
-  try {
-    winner = await (typeof Promise.any === 'function' ? Promise.any(attempts) : new Promise((res, rej) => {
-      let n = urls.length; const errs = [];
-      attempts.forEach((p, i) => p.then(res, e => { errs[i] = e; if(--n === 0) rej({ errors: errs }); }));
-    }));
-  } catch(agg) {
-    const errs = (agg && agg.errors) || [];
-    const first = errs.find(e => e);
-    throw (first instanceof Error) ? first : new Error('全部镜像下载失败');
-  }
-  const elapsed = (performance.now() - t0) / 1000;
-  const src = _demoSourceLabel(winner.url);
-  const size = winner.blob.size;
-  _log('demo.ogg: 镜像[' + src + ']最先完成 ' + (size/1024).toFixed(0) + 'KB，耗时' + elapsed.toFixed(1) + 's，平均' + (size/1024/Math.max(elapsed,0.001)).toFixed(0) + 'KB/s', 'ok');
-  // 暂停其余镜像的下载并清理其不完整分片
-  let aborted = 0;
-  controllers.forEach((c, i) => { if(c && i !== winner.i){ try { c.abort(); aborted++; } catch(e){} } });
-  _log('demo.ogg: 已中止其余 ' + aborted + ' 个镜像并清理不完整分片');
-  return { blob: winner.blob, url: winner.url, source: src };
+  return CdnRace.raceDownload(urls, {
+    label: 'demo.ogg',
+    onLive: _raceLogger.live,
+    onFinal: _raceLogger.final,
+  });
 }
 // 完整下载竞速开关（默认开，可在终端顶部关闭改用首字节竞速）
 let raceFullDownload = true;
@@ -157,31 +85,14 @@ function onRaceFullChange(){
 }
 // 首字节竞速：同时请求所有镜像，最先返回响应头者胜出，再读取其 Blob
 async function _raceFirstByteDemo(urls){
-  const hasAbort = (typeof AbortController !== 'undefined');
-  const controllers = urls.map(() => hasAbort ? new AbortController() : null);
-  const t0 = performance.now();
   _log('demo.ogg: 首字节竞速，同时请求 ' + urls.length + ' 个镜像');
-  const attempts = urls.map((url, i) => fetch(url, controllers[i] ? { signal: controllers[i].signal } : undefined).then(r => {
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    return { r, url, i };
-  }));
-  let winner;
-  try {
-    winner = await (typeof Promise.any === 'function' ? Promise.any(attempts) : new Promise((res, rej) => {
-      let n = urls.length; const errs = [];
-      attempts.forEach((p, i) => p.then(res, e => { errs[i] = e; if(--n === 0) rej({ errors: errs }); }));
-    }));
-  } catch(agg) {
-    const errs = (agg && agg.errors) || [];
-    const first = errs.find(e => e);
-    throw (first instanceof Error) ? first : new Error('全部镜像请求失败');
-  }
-  const src = _demoSourceLabel(winner.url);
-  controllers.forEach((c, i) => { if(c && i !== winner.i){ try { c.abort(); } catch(e){} } });
-  const blob = await winner.r.blob();
-  const elapsed = (performance.now() - t0) / 1000;
-  _log('demo.ogg: 镜像[' + src + ']首字节领先 ' + (blob.size/1024).toFixed(0) + 'KB，耗时' + elapsed.toFixed(1) + 's', 'ok');
-  return { blob, url: winner.url, source: src };
+  const blob = await CdnRace.fetchFirstByte(urls, {
+    label: 'demo.ogg',
+    onLive: _raceLogger.live,
+    onFinal: _raceLogger.final,
+    onInfo: (msg) => _log(msg),
+  });
+  return { blob: blob };
 }
 async function fetchDemo(){
   _log('demo.ogg: 开始加载...');

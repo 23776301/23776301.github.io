@@ -85,54 +85,21 @@ function _appendDebug(msg, type) {
   }
 }
 
-// ===== 公共 CDN 竞速日志能力 =====
-// 进行中每 0.5s 覆盖同一行；完成后由 _raceLogFinal 固化为最终结果行（保留，用于指示性能）。
-let _raceLogEl = null;
-function _raceLog(text){
-  if(!debugEnabled) return;
-  const term = document.getElementById('debugTerminalContent');
-  if(!term) return;
-  const line = '[' + new Date().toLocaleTimeString() + '] ' + text;
-  if(_raceLogEl && _raceLogEl.parentNode === term){
-    _raceLogEl.textContent = line; // 原地覆盖上一条竞速日志
-  } else {
-    _raceLogEl = document.createElement('div');
-    _raceLogEl.style.color = _debugColor('log', text);
-    _raceLogEl.style.wordBreak = 'break-all';
-    _raceLogEl.textContent = line;
-    const panel = _debugPanelScrollEl();
-    const atBottom = panel ? (panel.scrollHeight - panel.scrollTop - panel.clientHeight < 40) : true;
-    term.appendChild(_raceLogEl);
-    while(term.childElementCount > 300){ term.removeChild(term.firstChild); }
-    if(atBottom && panel) panel.scrollTop = panel.scrollHeight;
+// ===== 公共 CDN 竞速日志能力（由 shared/cdn-race.js 提供）=====
+// 进行中每 0.5s 覆盖同一行；完成后固化为最终结果行（保留，用于指示性能）。
+const _raceLogger = CdnRace.makeLiveLogger(
+  () => document.getElementById('debugTerminalContent'),
+  {
+    maxLines: 300,
+    enabled: () => debugEnabled,
+    color: (t) => _debugColor('log', t),
+    scrollParent: () => _debugPanelScrollEl(),
   }
-}
-// 竞速结束：把进行中的行改写成最终结果并「固化」（下次竞速另起新行），不删除，用于指示性能
-function _raceLogFinal(text){
-  const term = document.getElementById('debugTerminalContent');
-  if(debugEnabled && term){
-    const line = '[' + new Date().toLocaleTimeString() + '] ' + text;
-    if(_raceLogEl && _raceLogEl.parentNode === term){
-      _raceLogEl.textContent = line;
-      _raceLogEl.style.color = _debugColor('log', text);
-    } else {
-      const el = document.createElement('div');
-      el.style.color = _debugColor('log', text);
-      el.style.wordBreak = 'break-all';
-      el.textContent = line;
-      term.appendChild(el);
-      while(term.childElementCount > 300){ term.removeChild(term.firstChild); }
-    }
-  }
-  _raceLogEl = null; // 固化：后续竞速另起一行
-}
-// 字节数格式化：3.6MB / 520KB / 800B
-function _fmtSize(n){
-  n = Number(n) || 0;
-  if(n >= 1024*1024) return (n/1024/1024).toFixed(1) + 'MB';
-  if(n >= 1024) return (n/1024).toFixed(0) + 'KB';
-  return n + 'B';
-}
+);
+function _raceLog(text){ _raceLogger.live(text); }
+function _raceLogFinal(text){ _raceLogger.final(text); }
+// 字节数格式化（公共实现）
+function _fmtSize(n){ return CdnRace.fmtSize(n); }
 
 // 静态媒体「需传输体积」表（字节）：由脚本探测生成，避免运行时逐个 HEAD 探测。
 // - 谱面：仓库内 midi/*.mid.br 的实际文件大小（精确）
@@ -918,39 +885,14 @@ try{
 // ===== 媒体源：多个国内可用镜像 + 本站 Pages 兜底，完整下载竞速 =====
 // 中国大陆访问各镜像速度差异大：同一资源同时向所有镜像发起「完整下载」，最先完成者胜出，
 // 其余立即 abort 并丢弃不完整分片。冷启动管线保证同一时刻只竞速一个资源，避免多资源抢带宽。
-const REPO_GH = 'teecatt/teecatt.github.io';
-const REPO_REF = 'master';
-const RAW_BASE = 'https://raw.githubusercontent.com/' + REPO_GH + '/' + REPO_REF + '/';
-const _encPath = p => String(p).split('/').map(encodeURIComponent).join('/');
-// prefix 同时用于拼接与来源识别；资源 URL = prefix + encode('midi_player/' + 相对路径)
-const CDN_BASES = [
-  { name: 'jsDelivr',        prefix: 'https://cdn.jsdelivr.net/gh/' + REPO_GH + '@' + REPO_REF + '/' },
-  { name: 'jsDelivr-Fastly', prefix: 'https://fastly.jsdelivr.net/gh/' + REPO_GH + '@' + REPO_REF + '/' },
-  { name: 'jsDelivr-Gcore',  prefix: 'https://gcore.jsdelivr.net/gh/' + REPO_GH + '@' + REPO_REF + '/' },
-  { name: 'jsDelivr-CF',     prefix: 'https://testingcf.jsdelivr.net/gh/' + REPO_GH + '@' + REPO_REF + '/' },
-  { name: 'ghproxy.net',     prefix: 'https://ghproxy.net/' + RAW_BASE },
-  { name: 'gh-proxy.com',    prefix: 'https://gh-proxy.com/' + RAW_BASE },
-  { name: 'ghfast.top',      prefix: 'https://ghfast.top/' + RAW_BASE },
-  { name: 'gh.llkk.cc',      prefix: 'https://gh.llkk.cc/' + RAW_BASE },
-  { name: 'gh.xxooo.cf',     prefix: 'https://gh.xxooo.cf/' + RAW_BASE },
-  { name: 'statically',      prefix: 'https://cdn.statically.io/gh/' + REPO_GH + '/' + REPO_REF + '/' },
-  { name: 'githack',         prefix: 'https://raw.githack.com/' + REPO_GH + '/' + REPO_REF + '/' },
-];
+// 镜像列表与竞速引擎由公共能力 shared/cdn-race.js 提供（与音频可视化页面共用同一份）。
+const REPO_GH = CdnRace.REPO_GH;
+const REPO_REF = CdnRace.REPO_REF;
+const CDN_BASES = CdnRace.CDN_BASES;
 // midi_player 内的相对路径 -> [各镜像..., 本站同源 Pages 兜底]
-function _mediaUrls(relPath){
-  const clean = String(relPath).replace(/^\.\//, '');
-  const enc = _encPath('midi_player/' + clean);
-  const urls = CDN_BASES.map(b => b.prefix + enc);
-  urls.push(clean);
-  return urls;
-}
+function _mediaUrls(relPath){ return CdnRace.buildUrls('midi_player', relPath); }
 // 从 URL 推断可读来源名（用于日志/状态区）
-function _sourceLabel(url){
-  const u = String(url);
-  if(u.indexOf('://') < 0) return 'Pages';
-  for(const b of CDN_BASES){ if(u.indexOf(b.prefix) === 0) return b.name; }
-  try{ return new URL(u).hostname; }catch(e){ return '备用源'; }
-}
+function _sourceLabel(url){ return CdnRace.sourceLabel(url); }
 // 完整下载竞速开关（默认开）：开=所有镜像同时完整下载、最快完成者胜出；
 // 关=仅竞速首字节响应，胜出源再流式读取。
 let raceFullDownload = true;
@@ -965,168 +907,31 @@ function onRaceFullChange(){
   raceFullDownload = !!(cb && cb.checked);
   try{ localStorage.setItem('raceFull', raceFullDownload ? '1' : '0'); }catch(e){}
 }
-// Promise.any 兼容封装：返回最先成功的结果；全部失败时抛出含 errors 数组的对象
-function _promiseAny(ps){
-  if(typeof Promise.any === 'function') return Promise.any(ps);
-  return new Promise((resolve, reject) => {
-    let pending = ps.length; const errs = [];
-    if(!pending) return reject(new Error('无可用源'));
-    ps.forEach((p, i) => Promise.resolve(p).then(resolve, e => { errs[i] = e; if(--pending === 0) reject({ errors: errs }); }));
+// ===== 竞速引擎：全部委托给公共能力 shared/cdn-race.js =====
+// 保留这些内部函数名作为薄封装，页面其余代码无需改动。
+function _promiseAny(ps){ return CdnRace.promiseAny(ps); }
+async function _raceFetch(urls){ return CdnRace.raceFetch(urls); }
+async function _readBlobWithProgress(resp, onProgress){ return CdnRace.readBlobWithProgress(resp, onProgress); }
+async function _downloadBlobFrom(url, onProgress, signal){ return CdnRace.downloadBlob(url, onProgress, signal); }
+// 完整下载竞速：进行中 _raceLog 覆盖一行，完成后 _raceLogFinal 固化保留
+async function _raceDownloadFull(list, onProgress, label){
+  return CdnRace.raceDownload(list, {
+    label: label,
+    onProgress: onProgress,
+    onLive: _raceLog,
+    onFinal: _raceLogFinal,
   });
 }
-// 并发择优：同时请求所有候选源，最先成功返回响应的胜出，其余候选 abort（首字节竞速模式用）
-async function _raceFetch(urls){
-  const list = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
-  if(!list.length) throw new Error('无可用源');
-  const hasAbort = (typeof AbortController !== 'undefined');
-  const controllers = list.map(() => hasAbort ? new AbortController() : null);
-  const attempts = list.map((url, i) => (async () => {
-    const resp = await fetch(url, controllers[i] ? { signal: controllers[i].signal } : undefined);
-    if(!resp.ok) throw new Error('HTTP ' + resp.status);
-    return { resp, i, url };
-  })());
-  let winner;
-  try{
-    winner = await _promiseAny(attempts);
-  }catch(agg){
-    const errs = (agg && agg.errors) || [];
-    const first = errs.find(e => e);
-    throw (first instanceof Error) ? first : new Error('全部源下载失败');
-  }
-  controllers.forEach((c, i) => { if(c && i !== winner.i){ try{ c.abort(); }catch(e){} } });
-  return { resp: winner.resp, url: winner.url, index: winner.i, list };
-}
-// 流式读取响应为 Blob 并回报百分比（首字节竞速模式用）
-async function _readBlobWithProgress(resp, onProgress){
-  const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
-  if(!resp.body || !total || !resp.body.getReader){
-    const blob = new Blob([await resp.arrayBuffer()]);
-    if(onProgress) onProgress(100);
-    return blob;
-  }
-  const reader = resp.body.getReader();
-  const chunks = []; let received = 0;
-  while(true){
-    const {done, value} = await reader.read();
-    if(done) break;
-    chunks.push(value); received += value.length;
-    if(onProgress) onProgress(received / total * 100);
-  }
-  const blob = new Blob(chunks);
-  if(onProgress) onProgress(100);
-  return blob;
-}
-// 单源：完整下载为 Blob（流式回报 (received, total)；中止/失败时丢弃已收分片）
-async function _downloadBlobFrom(url, onProgress, signal){
-  const resp = await fetch(url, signal ? { signal } : undefined);
-  if(!resp.ok) throw new Error('HTTP ' + resp.status);
-  const total = (resp.headers && resp.headers.get) ? parseInt(resp.headers.get('content-length') || '0', 10) : 0;
-  if(!resp.body || !total || !resp.body.getReader){
-    const blob = new Blob([await resp.arrayBuffer()]);
-    if(onProgress) onProgress(blob.size, total > 0 ? total : blob.size);
-    return blob;
-  }
-  const reader = resp.body.getReader();
-  let chunks = []; let received = 0;
-  try{
-    while(true){
-      const {done, value} = await reader.read();
-      if(done) break;
-      chunks.push(value); received += value.length;
-      if(onProgress) onProgress(received, total);
-    }
-  }catch(e){
-    chunks = null; // 中止/失败：清理该镜像的不完整分片
-    throw e;
-  }
-  if(onProgress) onProgress(received, total > 0 ? total : received);
-  return new Blob(chunks);
-}
-// 完整下载竞速（公共能力）：所有镜像同时完整下载，最先完成者胜出；其余立即 abort 并丢弃不完整分片。
-// 进行中每 0.5s 覆盖一行进度；完成后由 _raceLogFinal 固化为最终性能行（保留，不被刷掉）。
-async function _raceDownloadFull(list, onProgress, label){
-  if(!list.length) throw new Error('无可用源');
-  const hasAbort = (typeof AbortController !== 'undefined');
-  const controllers = list.map(() => hasAbort ? new AbortController() : null);
-  const states = list.map(url => ({ src: _sourceLabel(url), received: 0, total: 0, failed: false }));
-  const tag = label || '文件';
-  const t0 = performance.now();
-  let lastLog = 0, bestPct = 0, done = false;
-  const report = () => {
-    if(done) return;
-    const now = performance.now();
-    if(now - lastLog < 500) return; // 每 0.5s 一次
-    lastLog = now;
-    let lead = null;
-    for(const s of states){ if(!s.failed && (!lead || s.received > lead.received)) lead = s; }
-    if(!lead || lead.received <= 0) return;
-    const elapsed = Math.max((now - t0) / 1000, 0.001);
-    const speed = lead.received / elapsed / 1024;
-    const pctTxt = lead.total > 0 ? (lead.received / lead.total * 100).toFixed(0) + '%' : '?';
-    _raceLog('竞速[' + tag + '] 领先: [' + lead.src + '] ' + _fmtSize(lead.received) + '/' +
-      (lead.total > 0 ? _fmtSize(lead.total) : '?') + ' ~ ' + pctTxt + ' 平均' + speed.toFixed(0) + 'KB/s');
-  };
-  const attempts = list.map((url, i) => _downloadBlobFrom(
-    url,
-    (received, total) => {
-      states[i].received = received; states[i].total = total;
-      if(total > 0){
-        const pct = received / total * 100;
-        if(pct > bestPct){ bestPct = pct; if(onProgress) onProgress(bestPct); }
-      }
-      report();
-    },
-    controllers[i] ? controllers[i].signal : null
-  ).then(blob => ({ blob, i, url }), err => { states[i].failed = true; throw err; }));
-  let winner;
-  try{
-    winner = await _promiseAny(attempts);
-  }catch(agg){
-    done = true;
-    _raceLogFinal('竞速[' + tag + '] 全部镜像失败');
-    const errs = (agg && agg.errors) || [];
-    const first = errs.find(e => e);
-    throw (first instanceof Error) ? first : new Error('全部源下载失败');
-  }
-  done = true;
-  controllers.forEach((c, i) => { if(c && i !== winner.i){ try{ c.abort(); }catch(e){} } });
-  if(onProgress) onProgress(100);
-  const secs = (performance.now() - t0) / 1000;
-  const avg = winner.blob.size / Math.max(secs, 0.001) / 1024;
-  _raceLogFinal('竞速[' + tag + '] 完成 <- [' + _sourceLabel(winner.url) + '] ' +
-    _fmtSize(winner.blob.size) + ' 用时' + secs.toFixed(2) + 's 平均' + avg.toFixed(0) + 'KB/s');
-  try{ winner.blob._netSize = states[winner.i].total || winner.blob.size; }catch(e){}
-  return { blob: winner.blob, url: winner.url, index: winner.i };
-}
-// 首字节竞速（开关关闭时）：胜出源流式读取，若读取中途失败则按顺序回退其余候选
+// 首字节竞速（开关关闭时）
 async function _fetchByFirstByte(list, onProgress, label, quiet){
-  const tag = label || '文件';
-  const winner = await _raceFetch(list);
-  const order = [winner.index, ...list.map((_, i) => i).filter(i => i !== winner.index)];
-  let lastErr;
-  const t0 = performance.now();
-  for(const idx of order){
-    try{
-      let resp;
-      if(idx === winner.index){ resp = winner.resp; }
-      else { resp = await fetch(list[idx]); if(!resp.ok) throw new Error('HTTP ' + resp.status); }
-      const blob = await _readBlobWithProgress(resp, onProgress);
-      try{
-        const net = parseInt((resp.headers && resp.headers.get) ? (resp.headers.get('content-length') || '0') : '0', 10);
-        blob._netSize = net > 0 ? net : blob.size;
-      }catch(e){ blob._netSize = blob.size; }
-      const secs = (performance.now() - t0) / 1000;
-      // 不再额外打「下载成功」蓝字：竞速最终行已含来源/体积/速度/文件名
-      _raceLogFinal('竞速[' + tag + '] 完成 <- [' + _sourceLabel(list[idx]) + '] ' +
-        _fmtSize(blob.size) + ' 用时' + secs.toFixed(2) + 's');
-      return blob;
-    }catch(e){
-      lastErr = e; if(onProgress) onProgress(0);
-      if(!quiet) console.log('[AudioDebug][INFO] ' + tag + '从' + _sourceLabel(list[idx]) + '下载失败');
-    }
-  }
-  _raceLogFinal('竞速[' + tag + '] 全部镜像失败');
-  throw lastErr || new Error('下载失败');
+  return CdnRace.fetchFirstByte(list, {
+    label: label,
+    onProgress: onProgress,
+    onLive: _raceLog,
+    onFinal: _raceLogFinal,
+    quiet: quiet,
+    onInfo: (msg) => console.log('[AudioDebug][INFO] ' + msg),
+  });
 }
 // 下载入口：默认「完整下载竞速」，可在设置面板关闭改用「首字节竞速」
 async function _fetchBlobWithProgress(urls, onProgress, label, quiet){
