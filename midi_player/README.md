@@ -308,7 +308,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **音频图**：`AudioContext → masterGain → outputAnalyser → destination`，`masterGain` 负责总音量，`outputAnalyser`（FFT 2048）用于静音探测。
 - **音色加载**：Soundfont 以 `*-ogg.js` 形式提供，内部是 base64 音频；`_doLoad` 下载/读缓存后用 `new Function` 求值取数据，再经 `atob → Uint8Array → decodeAudioData` 得到 `AudioBuffer`。
-- **媒体源（多镜像完整下载竞速 + 本站 Pages 兜底，公共能力）**：镜像列表与竞速引擎由 `shared/cdn-race.js` 统一提供（`CdnRace`，MIDI 播放器与音频可视化共用同一份，两边同时受益）。`CdnRace.buildUrls('midi_player', relPath)` 为每个资源生成候选源数组——**11 个镜像**：4 个 jsDelivr 边缘（`cdn` / `fastly` / `gcore` / `testingcf`）、5 个国内常用 GitHub 加速镜像（`ghproxy.net` / `gh-proxy.com` / `ghfast.top` / `gh.llkk.cc` / `gh.xxooo.cf`）、`statically` / `githack`，外加本站同源 Pages。`_raceDownloadFull()`（→ `CdnRace.raceDownload`）让所有镜像**同时完整下载**同一资源，`Promise.any` 取**最先完整完成**者，胜出后立即 `abort()` 其余并丢弃其不完整分片。开关 `raceFull`（默认开）关闭时改用 `_fetchByFirstByte()`（→ `CdnRace.fetchFirstByte`，只竞速首字节）。竞速日志由 `CdnRace.makeLiveLogger()` 实现：进行中每 0.5s 覆盖同一行，完成后固化最终结果行并保留。
+- **媒体源（多镜像完整下载竞速 + 本站 Pages 兜底，公共组件）**：镜像列表与竞速引擎由 `shared/cdn-race.js` 统一提供（`CdnRace`，MIDI 播放器与音频可视化共用同一份，两边同时受益）。`CdnRace.buildUrls('midi_player', relPath)` 为每个资源生成候选源数组——**11 个镜像**：4 个 jsDelivr 边缘（`cdn` / `fastly` / `gcore` / `testingcf`）、5 个国内常用 GitHub 加速镜像（`ghproxy.net` / `gh-proxy.com` / `ghfast.top` / `gh.llkk.cc` / `gh.xxooo.cf`）、`statically` / `githack`，外加本站同源 Pages。`_raceDownloadFull()`（→ `CdnRace.raceDownload`）让所有镜像**同时完整下载**同一资源，`Promise.any` 取**最先完整完成**者，胜出后立即 `abort()` 其余并丢弃其不完整分片。开关 `raceFull`（默认开）关闭时改用 `_fetchByFirstByte()`（→ `CdnRace.fetchFirstByte`，只竞速首字节）。竞速日志由 `CdnRace.makeLiveLogger()` 实现：进行中每 0.5s 覆盖同一行，完成后固化最终结果行并保留。
 - **启动优先级管线**（`COLD_START` + `coldStart()`）：启动时先判定**冷/热启动**——以**默认谱面是否已在本地缓存**为准（谱面是阻塞起播的主资源，刷新后必然命中）：已缓存则为**热启动**（刷新即属此类），日志打 `热启动(缓存)` 且显示「读取缓存」；否则为**冷启动**，日志打 `冷启动` 且显示「独占下载」。管线本身：**同一时刻只处理一个资源**，避免多资源互相抢带宽：**P0** 默认谱面（`Rush E 3.mid.br`）；**P0 完成立即用合成钢琴起播**，同时进入 **P1** 默认音色（`COLD_START.timbre`，默认 `__synth__`，即 Rush E3 默认合成钢琴、无需下载），此期间不下载其它任何资源；**P2** 默认音色就绪后，才下载 `mandatorySheets` / `mandatoryTimbres` 配置的预配置必下谱面与音色（默认 `The Sound of Silence` + 古钢琴 `clavinet`）。音色下载并预解码完成后只切 `current`，不打断正在发声的 voice。**冷启动且浏览器原生不支持 br 时，WASM 解码器与默认谱面并行下载**（否则解压要等谱面下完才开始）；热启动谱面已在缓存中（解压后写入），无需 WASM。
 - **谱面压缩传输（只传 brotli）**：仓库**只保留 `.mid.br`**，原始 `.mid` 与 `.gz` 已删除，传输一律使用 br 压缩后的文件。`_fetchMediaBlob()` 取 `.br` 后解压：原生 `DecompressionStream('brotli')` 优先；不支持时**惰性加载自定义 WASM 解码器**（`vendor/brotli_dec_wasm.js` + `vendor/brotli_dec_wasm_bg.wasm`，`brotli-dec-wasm@2.3.2`）。以 `_looksLikeMidi()` 校验 `MThd`，兼容服务端已按 `Content-Encoding` 自动解压的情况。解压后的谱面按原路径写入 Cache API，回访不再下载也不再解压。`Rush E 3.mid` 2.70 MB → br **95 KB**。
 - **依赖本地化**：`@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`，不再依赖 jsDelivr；入口 `app.js` 仍同源优先加载。
@@ -790,11 +790,14 @@ midi_player/
 | 帧率上限 | 设置面板新增帧率上限（30/60/90/120/不限，「不限」在最右）；渲染降级时临时压到 30fps，比仅抽帧 LOD 更平滑 | `_pending_` |
 | 冷/热启动区分 | 启动时按「默认谱面是否已缓存」判定冷/热启动，刷新不再误报「冷启动」；冷启动且原生不支持 br 时 WASM 解码器与默认谱面并行下载 | `_pending_` |
 | 合成路径指示 | 调试面板新增「合成钢琴：AudioWorklet / 预渲染缓冲区」实时指示 | `_pending_` |
-| 帧率显示 | 设置面板 CDN竞速右侧新增「帧率显示」开关；开启后在画布左上角显示最近 3 秒平均帧率（精确到 0.1） | `_pending_` |
+| 帧率显示 | 设置面板 CDN竞速右侧新增「帧率显示」开关（默认开，文字在开关左侧）；画布左上角显示实时帧率（精确到 0.1，无背景、小字号）；移除「帧率偏低/预期 xx」日志 | `_pending_` |
+| 合成高亮修复 | AudioWorklet 合成钢琴的 voice 在 worklet 内，主线程新增 `_synthWorkletActive` 登记按键，使合成音色与采样音色一样触发主题色遮罩 | `_pending_` |
+| 音色试听 | 切换音色不再收起下拉面板，便于在多个音色间反复试听；谱面管理点击未下载项 = 先下载（按钮显示进度）再切换并收起 | `_pending_` |
+| 公共组件用词 | 历史提交与代码注释中「抽为公共能力」等表述统一为「提取为公共组件」 | `_pending_` |
 | 降级自动弹出 | 自动降帧率同属渲染降级，进入降级时同样触发「渲染降级自动弹出」（需开启调试） | `_pending_` |
 | 未下载即下载+切换 | 谱面管理/音色选择点击未下载项 = 下载+切换：在下载按钮处显示百分比，完成后切换并收起面板（与先下载再切换一致） | `_pending_` |
 | Rush E3 默认音色 | Rush E3 默认改用合成钢琴（`songDefaultTimbre` + `COLD_START.timbre`）；古钢琴改到 P2 预配置必下音色 | `_pending_` |
-| 多CDN竞速公共能力 | 抽出 `shared/cdn-race.js`（`CdnRace`）：11 个镜像列表、`buildUrls`、完整/首字节竞速、`makeLiveLogger`（覆盖进行中行、固化最终行）；MIDI 播放器与音频可视化共用，两边同时受益、行为与日志一致 | `_pending_` |
+| 多CDN竞速公共组件 | 抽出 `shared/cdn-race.js`（`CdnRace`）：11 个镜像列表、`buildUrls`、完整/首字节竞速、`makeLiveLogger`（覆盖进行中行、固化最终行）；MIDI 播放器与音频可视化共用，两边同时受益、行为与日志一致 | `_pending_` |
 
 ## 2026-09 首版与性能攻坚
 

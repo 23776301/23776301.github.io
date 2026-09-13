@@ -612,15 +612,15 @@ select:focus{border-color:var(--accent)}
               <span class="val" id="fpsCapVal">不限</span>
             </div>
             <div class="row">
-              <label title="开：所有镜像同时完整下载，最快完成者胜出；关：仅竞速首字节响应">CDN竞速</label>
-              <label class="switch" style="margin-left:auto">
+              <label style="min-width:auto" title="开：所有镜像同时完整下载，最快完成者胜出；关：仅竞速首字节响应">CDN竞速</label>
+              <label class="switch">
                 <input id="raceFullSw" type="checkbox" checked onchange="onRaceFullChange()">
                 <span class="track"><span class="knob"></span></span>
               </label>
-              <label class="switch" title="在画布左上角显示最近 3 秒平均帧率（精确到 0.1）">
-                <input id="fpsDisplaySw" type="checkbox" onchange="onFpsDisplayChange()">
-                <span class="track"><span class="knob"></span></span>
+              <label class="switch" style="margin-left:auto" title="在画布左上角显示实时帧率（精确到 0.1）">
                 <span>帧率显示</span>
+                <input id="fpsDisplaySw" type="checkbox" checked onchange="onFpsDisplayChange()">
+                <span class="track"><span class="knob"></span></span>
               </label>
             </div>
             <div class="row">

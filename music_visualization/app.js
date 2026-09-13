@@ -55,7 +55,7 @@ function logDownload(){
 function logScrollTop(){ if(_logBar) _logBar.scrollTop=0; }
 function logScrollBottom(){ if(_logBar) _logBar.scrollTop=_logBar.scrollHeight; }
 
-// 媒体源：镜像列表与竞速引擎来自公共能力 shared/cdn-race.js
+// 媒体源：镜像列表与竞速引擎来自公共组件 shared/cdn-race.js
 // （与 midi_player 共用同一份：11 个镜像 + 本站同源兜底，同时受益）
 const REPO_GH = CdnRace.REPO_GH;
 const REPO_REF = CdnRace.REPO_REF;
@@ -138,7 +138,7 @@ const CFG = {
   elements: [], selectedId: null,
   audio: null, audioCtx: null, analyser: null, freq: null, wave: null,
   playing: false, loop: true, volume: 1, smoothing: 0.8,
-  fps: 60, showFps: true, showRes: true,
+  fps: 120, showFps: true, showRes: true,
 };
 window.__CFG = CFG;
 
@@ -192,7 +192,7 @@ function resetAllSettings(){
     gradAngle:360, gradRadius:640, bgImage:'', bgBlur:0, bgDarken:0 });
   canvas.width=1280; canvas.height=720;
   CFG.elements=[]; CFG.selectedId=null; _eid=0;
-  CFG.fps=60; CFG.showFps=true; CFG.showRes=true;
+  CFG.fps=120; CFG.showFps=true; CFG.showRes=true;
   CFG.loop=true; CFG.volume=1; CFG.smoothing=0.8;
   _panelW=280; document.documentElement.style.setProperty('--panel-w', '280px');
   if(CFG.audio){ CFG.audio.loop=true; CFG.audio.volume=1; }
