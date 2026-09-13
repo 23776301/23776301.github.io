@@ -1060,6 +1060,27 @@ async function _fetchMediaBlob(relPath, onProgress, quiet){
   return new Blob([out]);
 }
 
+// 合成钢琴：把「三角波基频 + 2/3 次正弦泛音」预先合成为单个 PeriodicWave，
+// 每个音符只需 1 个振荡器（原为 3 个），显著降低高密度谱面的音频线程负载。
+let _synthPeriodicWave = null;
+function _getSynthPeriodicWave(){
+  if(_synthPeriodicWave) return _synthPeriodicWave;
+  const H = 16;
+  const real = new Float32Array(H + 1);
+  const imag = new Float32Array(H + 1);
+  // 三角波奇次谐波（幅度 ∝ 1/n²，符号交替），基频归一为 0.9
+  for(let n = 1; n <= H; n += 2){
+    const sign = (n % 4 === 1) ? 1 : -1;
+    imag[n] += 0.9 * sign / (n * n);
+  }
+  // 叠加原实现的两个正弦泛音：2 次 0.35、3 次 0.18
+  imag[2] += 0.35;
+  imag[3] += 0.18;
+  // disableNormalization:true 保持与旧「三振荡器叠加」一致的谐波幅度
+  _synthPeriodicWave = audioCtx.createPeriodicWave(real, imag, {disableNormalization: true});
+  return _synthPeriodicWave;
+}
+
 const SoundfontLoader = {
   cacheName: 'midi-player-soundfont-cache-v1',
   cdnBase: './soundfonts/',
@@ -1496,7 +1517,7 @@ const SoundfontLoader = {
     // 只有current为__synth__时才走合成钢琴
     if(!this.debug.synthWarned){
       this.debug.synthWarned = true;
-      console.log('[AudioDebug][INFO] 当前使用合成钢琴音色（current=__synth__），时间=', t.toFixed(2));
+      console.log('[AudioDebug][INFO] 当前使用合成钢琴音色（current=__synth__，单振荡器 PeriodicWave），时间=', t.toFixed(2));
     }
     // 同音打断：与 sample 分支一致，避免同音叠加导致 voice 爆炸
     const prevS = this.activeSynth[midi];
@@ -1519,16 +1540,14 @@ const SoundfontLoader = {
     env.gain.linearRampToValueAtTime(0.4 * velocity, t0 + Math.min(0.008, synthDur * 0.5));
     env.gain.exponentialRampToValueAtTime(0.0008, t0 + synthDur);
     env.connect(masterGain);
-    const specs = [[1, 0.9, "triangle"], [2, 0.35, "sine"], [3, 0.18, "sine"]];
-    const oscs = [];
-    for(const [mult, amp, wf] of specs){
-      const o = audioCtx.createOscillator();
-      o.type = wf; o.frequency.value = f * mult;
-      const g = audioCtx.createGain(); g.gain.value = amp;
-      o.connect(g); g.connect(env);
-      o.start(t0); o.stop(t0 + synthDur + 0.2);
-      oscs.push(o);
-    }
+    // 单振荡器 + 预置 PeriodicWave（原为 3 个振荡器 + 3 个分音 Gain），
+    // 每音符节点数 7 -> 2，与采样分支持平，缓解高密度谱面的音频线程过载。
+    const o = audioCtx.createOscillator();
+    o.setPeriodicWave(_getSynthPeriodicWave());
+    o.frequency.value = f;
+    o.connect(env);
+    o.start(t0); o.stop(t0 + synthDur + 0.2);
+    const oscs = [o];
     // 登记 voice，并在结束时清理，避免振荡器累积
     const voice = { kind: 'synth', midi, oscs, env };
     this.synthVoices.push(voice);
