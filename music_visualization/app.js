@@ -153,7 +153,7 @@ function onRaceFullChange(){
   const el = document.getElementById('raceFullSw');
   raceFullDownload = el ? el.checked : true;
   try { localStorage.setItem('raceFull', raceFullDownload ? '1' : '0'); } catch(e){}
-  _log('完整下载竞速：' + (raceFullDownload ? '开' : '关（改用首字节竞速）'));
+  _log('CDN竞速：' + (raceFullDownload ? '开' : '关（改用首字节竞速）'));
 }
 // 首字节竞速：同时请求所有镜像，最先返回响应头者胜出，再读取其 Blob
 async function _raceFirstByteDemo(urls){

@@ -309,7 +309,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **音频图**：`AudioContext → masterGain → outputAnalyser → destination`，`masterGain` 负责总音量，`outputAnalyser`（FFT 2048）用于静音探测。
 - **音色加载**：Soundfont 以 `*-ogg.js` 形式提供，内部是 base64 音频；`_doLoad` 下载/读缓存后用 `new Function` 求值取数据，再经 `atob → Uint8Array → decodeAudioData` 得到 `AudioBuffer`。
 - **媒体源（多镜像完整下载竞速 + 本站 Pages 兜底）**：`_mediaUrls()` 为每个资源生成候选源数组——4 个 jsDelivr 边缘（`cdn` / `fastly` / `gcore` / `testingcf`）、5 个国内常用 GitHub 加速镜像（`ghproxy.net` / `gh-proxy.com` / `ghfast.top` / `gh.llkk.cc` / `gh.xxooo.cf`）、`statically` / `githack`，外加本站同源 Pages。`_raceDownloadFull()` 让所有镜像**同时完整下载**同一资源，`Promise.any` 取**最先完整完成**者，胜出后立即 `abort()` 其余并丢弃其不完整分片。开关 `raceFull`（默认开）关闭时改用 `_fetchByFirstByte()`（只竞速首字节）。
-- **启动优先级管线**（`COLD_START` + `coldStart()`）：启动时先判定**冷/热启动**——以**默认谱面是否已在本地缓存**为准（谱面是阻塞起播的主资源，刷新后必然命中）：已缓存则为**热启动**（刷新即属此类），日志打 `热启动(缓存)` 且显示「读取缓存」；否则为**冷启动**，日志打 `冷启动` 且显示「独占下载」。管线本身：**同一时刻只处理一个资源**，避免多资源互相抢带宽：**P0** 默认谱面（`Rush E 3.mid.br`）；**P0 完成立即用合成钢琴起播**，同时进入 **P1** 默认音色（古钢琴 `clavinet`），此期间不下载其它任何资源；**P2** 古钢琴就绪后，才下载 `mandatorySheets` / `mandatoryTimbres` 配置的预配置必下谱面与音色（默认 `The Sound of Silence`）。音色下载并预解码完成后只切 `current`，不打断正在发声的 voice。**冷启动且浏览器原生不支持 br 时，WASM 解码器与默认谱面并行下载**（否则解压要等谱面下完才开始）；热启动谱面已在缓存中（解压后写入），无需 WASM。
+- **启动优先级管线**（`COLD_START` + `coldStart()`）：启动时先判定**冷/热启动**——以**默认谱面是否已在本地缓存**为准（谱面是阻塞起播的主资源，刷新后必然命中）：已缓存则为**热启动**（刷新即属此类），日志打 `热启动(缓存)` 且显示「读取缓存」；否则为**冷启动**，日志打 `冷启动` 且显示「独占下载」。管线本身：**同一时刻只处理一个资源**，避免多资源互相抢带宽：**P0** 默认谱面（`Rush E 3.mid.br`）；**P0 完成立即用合成钢琴起播**，同时进入 **P1** 默认音色（`COLD_START.timbre`，默认 `__synth__`，即 Rush E3 默认合成钢琴、无需下载），此期间不下载其它任何资源；**P2** 默认音色就绪后，才下载 `mandatorySheets` / `mandatoryTimbres` 配置的预配置必下谱面与音色（默认 `The Sound of Silence` + 古钢琴 `clavinet`）。音色下载并预解码完成后只切 `current`，不打断正在发声的 voice。**冷启动且浏览器原生不支持 br 时，WASM 解码器与默认谱面并行下载**（否则解压要等谱面下完才开始）；热启动谱面已在缓存中（解压后写入），无需 WASM。
 - **谱面压缩传输（只传 brotli）**：仓库**只保留 `.mid.br`**，原始 `.mid` 与 `.gz` 已删除，传输一律使用 br 压缩后的文件。`_fetchMediaBlob()` 取 `.br` 后解压：原生 `DecompressionStream('brotli')` 优先；不支持时**惰性加载自定义 WASM 解码器**（`vendor/brotli_dec_wasm.js` + `vendor/brotli_dec_wasm_bg.wasm`，`brotli-dec-wasm@2.3.2`）。以 `_looksLikeMidi()` 校验 `MThd`，兼容服务端已按 `Content-Encoding` 自动解压的情况。解压后的谱面按原路径写入 Cache API，回访不再下载也不再解压。`Rush E 3.mid` 2.70 MB → br **95 KB**。
 - **依赖本地化**：`@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`，不再依赖 jsDelivr；入口 `app.js` 仍同源优先加载。
 - **竞速日志（固化最后一行，不重复打「下载成功」）**：进行中 `_raceLog()` 每 0.5s 覆盖同一行显示领先镜像与速度；完成后 `_raceLogFinal()` 把该行固化为 `竞速[文件名] 完成 <- [镜像] 大小 用时Xs 平均YKB/s` 并**保留不删**，用于指示本次性能。失败时同样保留 `全部镜像失败`。竞速行已含来源/体积/速度/文件名，故不再额外打印 `xx下载成功` 的蓝色日志（缓存命中仍打印）。
@@ -329,7 +329,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **时钟**：以 `audioCtx.currentTime` 为准推进 `currentTime`，避免 `performance.now` 与音频时钟漂移。
 - **控制**：播放/暂停/停止/重播、进度条拖拽 seek、0.2x–2x 变速、列表循环/单曲循环。
 - **定位**：seek 与开始播放都用二分 `lowerBound(allNotes, time)` 找起始音符，避免线性扫描。
-- **并行加载与自动播放**：进入页面即**并行**下载默认谱面与默认音色（早期版本为串行）。谱面解析完成即可起播：若音色尚未就绪，先用**合成钢琴**抢跑，待音色下载并**预解码完成后无缝切回**——只切换 `current`，不打断正在发声的 voice，避免解码期间丢音；音色加载失败则保持合成钢琴。若 AudioContext 处于 suspended，则挂到首次点击/触摸后恢复。
+- **顺序优先加载与自动播放**：由 `COLD_START` 驱动三段式管线（P0 谱面 → P1 默认音色 → P2 预配置，见「冷启动」章节），**同一时刻只处理一个资源**。谱面解析完成即可起播：Rush E3 默认用**合成钢琴**起播；若配置了采样音色且尚未就绪，也先用合成钢琴抢跑，待其下载并**预解码完成后无缝切回**——只切换 `current`，不打断正在发声的 voice，避免解码期间丢音；音色加载失败则保持合成钢琴。若 AudioContext 处于 suspended，则挂到首次点击/触摸后恢复。
 - **回到前台自动续播**：不因失焦暂停。`visibilitychange` 回到前台时，若仍在播放且音频上下文被浏览器挂起，则自动 `resume()` 并确保渲染循环运行。注：后台期间 rAF 被浏览器挂起，音频不会持续输出，此机制保证切回后接上。
 - **列表循环 / 单曲循环**：循环按钮为两态。**列表循环**（默认）一首播完自动切下一首，播到列表末尾回到第一首继续；**单曲循环**重复当前一首。切歌时 `await` 音色加载后再开始，避免开头丢音。
 - **进度节流**：进度条与统计文本合并为 100ms 更新一次，避免每帧写 DOM。
@@ -338,7 +338,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **解析**：使用 `@tonejs/midi` 解析，汇总所有轨道的音符为 `{midi, time, duration, velocity}` 并按时间排序，计算总时长与密度。
 - **内置谱**：`midi/list.json` 描述 `name`/`file`，通过 `fetchFresh` 获取最新列表。
-- **默认音色映射**：`songDefaultTimbre` 将谱面文件名映射到默认音色（如 `Rush E 3.mid → clavinet`，`The Sound of Silence.mid → __synth__`）。
+- **默认音色映射**：`songDefaultTimbre` 将谱面文件名映射到默认音色（如 `Rush E 3.mid → __synth__`、`The Sound of Silence.mid → __synth__`，两首内置谱默认均使用合成钢琴）。
 - **默认音色应用与自动切换**（`_applySongDefaultTimbre`）：切到内置谱时按配置处理——① 配置为合成钢琴（如 The Sound of Silence）即正常使用合成钢琴，**不当作「加载失败回退」**；② 默认音色已缓存则直接切换；③ 默认音色本地不存在时提示 `谱面[X]默认使用音色[T]。音色[T]本地不存在，回滚到合成钢琴`，先回滚合成钢琴并**后台下载**（`switchCurrent:false`，不阻塞播放），把「切到 T」作为待办（`_timbreAutoSwitch` + `_timbreGen`）。下载成功后仅当**用户未主动切其他音色**（手动切换会 `_invalidateTimbreAutoSwitch()`）且**当前谱面未播完**（`_songEnded` / `currentSongKey`）时，才记录 `音色[T]下载成功，谱面[X]音色自动切换到[T]` 并自动切换；否则作废待办。
 - **用户上传**：文件读取后立即解析播放，同时写入 IndexedDB `user-songs`，支持在「谱面管理」弹窗中删除；全部本地，不涉及服务器。**非 `.mid/.midi` 文件直接拒绝并 `console.warn`；是 MIDI 但解析失败/无音符也打 warn**（`[AudioDebug][WARN] ...`）。
 - **偏好持久化**：配色（`paletteV2`/`paletteCustom`）、面板位置（`menuBtnPos`）、降级弹窗（`dbgAutoOpen`）。
@@ -461,8 +461,8 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **删除即真正清理空间**（Rush E3 除外）：`deleteBuiltinSong` 会遍历 Cache API 删除该谱面所有缓存键（按文件名匹配，兼容 CDN/Pages 键名），并释放其配置的默认音色缓存（若不再被其它未删除的内置谱使用且非当前音色），日志输出释放的 MB 数。删除状态存于 `deletedBuiltin`。**Rush E3 为演示谱面**：删除仅标记（`_SOFT_DELETE`），不删缓存，重置后自动恢复；其余谱面删除后不随重置恢复。
 - **内置谱列表刷新**：`_getBuiltinList()` 每次会话先读旧缓存列表，再用 `AssetCache.fetchFresh('midi/list.json')`（`cache:'no-store'`）联网刷新，失败回退旧缓存；内存缓存避免同一次会话重复拉取。这样老用户也能拿到更新后的内置谱表。
 - **废弃内置谱转入「我的上传」**：对比新旧列表，若某内置谱「之前存在、后来废弃」且用户本地缓存过（且未主动删除），`_migrateDeprecatedBuiltins()` 会把缓存中的字节复制为 IndexedDB 用户谱，归入「我的上传」分类；**绝不主动删除用户缓存中的任何谱面**（原资产缓存保留）。若用户没缓存过该废弃谱，则不主动下载、也不新增记录。
-- **默认冷启动（顺序独占 + 实时更新状态）**：由 `COLD_START` 配置驱动三段式管线——P0 独占下载 `Rush E 3`（brotli 变体）并立即用合成钢琴起播；P1 起播同时独占下载古钢琴 `clavinet`；P2 古钢琴就绪后下载 `mandatorySheets`（默认 `The Sound of Silence`）与 `mandatoryTimbres`。**默认下载的音色只保留古钢琴**；三角钢琴、电钢琴2 等其余音色不再默认下载，仅在用户主动下载或切到配置了该音色的谱面时才下载。每项完成后调用 `refreshManageRowState` / `_onTimbreCached` 刷新对应面板状态。
-- **音色列表按需下载**：音色下拉每一项右侧有垃圾桶 / 下载按钮（复用 `.icon-btn`，与谱面管理一致）。已缓存显示垃圾桶（正在使用的音色不可删），未缓存显示下载按钮、点击后就地显示百分比；**未完成下载的音色不允许切换**（`canChoose` 拦截并提示）。`SoundfontLoader.cachedNames` 由 `refreshCachedNames()` 扫描缓存重建，删除用 `deleteCached()`。已删除「当前音色：xx 已就绪」文字提示。下载/删除完成后**只重绘该行按钮**（`render()`），不再重建整个列表，避免列表滚动位置乱跳；`buildList()` 也会保存/恢复 `scrollTop`。后台自动下载的音色（如谱面默认音色）完成时，`SoundfontLoader._doLoad` 调用 `_onTimbreCached()` → `_timbreSelect.refresh()`，**下完哪个就更新哪个的状态**。
+- **默认冷启动（顺序独占 + 实时更新状态）**：由 `COLD_START` 配置驱动三段式管线——P0 独占下载 `Rush E 3`（brotli 变体）并立即用合成钢琴起播；P1 默认音色（默认 `__synth__`，Rush E3 默认合成钢琴、无需下载）；P2 默认音色就绪后下载 `mandatorySheets`（默认 `The Sound of Silence`）与 `mandatoryTimbres`（默认古钢琴 `clavinet`）。**默认下载的音色只保留古钢琴**；三角钢琴、电钢琴2 等其余音色不再默认下载，仅在用户主动下载或切到配置了该音色的谱面时才下载。每项完成后调用 `refreshManageRowState` / `_onTimbreCached` 刷新对应面板状态。
+- **音色列表按需下载**：音色下拉每一项右侧有垃圾桶 / 下载按钮（复用 `.icon-btn`，与谱面管理一致）。已缓存显示垃圾桶（正在使用的音色不可删），未缓存显示下载按钮、点击后就地显示百分比。**直接点击未下载的音色选项 = 下载 + 切换**（`deferChoose`）：在下载按钮处显示百分比，下载完成后才切换并收起下拉，与「先点下载再选」一致；已缓存的音色直接切换。`SoundfontLoader.cachedNames` 由 `refreshCachedNames()` 扫描缓存重建，删除用 `deleteCached()`。已删除「当前音色：xx 已就绪」文字提示。下载/删除完成后**只重绘该行按钮**（`render()`），不再重建整个列表，避免列表滚动位置乱跳；`buildList()` 也会保存/恢复 `scrollTop`。后台自动下载的音色（如谱面默认音色）完成时，`SoundfontLoader._doLoad` 调用 `_onTimbreCached()` → `_timbreSelect.refresh()`，**下完哪个就更新哪个的状态**。
 
 ## 9.11 全屏悬浮控件
 
@@ -514,7 +514,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 | `midi_player/vendor/` | `Midi.js` + `brotli_dec_wasm.js` + `brotli_dec_wasm_bg.wasm` | ≈ 250 KB |
 
 - 单个音色文件约 2–4.5 MB（如 `lead_7_fifths-ogg.js` 4.5 MB、`violin-ogg.js` 3.6 MB）。
-- 默认加载：`Rush E 3.mid.br`（95 KB）+ 默认音色 `clavinet`（2.6 MB）≈ **2.7 MB**；其余音色仅在按需/配置时下载。
+- 默认加载：`Rush E 3.mid.br`（95 KB）+ 合成钢琴（0 字节，起播即用）；P2 预配置再下载 `The Sound of Silence.mid.br` 与古钢琴 `clavinet`（2.6 MB）。其余音色仅在按需/配置时下载。
 
 **传输压缩实测**
 
@@ -555,7 +555,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 
 - **重复访问零流量**：音色与谱面命中 Cache API，回访用户不再下载（列表除外）。
 - **列表极小**：`list.json` 仅约 1 KB，且是唯一每次走网络的资源。
-- **按需加载音色**：默认只下载 **古钢琴**（默认曲目 `Rush E 3` 使用）；其余音色仅在用户主动点下拉里的下载按钮、或切到 `songDefaultTimbre` 配置了该音色的谱面时（`onTimbreChange({auto:true})`）才下载，绝不拉取全部 56 个。
+- **按需加载音色**：默认只预下载 **古钢琴**（作为默认采样音色，Rush E3 本身用合成钢琴）；其余音色仅在用户主动点下拉里的下载按钮、或切到 `songDefaultTimbre` 配置了该音色的谱面时（`onTimbreChange({auto:true})`）才下载，绝不拉取全部 56 个。
 - **用户上传不上云**：上传的 MIDI 存本地 IndexedDB，服务端零带宽。
 - **诊断不上网**：所有性能指标在本地采集，不发送遥测。
 
@@ -779,7 +779,7 @@ midi_player/
 | 主题 | 摘要 | 代表 commit |
 | --- | --- | --- |
 | 镜像扩容 | 竞速镜像从 4 个 jsDelivr 扩到 4 jsDelivr + 5 个国内常用 GitHub 加速（ghproxy.net / gh-proxy.com / ghfast.top / gh.llkk.cc / gh.xxoo.cf）+ statically / githack + 本站 Pages；`CDN_BASES` 改为 `prefix` 统一拼接与来源识别 | `_pending_` |
-| 冷启动管线 | `COLD_START` 三段式，**同一时刻只竞速一个资源**：P0 竞速下载 Rush E3 br 谱 → 完成即用合成钢琴起播 + P1 竞速下载古钢琴 → P2 下载预配置必下音色与谱 | `_pending_` |
+| 冷启动管线 | `COLD_START` 三段式，**同一时刻只处理一个资源**：P0 下载 Rush E3 br 谱 → 完成即用合成钢琴起播 + P1 默认音色（Rush E3 默认合成钢琴，无需下载）→ P2 下载预配置必下资源（含古钢琴） | `_pending_` |
 | br 单格式 | 删除原始 `.mid` 与 `.gz`，只保留 `.mid.br`；解压原生优先，否则惰性加载自定义 WASM 解码器 `vendor/brotli_dec_wasm.js`（brotli-dec-wasm@2.3.2） | `_pending_` |
 | 可观测性 | 调试面板显示浏览器 br 支持；启动打印 br 支持与 WASM 解码器加载过程；竞速日志完成后**固化为性能行**不再刷掉；日志含每个文件名 | `_pending_` |
 | 依赖本地化 | `@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`；CSS 全内联（`ui-kit` 页面已内联，无外部样式请求） | `_pending_` |
@@ -787,9 +787,13 @@ midi_player/
 | 合成钢琴预渲染 | 解析式预渲染每音高的无缝循环 `AudioBuffer`（单声道 ~130KB、与 ctx 同采样率），改用 `BufferSource(loop) + Gain` 播放，每音符 2 节点，播放开销与采样音色相当 | `390b66c` |
 | 合成钢琴 AudioWorklet | 单节点合成器（Blob URL 内联、无额外请求），每音符 0 节点、零 churn；每八度限谐波波表防混叠，128 voice 池，就绪前/失败回退预渲染缓冲区方案 | `_pending_` |
 | 交互优化 | 设置开关只显示「音游模式」且默认关（=欣赏模式）；测试谱未下载不出现在选谱列表；管理/音色列表在按钮旁标注 br 传输体积；点击未下载的谱面/音色直接下载并切换（去掉二次确认）；`内置 WASM` 改称 `自定义 WASM`；密度日志改 2 位小数并解释算法；切歌日志合并为「切换: xxx.mid - xxx 音色」 | `_pending_` |
-| 帧率上限 | 设置面板新增帧率上限（不限/30/60/90/120）；渲染降级时临时压到 30fps，比仅抽帧 LOD 更平滑 | `_pending_` |
-| 冷/热启动区分 | 启动时按「默认谱面+默认音色是否已缓存」判定冷/热启动，刷新不再误报「冷启动」；冷启动且原生不支持 br 时 WASM 解码器与默认谱面并行下载 | `_pending_` |
+| 帧率上限 | 设置面板新增帧率上限（30/60/90/120/不限，「不限」在最右）；渲染降级时临时压到 30fps，比仅抽帧 LOD 更平滑 | `_pending_` |
+| 冷/热启动区分 | 启动时按「默认谱面是否已缓存」判定冷/热启动，刷新不再误报「冷启动」；冷启动且原生不支持 br 时 WASM 解码器与默认谱面并行下载 | `_pending_` |
 | 合成路径指示 | 调试面板新增「合成钢琴：AudioWorklet / 预渲染缓冲区」实时指示 | `_pending_` |
+| 帧率显示 | 设置面板 CDN竞速右侧新增「帧率显示」开关；开启后在画布左上角显示最近 3 秒平均帧率（精确到 0.1） | `_pending_` |
+| 降级自动弹出 | 自动降帧率同属渲染降级，进入降级时同样触发「渲染降级自动弹出」（需开启调试） | `_pending_` |
+| 未下载即下载+切换 | 谱面管理/音色选择点击未下载项 = 下载+切换：在下载按钮处显示百分比，完成后切换并收起面板（与先下载再切换一致） | `_pending_` |
+| Rush E3 默认音色 | Rush E3 默认改用合成钢琴（`songDefaultTimbre` + `COLD_START.timbre`）；古钢琴改到 P2 预配置必下音色 | `_pending_` |
 
 ## 2026-09 首版与性能攻坚
 

@@ -608,20 +608,25 @@ select:focus{border-color:var(--accent)}
             </div>
             <div class="row">
               <label title="可视化渲染帧率上限；不限=跟随显示器刷新率。降低上限可减轻主线程/GPU 负载；渲染降级时会临时降到 30fps">帧率上限</label>
-              <input type="range" id="fpsCapSlider" min="0" max="4" step="1" value="0" oninput="onFpsCapChange()">
+              <input type="range" id="fpsCapSlider" min="0" max="4" step="1" value="4" oninput="onFpsCapChange()">
               <span class="val" id="fpsCapVal">不限</span>
             </div>
             <div class="row">
-              <label title="开：所有镜像同时完整下载，最快完成者胜出；关：仅竞速首字节响应">完整下载竞速</label>
+              <label title="开：所有镜像同时完整下载，最快完成者胜出；关：仅竞速首字节响应">CDN竞速</label>
               <label class="switch" style="margin-left:auto">
                 <input id="raceFullSw" type="checkbox" checked onchange="onRaceFullChange()">
                 <span class="track"><span class="knob"></span></span>
+              </label>
+              <label class="switch" title="在画布左上角显示最近 3 秒平均帧率（精确到 0.1）">
+                <input id="fpsDisplaySw" type="checkbox" onchange="onFpsDisplayChange()">
+                <span class="track"><span class="knob"></span></span>
+                <span>帧率显示</span>
               </label>
             </div>
             <div class="row">
               <label>音色选择</label>
               <select id="timbreSel" onchange="onTimbreChange()">
-                <option value="__synth__">合成钢琴</option>
+                <option value="__synth__" selected>合成钢琴</option>
                 <optgroup label="键盘">
                   <option value="acoustic_grand_piano">三角钢琴</option>
                   <option value="bright_acoustic_piano">亮音钢琴</option>
@@ -630,7 +635,7 @@ select:focus{border-color:var(--accent)}
                   <option value="electric_piano_2">电钢琴2</option>
                   <option value="honkytonk_piano">酒吧钢琴</option>
                   <option value="harpsichord">大键琴</option>
-                  <option value="clavinet" selected>古钢琴</option>
+                  <option value="clavinet">古钢琴</option>
                 </optgroup>
                 <optgroup label="风琴/打击">
                   <option value="drawbar_organ">拉杆风琴</option>

@@ -326,7 +326,7 @@ body{background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft Ya
       <button class="log-btn" onclick="logClear()" title="清空日志"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"/></svg></button>
       <button class="log-btn" onclick="logDownload()" title="下载日志"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m4-5 5 5 5-5m-5 5V3"/></svg></button>
       <span class="log-spacer"></span>
-      <label class="log-switch" title="开：所有镜像同时完整下载，最快完成者胜出；关：仅竞速首字节响应"><input id="raceFullSw" type="checkbox" checked onchange="onRaceFullChange()"><span class="track"><span class="knob"></span></span><span class="log-switch-label">完整竞速</span></label>
+      <label class="log-switch" title="开：所有镜像同时完整下载，最快完成者胜出；关：仅竞速首字节响应"><span class="log-switch-label">CDN竞速</span><input id="raceFullSw" type="checkbox" checked onchange="onRaceFullChange()"><span class="track"><span class="knob"></span></span></label>
       <button class="log-btn" onclick="logScrollTop()" title="滚到顶部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg></button>
       <button class="log-btn" onclick="logScrollBottom()" title="滚到底部"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
     </div>
