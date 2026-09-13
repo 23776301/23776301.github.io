@@ -1085,7 +1085,8 @@ async function _fetchMediaBlob(relPath, onProgress, quiet){
 // 交给 BufferSource 播放，与采样音色同构（每音符 1 Source + 1 Gain）。
 // 相比旧的「每音符 1 振荡器 + PeriodicWave」：
 //   ① 缓冲区采样率 = AudioContext.sampleRate，播放时零重采样
-//      （采样音色若为 44.1kHz 而 ctx 为 48kHz，则每个 voice 都要在音频线程重采样）；
+//      （采样音色由 decodeAudioData 一次性重采样到 ctx 采样率，播放时同样零重采样，
+//        故二者播放开销相当）；
 //   ② 单声道、全部 88 音仅约 130KB，无需 decodeAudioData、无需 OfflineAudioContext；
 //   ③ 每音高按 Nyquist 限制谐波数，天然无混叠；
 //   ④ 循环体内各谐波均为整数周期，循环点无缝，无爆音。
@@ -1619,7 +1620,7 @@ const SoundfontLoader = {
     env.gain.exponentialRampToValueAtTime(0.0008, t0 + synthDur);
     env.connect(masterGain);
     // 每音符节点数 7 -> 2：预渲染循环波形经 BufferSource 播放（与采样分支同构）。
-    // 播放时零重采样，音频线程开销低于采样音色，高密度谱面更不易卡顿。
+    // 缓冲区与 ctx 同采样率，音频线程开销与采样音色相当，高密度谱面更不易卡顿。
     let oscs;
     const loopBuf = _getSynthLoopBuffers()[midi] || null;
     if(loopBuf){

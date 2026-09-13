@@ -317,7 +317,8 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **WASM 二进制同样竞速**：WASM brotli 解码器（`vendor/brotli_dec_wasm_bg.wasm`）通过 `_fetchBlobWithProgress` 走多镜像完整下载竞速，其来源/体积/速度/文件名由竞速最终行打印。
 - **br 支持可观测**：启动时打印 `br 解压支持：原生 DecompressionStream(brotli)=true/false`，并在**调试面板**显示 `br 解压：原生支持 / 需 WASM 解码器`；WASM 解码器的加载过程（JS 模块加载 → WASM 竞速下载 → 初始化 → 就绪）逐条打印。
 - **预解码**：`predecodeAll` 按每批 8 个解码 88 个音，避免一次性解码阻塞主线程与音频时间线。
-- **合成回退（预渲染循环波形，零重采样）**：`__synth__` 分支先用 `_getSynthLoopBuffers()` **解析式预渲染**每个音高的无缝循环 `AudioBuffer`（三角波奇次谐波 + 2/3 次正弦泛音；按 Nyquist 限制谐波数防混叠；循环体内谐波均为整数周期，循环点无缝），再由 **`BufferSource(loop=true)` + 动态包络 Gain** 播放，与采样分支同构（每音符 2 节点）。相比旧的「单振荡器 + `PeriodicWave`」：① 缓冲区采样率 = `AudioContext.sampleRate`，播放时**零重采样**（采样音色若为 44.1kHz 而 ctx 为 48kHz，每个 voice 都要在音频线程重采样）；② 单声道、全部 88 音仅约 130KB；③ 无需 `decodeAudioData`/`OfflineAudioContext`。因此**合成钢琴的音频线程开销低于古钢琴等采样音色**，高密度谱面更不易卡顿。`initAudio()` 时用 `setTimeout(...,0)` 预热（约 8ms），首个合成音符不再触发一次性构建。仅在音色加载失败或 buffer 缺失时使用；极端场景无法创建 `AudioBuffer` 时退回单振荡器 `PeriodicWave`。合成钢琴本身**无任何音频文件**（0 字节），因此不需要下载。
+- **合成回退（预渲染循环波形，零重采样）**：`__synth__` 分支先用 `_getSynthLoopBuffers()` **解析式预渲染**每个音高的无缝循环 `AudioBuffer`（三角波奇次谐波 + 2/3 次正弦泛音；按 Nyquist 限制谐波数防混叠；循环体内谐波均为整数周期，循环点无缝），再由 **`BufferSource(loop=true)` + 动态包络 Gain** 播放，与采样分支同构（每音符 2 节点）。相比旧的「单振荡器 + `PeriodicWave`」：① 缓冲区采样率 = `AudioContext.sampleRate`，播放时**零重采样**；② 单声道、全部 88 音仅约 130KB；③ 无需 `decodeAudioData`/`OfflineAudioContext`。**注意**：`decodeAudioData` 会把采样音色一次性重采样到 ctx 采样率，所以古钢琴等**播放时同样零重采样**——预渲染让合成钢琴的播放开销**与采样音色相当**（每音符 2 节点），而非更低；要严格更低需改用 AudioWorklet（见下）。`initAudio()` 时用 `setTimeout(...,0)` 预热（约 8ms），首个合成音符不再触发一次性构建。仅在音色加载失败或 buffer 缺失时使用；极端场景无法创建 `AudioBuffer` 时退回单振荡器 `PeriodicWave`。合成钢琴本身**无任何音频文件**（0 字节），因此不需要下载。
+- **进一步降低合成开销（AudioWorklet，未实现）**：当前每音符仍需 `createBufferSource` + `createGain` 两个节点（与采样音色相同）。若把整个合成器放进一个 `AudioWorkletProcessor`（用 Blob URL 内联，**不增加网络请求**），所有 voice 在一个节点内以纯数值合成，可实现**每音符 0 节点、零节点 churn、零 GC**，这是让合成钢琴**严格比采样音色更不易卡顿**的唯一途径；代价是需 `audioWorklet.addModule` 异步就绪、且无法复用 `activeVoices` 抢占逻辑，复杂度与兼容性风险较高。
 - **增益**：`timbreGain` 对个别音色（三角钢琴、古钢琴）单独设增益，其余默认 3.0。
 - **包络**：短音符按比例缩短 attack/release，避免事件时间倒挂。
 - **采样缓存**：每个音色按 midi 缓存已解码 `AudioBuffer`（`entry.buffers[midi]`），超出 88 键范围的音会映射到最近有效键。
@@ -780,7 +781,7 @@ midi_player/
 | 可观测性 | 调试面板显示浏览器 br 支持；启动打印 br 支持与 WASM 解码器加载过程；竞速日志完成后**固化为性能行**不再刷掉；日志含每个文件名 | `_pending_` |
 | 依赖本地化 | `@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`；CSS 全内联（`ui-kit` 页面已内联，无外部样式请求） | `_pending_` |
 | 日志精简 | 竞速最终行已含来源/体积/速度/文件名，删除重复的「下载成功」蓝字；`.mid.br` 与音色打印压缩比；WASM 二进制也参与多镜像竞速；移除「默认谱面已加载」，不支持 `renderCapacity` 时静默 | `01334f5` |
-| 合成钢琴预渲染 | 解析式预渲染每音高的无缝循环 `AudioBuffer`（单声道 ~130KB、与 ctx 同采样率），改用 `BufferSource(loop) + Gain` 播放，**零重采样**，音频线程开销低于采样音色 | `_pending_` |
+| 合成钢琴预渲染 | 解析式预渲染每音高的无缝循环 `AudioBuffer`（单声道 ~130KB、与 ctx 同采样率），改用 `BufferSource(loop) + Gain` 播放，每音符 2 节点，播放开销与采样音色相当 | `390b66c` |
 
 ## 2026-09 首版与性能攻坚
 
