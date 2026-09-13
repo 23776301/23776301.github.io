@@ -9,26 +9,32 @@
   },
   {
     "name": "44并发500ms测试.mid",
-    "file": "midi/concurrent_44_500ms.mid"
+    "file": "midi/concurrent_44_500ms.mid",
+    "test": true
   },
   {
     "name": "88并发500ms测试.mid",
-    "file": "midi/concurrent_88_500ms.mid"
+    "file": "midi/concurrent_88_500ms.mid",
+    "test": true
   },
   {
     "name": "88并发250ms测试.mid",
-    "file": "midi/concurrent_88_250ms.mid"
+    "file": "midi/concurrent_88_250ms.mid",
+    "test": true
   },
   {
     "name": "88并发100ms测试.mid",
-    "file": "midi/concurrent_88_100ms.mid"
+    "file": "midi/concurrent_88_100ms.mid",
+    "test": true
   },
   {
     "name": "88并发50ms测试.mid",
-    "file": "midi/concurrent_88_50ms.mid"
+    "file": "midi/concurrent_88_50ms.mid",
+    "test": true
   },
   {
     "name": "88并发10ms测试.mid",
-    "file": "midi/concurrent_88_10ms.mid"
+    "file": "midi/concurrent_88_10ms.mid",
+    "test": true
   }
 ]

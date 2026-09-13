@@ -134,6 +134,126 @@ function _fmtSize(n){
   return n + 'B';
 }
 
+// 静态媒体「需传输体积」表（字节）：由脚本探测生成，避免运行时逐个 HEAD 探测。
+// - 谱面：仓库内 midi/*.mid.br 的实际文件大小（精确）
+// - 音色：jsDelivr 对 soundfonts/*-ogg.js 返回的 br Content-Length（浏览器实际传输量）
+// 注意：文件更新后需重新生成（见 README）。
+const MEDIA_BR_SIZES = {
+  "midi/Rush E 3.mid": 97614,
+  "midi/The Sound of Silence.mid": 3601,
+  "midi/concurrent_44_500ms.mid": 246,
+  "midi/concurrent_88_100ms.mid": 301,
+  "midi/concurrent_88_10ms.mid": 302,
+  "midi/concurrent_88_250ms.mid": 304,
+  "midi/concurrent_88_500ms.mid": 305,
+  "midi/concurrent_88_50ms.mid": 302,
+  "soundfonts/acoustic_bass": 1312318,
+  "soundfonts/acoustic_grand_piano": 1594679,
+  "soundfonts/acoustic_guitar_nylon": 1232847,
+  "soundfonts/acoustic_guitar_steel": 1337754,
+  "soundfonts/alto_sax": 1358889,
+  "soundfonts/baritone_sax": 1090241,
+  "soundfonts/bassoon": 1853279,
+  "soundfonts/brass_ensemble": 1683696,
+  "soundfonts/brass_section": 1683696,
+  "soundfonts/bright_acoustic_piano": 1655436,
+  "soundfonts/celesta": 1011245,
+  "soundfonts/cello": 2576777,
+  "soundfonts/church_organ": 1614583,
+  "soundfonts/clarinet": 1363706,
+  "soundfonts/clavinet": 1618536,
+  "soundfonts/contrabass": 1092325,
+  "soundfonts/distortion_guitar": 1814863,
+  "soundfonts/drawbar_organ": 1416455,
+  "soundfonts/electric_bass_finger": 1031639,
+  "soundfonts/electric_bass_pick": 1105987,
+  "soundfonts/electric_grand_piano": 1277773,
+  "soundfonts/electric_guitar_clean": 1290951,
+  "soundfonts/electric_guitar_jazz": 1220594,
+  "soundfonts/electric_piano_1": 1193793,
+  "soundfonts/electric_piano_2": 1370200,
+  "soundfonts/flute": 2005155,
+  "soundfonts/french_horn": 1639372,
+  "soundfonts/fretless_bass": 1279207,
+  "soundfonts/harpsichord": 1468820,
+  "soundfonts/honkytonk_piano": 1606478,
+  "soundfonts/lead_1_square": 2591163,
+  "soundfonts/lead_2_sawtooth": 2409417,
+  "soundfonts/lead_7_fifths": 3052410,
+  "soundfonts/marimba": 535879,
+  "soundfonts/oboe": 1634473,
+  "soundfonts/orchestral_harp": 1289153,
+  "soundfonts/overdriven_guitar": 1867723,
+  "soundfonts/pad_4_choir": 2140300,
+  "soundfonts/pan_flute": 1513250,
+  "soundfonts/percussive_organ": 1542136,
+  "soundfonts/piccolo": 1900589,
+  "soundfonts/pizzicato_strings": 898691,
+  "soundfonts/recorder": 1175271,
+  "soundfonts/rock_organ": 1765436,
+  "soundfonts/soprano_sax": 1494042,
+  "soundfonts/string_ensemble_1": 2138236,
+  "soundfonts/string_ensemble_2": 2143193,
+  "soundfonts/tenor_sax": 1859968,
+  "soundfonts/trombone": 1313395,
+  "soundfonts/trumpet": 1705998,
+  "soundfonts/tuba": 832051,
+  "soundfonts/tubular_bells": 1377313,
+  "soundfonts/vibraphone": 1184997,
+  "soundfonts/viola": 2165049,
+  "soundfonts/violin": 2300194,
+  "soundfonts/xylophone": 471137,
+};
+function _mediaBrSize(relPath){
+  const v = MEDIA_BR_SIZES[relPath];
+  return (typeof v === 'number' && v > 0) ? v : 0;
+}
+// 生成「需下载体积」标签（br 压缩后的传输体积）；无数据返回 null
+function _makeSizeSpan(bytes){
+  if(!bytes) return null;
+  const s = document.createElement('span');
+  s.className = 'size';
+  s.textContent = _fmtSize(bytes);
+  s.title = '需下载体积（br 压缩后，实际传输量）约 ' + bytes + ' 字节';
+  return s;
+}
+
+// ===== 可视化帧率上限 =====
+// 0 = 不限（跟随显示器刷新率，如 60/120/144Hz）；>0 时每帧不足 1000/cap 毫秒则跳过绘制。
+// 渲染降级时临时压到 DEGRADE_FPS_CAP，减轻主线程与 GPU 负载。
+const FPS_CAP_OPTIONS = [0, 30, 60, 90, 120];
+const DEGRADE_FPS_CAP = 30;
+let renderFpsCap = 0;
+let _lastLoopTs = 0;
+function _effectiveFpsCap(){
+  if(typeof PerfArbiter !== 'undefined' && PerfArbiter.degraded){
+    return renderFpsCap > 0 ? Math.min(renderFpsCap, DEGRADE_FPS_CAP) : DEGRADE_FPS_CAP;
+  }
+  return renderFpsCap;
+}
+function _syncFpsCapLabel(){
+  const v = document.getElementById('fpsCapVal');
+  if(!v) return;
+  const cap = _effectiveFpsCap();
+  v.textContent = cap > 0 ? (cap + 'fps') : '不限';
+}
+function onFpsCapChange(){
+  const sl = document.getElementById('fpsCapSlider');
+  renderFpsCap = (sl ? FPS_CAP_OPTIONS[parseInt(sl.value, 10)] : 0) || 0;
+  try{ localStorage.setItem('renderFpsCap', String(renderFpsCap)); }catch(e){}
+  _lastLoopTs = 0;
+  _syncFpsCapLabel();
+}
+function _loadFpsCap(){
+  try{
+    const v = parseInt(localStorage.getItem('renderFpsCap'), 10);
+    if(FPS_CAP_OPTIONS.indexOf(v) >= 0) renderFpsCap = v;
+  }catch(e){}
+  const sl = document.getElementById('fpsCapSlider');
+  if(sl) sl.value = String(Math.max(0, FPS_CAP_OPTIONS.indexOf(renderFpsCap)));
+  _syncFpsCapLabel();
+}
+
 console.log = function(...args) {
   _origLog(...args);
   if(!debugEnabled) return;
@@ -452,6 +572,8 @@ function initAudio(){
   if(debugEnabled) AudioDebugMonitor.init();
   // 预热合成钢琴预渲染缓冲区（约 8ms），避免首个合成音符触发一次性主线程构建
   setTimeout(() => { try{ _getSynthLoopBuffers(); }catch(e){} }, 0);
+  // 后台加载合成钢琴 AudioWorklet（渐进增强）；失败则保持预渲染缓冲区方案
+  setTimeout(() => { try{ _initSynthWorklet(); }catch(e){} }, 0);
 }
 
 /* ============================================================
@@ -495,6 +617,11 @@ function applyDegradation(on){
   SoundfontLoader.MAX_VOICES = on ? 64 : 128;
   const base = SoundfontLoader.baseRetriggerFloor || 0;
   SoundfontLoader.retriggerFloor = on ? Math.max(base, 0.03) : base;
+  // 渲染：降级时把帧率上限临时压到 DEGRADE_FPS_CAP，减少主线程/GPU 负载（比仅抽帧 LOD 更平滑）
+  _lastLoopTs = 0;
+  _syncFpsCapLabel();
+  if(on) console.log('[AudioDebug][INFO] 渲染降级：帧率上限临时降为 ' + _effectiveFpsCap() + 'fps（原 ' + (renderFpsCap || '不限') + '）');
+  else console.log('[AudioDebug][INFO] 渲染恢复：帧率上限回到 ' + (renderFpsCap || '不限'));
 }
 
 const AudioDebugMonitor = {
@@ -623,7 +750,9 @@ const AudioDebugMonitor = {
 
     const d = SoundfontLoader.debug;
     const sampleLive = d.srcCreated - d.onendedFired;
-    const synthLive = SoundfontLoader.synthVoices.length;
+    // 合成钢琴 voice：缓冲区方案用 synthVoices 计数；AudioWorklet 方案用其回报的 voice 数
+    const synthLive = SoundfontLoader.synthVoices.length +
+      ((typeof _synthWorkletVoices !== 'undefined' && _synthWorkletReady) ? _synthWorkletVoices : 0);
     const liveNodes = sampleLive + synthLive;
     const activeKeys = SoundfontLoader.activeSources.filter(s => s !== null).length;
 
@@ -986,7 +1115,7 @@ async function _fetchBlobWithProgress(urls, onProgress, label, quiet){
 
 // ===== 谱面压缩传输：只传 brotli（.mid.br），客户端解压 =====
 // 仓库已删除原始 .mid 与 .gz：传输一律使用 br 压缩后的文件（体积最小）。
-// 解压优先原生 DecompressionStream('brotli')；不支持时惰性加载内置 WASM 解码器。
+// 解压优先原生 DecompressionStream('brotli')；不支持时惰性加载自定义 WASM 解码器。
 const _NATIVE_BROTLI = (function(){
   try{ if(typeof DecompressionStream === 'function'){ new DecompressionStream('brotli'); return true; } }catch(e){}
   return false;
@@ -997,12 +1126,12 @@ const _NATIVE_GZIP = (function(){
 })();
 let _brotliWasmMod = null;
 let _brotliWasmLoading = null;
-// 惰性加载内置 WASM brotli 解码器；返回模块（decompress(Uint8Array)->Uint8Array）
+// 惰性加载自定义 WASM brotli 解码器；返回模块（decompress(Uint8Array)->Uint8Array）
 async function _loadBrotliWasm(){
   if(_brotliWasmMod) return _brotliWasmMod;
   if(_brotliWasmLoading) return _brotliWasmLoading;
   _brotliWasmLoading = (async () => {
-    console.log('[AudioDebug][INFO] br 解码器：原生不支持，开始加载内置 WASM 解码器');
+    console.log('[AudioDebug][INFO] br 解码器：原生不支持，开始加载自定义 WASM 解码器');
     const mod = await import('./vendor/brotli_dec_wasm.js');
     console.log('[AudioDebug][INFO] br 解码器：JS 模块已加载，开始竞速下载 brotli_dec_wasm_bg.wasm');
     // WASM 二进制同样走多镜像完整下载竞速（竞速结果会打印来源/体积/速度/文件名）
@@ -1051,11 +1180,11 @@ async function _decompressBrotli(ab){
 }
 try{
   console.log('[AudioDebug][INFO] br 解压支持：原生 DecompressionStream(brotli)=' + _NATIVE_BROTLI +
-    '，原生 gzip=' + _NATIVE_GZIP + (_NATIVE_BROTLI ? '（无需 WASM）' : '（将使用内置 WASM 解码器）'));
+    '，原生 gzip=' + _NATIVE_GZIP + (_NATIVE_BROTLI ? '（无需 WASM）' : '（将使用自定义 WASM 解码器）'));
   const _brEl = document.getElementById('brSupportInfo');
   if(_brEl) _brEl.textContent = 'br 解压：' + (_NATIVE_BROTLI
     ? '原生支持 DecompressionStream(brotli)'
-    : '原生不支持 → 使用内置 WASM 解码器');
+    : '原生不支持 → 使用自定义 WASM 解码器');
 }catch(e){}
 // 谱面下载：只取 .mid.br，客户端解压（原文已删除，不再回退）
 async function _fetchMediaBlob(relPath, onProgress, quiet){
@@ -1150,6 +1279,128 @@ function _getSynthPeriodicWave(){
   // disableNormalization:true 保持与旧「三振荡器叠加」一致的谐波幅度
   _synthPeriodicWave = audioCtx.createPeriodicWave(real, imag, {disableNormalization: true});
   return _synthPeriodicWave;
+}
+
+// ===== 合成钢琴 AudioWorklet（渐进增强）=====
+// 把整个合成器放进一个 AudioWorkletProcessor：所有 voice 在同一节点内以数值合成，
+// 每音符 0 个 Web Audio 节点、零节点创建/销毁、零 GC —— 比采样音色更抗卡顿。
+// 处理器源码用 Blob URL 内联，不产生额外网络请求；就绪前/失败时回退上面的预渲染缓冲区方案。
+const SYNTH_WORKLET_SRC = `
+class SynthProcessor extends AudioWorkletProcessor {
+  constructor(){
+    super();
+    this.voices = [];
+    this.tables = [];
+    this.tableSize = 2048;
+    this.maxVoices = 128;
+    this._buildTables();
+    this.port.onmessage = (e) => this._onMsg(e.data);
+    this._reportAcc = 0;
+  }
+  // 每八度一张波形表，谐波按该八度最高音的 Nyquist 限幅，避免混叠
+  _buildTables(){
+    const H = 16;
+    const amp = new Float32Array(H + 1);
+    for(let n = 1; n <= H; n += 2){ const s = (n % 4 === 1) ? 1 : -1; amp[n] += 0.9 * s / (n * n); }
+    amp[2] += 0.35; amp[3] += 0.18;
+    const N = this.tableSize;
+    for(let oct = 0; oct < 10; oct++){
+      const fTop = 27.5 * Math.pow(2, oct + 1);
+      const kmax = Math.max(1, Math.min(H, Math.floor((sampleRate / 2) / fTop)));
+      const t = new Float32Array(N + 1);
+      for(let i = 0; i < N; i++){
+        let s = 0;
+        for(let k = 1; k <= kmax; k++){ const a = amp[k]; if(a) s += a * Math.sin(2 * Math.PI * k * i / N); }
+        t[i] = s;
+      }
+      t[N] = t[0];
+      this.tables.push(t);
+    }
+  }
+  _tableFor(freq){
+    let oct = Math.floor(Math.log2(Math.max(1e-6, freq / 27.5)));
+    if(oct < 0) oct = 0; if(oct > 9) oct = 9;
+    return this.tables[oct];
+  }
+  _onMsg(m){
+    if(!m) return;
+    if(m.type === 'note'){
+      if(this.voices.length >= this.maxVoices) this.voices.shift();
+      const freq = m.freq > 0 ? m.freq : 440;
+      this.voices.push({
+        midi: m.midi, table: this._tableFor(freq), phase: 0,
+        inc: freq * this.tableSize / sampleRate,
+        vel: Math.max(0.0001, m.vel || 0.4), dur: Math.max(0.01, m.dur || 0.5),
+        t: 0, releasing: false
+      });
+    } else if(m.type === 'off'){
+      for(let i = 0; i < this.voices.length; i++){ if(this.voices[i].midi === m.midi) this.voices[i].releasing = true; }
+    } else if(m.type === 'allOff'){
+      this.voices.length = 0;
+    }
+  }
+  process(inputs, outputs){
+    const out = outputs[0] && outputs[0][0];
+    if(!out) return true;
+    const N = out.length;
+    for(let i = 0; i < N; i++) out[i] = 0;
+    const ts = this.tableSize, sr = sampleRate, attack = 0.008;
+    for(let vi = this.voices.length - 1; vi >= 0; vi--){
+      const v = this.voices[vi];
+      const table = v.table, vel = v.vel, dur = v.dur;
+      const decayRatio = 0.0008 / vel;
+      for(let i = 0; i < N; i++){
+        v.t += 1 / sr;
+        let env;
+        if(v.t < attack){ env = vel * (v.t / attack); }
+        else {
+          const p = Math.min(1, (v.t - attack) / Math.max(0.001, dur - attack));
+          env = vel * Math.pow(decayRatio, p);
+        }
+        if(v.releasing) env *= 0.85;
+        const idx = v.phase | 0;
+        const frac = v.phase - idx;
+        const s0 = table[idx], s1 = table[idx + 1];
+        out[i] += (s0 + (s1 - s0) * frac) * env;
+        v.phase += v.inc;
+        if(v.phase >= ts) v.phase -= ts;
+      }
+      if(v.releasing || v.t > dur + 0.05) this.voices.splice(vi, 1);
+    }
+    this._reportAcc += N;
+    if(this._reportAcc >= sr * 0.5){ this._reportAcc = 0; this.port.postMessage({ type: 'voices', n: this.voices.length }); }
+    return true;
+  }
+}
+registerProcessor('synth-processor', SynthProcessor);
+`;
+let _synthWorkletNode = null;
+let _synthWorkletReady = false;
+let _synthWorkletLoading = null;
+let _synthWorkletVoices = 0;
+function _initSynthWorklet(){
+  if(_synthWorkletReady || _synthWorkletLoading) return _synthWorkletLoading;
+  if(!audioCtx || !audioCtx.audioWorklet) return null;
+  _synthWorkletLoading = (async () => {
+    const blob = new Blob([SYNTH_WORKLET_SRC], { type: 'application/javascript' });
+    const url = URL.createObjectURL(blob);
+    try{ await audioCtx.audioWorklet.addModule(url); }
+    finally{ try{ URL.revokeObjectURL(url); }catch(e){} }
+    const node = new AudioWorkletNode(audioCtx, 'synth-processor', {
+      numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1]
+    });
+    node.port.onmessage = (e) => { if(e.data && e.data.type === 'voices') _synthWorkletVoices = e.data.n; };
+    node.connect(masterGain);
+    _synthWorkletNode = node;
+    _synthWorkletReady = true;
+    console.log('[AudioDebug][INFO] 合成钢琴 AudioWorklet 已启用（每音符 0 节点、无节点 churn）');
+    return node;
+  })().catch((e) => {
+    console.warn('[AudioDebug][WARN] AudioWorklet 初始化失败，回退预渲染缓冲区方案：' + (e && e.message ? e.message : e));
+    _synthWorkletLoading = null;
+    return null;
+  });
+  return _synthWorkletLoading;
 }
 
 const SoundfontLoader = {
@@ -1451,6 +1702,11 @@ const SoundfontLoader = {
       }
     }
     if(stopped > 0) console.log('[AudioDebug][INFO] stopAll停止了', stopped, '个 note');
+    // AudioWorklet 合成器：一次性释放所有 voice
+    if(_synthWorkletReady && _synthWorkletNode){
+      try{ _synthWorkletNode.port.postMessage({ type: 'allOff' }); }catch(e){}
+      _synthWorkletVoices = 0;
+    }
     // 合成钢琴分支的音源节点也必须停掉
     if(this.synthVoices.length){
       const n = this.synthVoices.length;
@@ -1468,6 +1724,10 @@ const SoundfontLoader = {
   // 松开某个琴键：立即停止该 midi 正在发声的 voice（用户敲击抬起手指时用）
   stopNote(midi){
     const t = audioCtx ? audioCtx.currentTime : 0;
+    // AudioWorklet 合成器：释放该音高的 voice
+    if(_synthWorkletReady && _synthWorkletNode){
+      try{ _synthWorkletNode.port.postMessage({ type: 'off', midi: midi }); }catch(e){}
+    }
     for(let i = this.activeVoices.length - 1; i >= 0; i--){
       const v = this.activeVoices[i];
       if(v.midi !== midi) continue;
@@ -1597,7 +1857,17 @@ const SoundfontLoader = {
     // 只有current为__synth__时才走合成钢琴
     if(!this.debug.synthWarned){
       this.debug.synthWarned = true;
-      console.log('[AudioDebug][INFO] 当前使用合成钢琴音色（current=__synth__，预渲染循环波形），时间=', t.toFixed(2));
+      console.log('[AudioDebug][INFO] 当前使用合成钢琴音色（current=__synth__，预渲染循环波形 / AudioWorklet），时间=', t.toFixed(2));
+    }
+    const synthDur = Math.max(duration, 0.001); // 真实时长，仅 1ms epsilon
+    const f = 440 * Math.pow(2, (midi - 69) / 12);
+    // 渐进增强：AudioWorklet 就绪时走单节点合成器（每音符 0 节点、零 churn）
+    if(_synthWorkletReady && _synthWorkletNode){
+      try{
+        _synthWorkletNode.port.postMessage({ type: 'off', midi: midi }); // 同音先释放
+        _synthWorkletNode.port.postMessage({ type: 'note', midi: midi, freq: f, vel: 0.4 * velocity, dur: synthDur });
+      }catch(e){}
+      return;
     }
     // 同音打断：与 sample 分支一致，避免同音叠加导致 voice 爆炸
     const prevS = this.activeSynth[midi];
@@ -1613,7 +1883,6 @@ const SoundfontLoader = {
       delete this.activeSynth[midi];
     }
     const t0 = audioCtx.currentTime;
-    const synthDur = Math.max(duration, 0.001); // 真实时长，仅 1ms epsilon
     const env = audioCtx.createGain();
     env.gain.setValueAtTime(0, t0);
     env.gain.linearRampToValueAtTime(0.4 * velocity, t0 + Math.min(0.008, synthDur * 0.5));
@@ -1632,7 +1901,6 @@ const SoundfontLoader = {
       src.start(t0); src.stop(t0 + synthDur + 0.03);
       oscs = [src];
     } else {
-      const f = 440 * Math.pow(2, (midi - 69) / 12);
       const o = audioCtx.createOscillator();
       o.setPeriodicWave(_getSynthPeriodicWave());
       o.frequency.value = f;
@@ -1868,12 +2136,7 @@ let _timbreSelect = null;
 try{
   _timbreSelect = initCustomSelect(document.getElementById('timbreSel'), {
     search: true,
-    actions: _makeTimbreAction,
-    canChoose: function(o){
-      if(o.value === '__synth__' || SoundfontLoader.cachedNames.has(o.value)) return true;
-      setStatus('请先点击右侧下载按钮下载该音色');
-      return false;
-    }
+    actions: _makeTimbreAction
   });
   initCustomSelect(document.getElementById('songSel'), {search: true});
 }catch(e){ console.warn('[AudioDebug] 自定义下拉初始化失败', e); }
@@ -1881,7 +2144,7 @@ try{ SoundfontLoader.refreshCachedNames(); }catch(e){}
 // 音色下载完成后刷新音色下拉列表的下载/删除按钮状态（由 SoundfontLoader._doLoad 调用）
 function _onTimbreCached(){ try{ if(_timbreSelect) _timbreSelect.refresh(); }catch(e){} }
 
-// opts.auto=true：谱面配置的音色，允许自动下载（不受"未下载不可切换"限制）
+// opts.auto=true：谱面配置的音色自动切换（不打断正在播放的音符）
 // 谱面默认音色自动切换：默认音色本地不存在时，先回滚合成钢琴并后台下载；
 // 下载完成后仅在「用户未主动切其他音色」且「当前谱面未播完」时自动切回。
 let _timbreAutoSwitch = null; // { file, name, disp, gen }
@@ -1903,16 +2166,13 @@ async function onTimbreChange(opts){
     SoundfontLoader.current = '__synth__';
     return;
   }
-  // 用户手动选择：未完成下载不允许切换（需先点下拉里的下载按钮）
-  if(!SoundfontLoader.cachedNames.has(name) && !auto){
-    setStatus('音色[' + disp + ']未下载，请先点击右侧下载按钮');
-    return;
-  }
+  // 未下载的音色：直接下载并切换（不再要求先点下载按钮）
+  const needDownload = !SoundfontLoader.cachedNames.has(name);
   try{
-    setStatus('音色[' + disp + ']加载中…');
-    await SoundfontLoader.load(name, auto ? (p) => {
+    setStatus('音色[' + disp + ']' + (needDownload ? '下载中…' : '加载中…'));
+    await SoundfontLoader.load(name, (p) => {
       if(p < 1) setStatus('音色[' + disp + ']下载 ' + Math.round(p * 100) + '%');
-    } : undefined);
+    });
     await SoundfontLoader.predecodeAll();
     setStatus('音色[' + disp + ']完成!');
   }catch(e){
@@ -2313,13 +2573,20 @@ async function loadSongList(){
   // 内置谱（排除已删除）
   try{
     const list = await _getBuiltinList();
-    list.forEach(song => {
-      if(deleted.has(song.file)) return;
+    for(const song of list){
+      if(deleted.has(song.file)) continue;
+      // 测试谱（list.json 中 test:true）仅在本地下过时才出现在选谱列表，
+      // 避免初始状态只下载 2 首正式谱、列表却列出一堆未下载的测试谱。
+      if(song.test){
+        let has = false;
+        try{ has = await AssetCache.has(song.file); }catch(e){}
+        if(!has) continue;
+      }
       const opt = document.createElement('option');
       opt.value = 'builtin:' + song.file;
       opt.textContent = song.name;
       sel.appendChild(opt);
-    });
+    }
   }catch(e){}
   // 用户上传谱
   try{
@@ -2337,10 +2604,13 @@ loadSongList();
 // 图标（Feather 线性）
 const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
 const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
-// 音色列表项右侧动作：已缓存显示垃圾桶，未缓存显示下载（带百分比）；未下载不可切换
+// 音色列表项右侧动作：已缓存显示垃圾桶，未缓存显示下载（带百分比）；点击未下载项会直接下载并切换
 function _makeTimbreAction(o){
   if(o.value === '__synth__') return null;
   const box = document.createElement('span');
+  // 需下载体积（br 压缩后传输量）：标注在垃圾桶/下载按钮旁边
+  const sz = _makeSizeSpan(_mediaBrSize('soundfonts/' + o.value));
+  if(sz) box.appendChild(sz);
   const btn = document.createElement('button');
   btn.type = 'button';
   box.appendChild(btn);
@@ -2411,8 +2681,13 @@ function _makeManageRow(name, kind, file, isDeleted, cached){
   } else {
     _btnIcon(btn, TRASH_ICON, 'del', '删除', () => _onDeleteBuiltin(file, btn));
   }
+  // 需下载体积（br 压缩后传输量）：标注在垃圾桶/下载按钮旁边
+  if(kind === 'builtin' && file){
+    const sz = _makeSizeSpan(_mediaBrSize(file));
+    if(sz) row.appendChild(sz);
+  }
   row.appendChild(btn);
-  // 点击行（非操作按钮）切换到该谱面播放；未下载则弹窗询问是否下载并播放。
+  // 点击行（非操作按钮）切换到该谱面播放；未下载则直接下载并切换（不再弹窗确认）。
   // 下载/删除属"管理动作"，不算直接点击谱面：按钮处理器会调用 _btnLoading
   // 替换 innerHTML，使 e.target 脱离文档、closest('button') 失效，故用
   // composedPath（派发时快照）判断是否来自按钮。
@@ -2440,22 +2715,18 @@ async function _onManageRowClick(name, kind, file, isDeleted){
       await _switchToSong('builtin:' + file);
       return;
     }
-    // 未下载：探测大小并弹窗确认
-    const size = await _probeMediaSize(file);
-    const sizeTxt = size > 0 ? ('大小约 ' + Math.round(size / 1024) + 'KB，') : '';
-    _showConfirm('谱面[' + name + '] ' + sizeTxt + '是否立即下载并播放？', async () => {
-      try{
-        setStatus('谱面[' + name + '] 下载中…');
-        await _fetchWithProgress(file, (p) => setStatus('谱面[' + name + '] 下载 ' + Math.round(p) + '%'));
-        const set = getDeletedBuiltin();
-        if(set.has(file)){ set.delete(file); saveDeletedBuiltin(set); }
-        await loadSongList();
-        closeManageModal();
-        await _switchToSong('builtin:' + file);
-      }catch(e){
-        setStatus('谱面[' + name + '] 下载失败');
-      }
-    });
+    // 未下载：直接下载并切换（不再二次确认弹窗）
+    try{
+      setStatus('谱面[' + name + '] 下载中…');
+      await _fetchWithProgress(file, (p) => setStatus('谱面[' + name + '] 下载 ' + Math.round(p) + '%'));
+      const set = getDeletedBuiltin();
+      if(set.has(file)){ set.delete(file); saveDeletedBuiltin(set); }
+      await loadSongList();
+      closeManageModal();
+      await _switchToSong('builtin:' + file);
+    }catch(e){
+      setStatus('谱面[' + name + '] 下载失败');
+    }
   }catch(e){
     setStatus('谱面加载失败：' + (e && e.message ? e.message : e));
   }
@@ -2640,7 +2911,12 @@ async function onSongChange(val){
   stopPlay();
   currentSongKey = val;
   _invalidateTimbreAutoSwitch(); // 切歌：作废上一首的默认音色自动切换
-  console.log('[AudioDebug][INFO] 切换谱面 ' + _songId(String(val).replace(/^(builtin:|user:)/, '')));
+  // 谱面 + 音色合并为同一条日志：切换: xxx.mid - xxx 音色
+  {
+    const fname = String(val).replace(/^(builtin:|user:)/, '').split('/').pop();
+    const tName = songDefaultTimbre[fname] || SoundfontLoader.current || '__synth__';
+    console.log('[AudioDebug][INFO] 切换: ' + fname + ' - ' + timbreDisplayName(tName) + ' 音色');
+  }
   try{
     let buf, name;
     if(val.startsWith('builtin:')){
@@ -2696,7 +2972,9 @@ function parseAndPlayMidi(buf, filename){
     density <= 12000 ? 0.035 : 0.05;
   SoundfontLoader.retriggerFloor = SoundfontLoader.baseRetriggerFloor;
   SoundfontLoader.lastTriggerTime.fill(0);
-  console.log('[AudioDebug][INFO] 谱面密度=' + density.toFixed(0) + ' 音符/s，自适应同音重触发下限=' +
+  // 谱面密度 = 全曲音符总数 / 全曲时长(秒)，即整首的平均音符密度（音符/s）
+  console.log('[AudioDebug][INFO] 谱面密度=' + density.toFixed(2) + ' 音符/s（=' + allNotes.length +
+    ' 音符 / ' + totalDuration.toFixed(2) + 's，全曲平均），自适应同音重触发下限=' +
     SoundfontLoader.retriggerFloor + 's');
   document.getElementById('statTracks').textContent = '轨道：' + midi.tracks.length;
   document.getElementById('statTotal').textContent = '音符：' + allNotes.length;
@@ -2793,13 +3071,12 @@ let viewOffsetX = 0;           // 钢琴水平偏移（canvas 设备像素），
 const PIANO_MIN_SCALE = 1;
 const PIANO_MAX_SCALE = 4;
 
-// 欣赏模式 / 演奏模式切换
+// 音游模式开关：开 = 音游模式（音符只下落、需点击琴键发声）；关 = 欣赏模式（默认，音符自动发声）
+// 标签固定显示「音游模式」四个字，默认关闭（即欣赏模式）。
 function onPlayModeChange(){
   const sw = document.getElementById('playModeSw');
-  playMode = (sw && sw.checked) ? 'appreciate' : 'perform';
-  const label = document.getElementById('playModeLabel');
-  if(label) label.textContent = (playMode === 'appreciate') ? '欣赏模式' : '音游模式';
-  if(playMode === 'perform') SoundfontLoader.stopAll(); // 演奏模式：停止自动排程的音符
+  playMode = (sw && sw.checked) ? 'perform' : 'appreciate';
+  if(playMode === 'perform') SoundfontLoader.stopAll(); // 音游模式：停止自动排程的音符
 }
 // 横竖屏两套默认钢琴高度：竖屏（移动端）15%，横屏（PC / 全屏旋转）25%
 const PIANO_HEIGHT_DEFAULT = { portrait: 15, landscape: 25 };
@@ -3165,8 +3442,18 @@ function lowerBound(arr, target){
   return lo;
 }
 
-function playLoop(){
+function playLoop(ts){
   if(!isPlaying) return;
+  // 帧率上限：不足最小间隔则本帧只重排 rAF、不推进逻辑与绘制
+  const _cap = _effectiveFpsCap();
+  if(_cap > 0){
+    const _t = (typeof ts === 'number') ? ts : performance.now();
+    if(_lastLoopTs && (_t - _lastLoopTs) < (1000 / _cap) - 0.5){
+      rafId = requestAnimationFrame(playLoop);
+      return;
+    }
+    _lastLoopTs = _t;
+  }
   const _frameT0 = performance.now();
   const now = audioCtx.currentTime;
 
@@ -4263,3 +4550,4 @@ resizeCanvas();
 setPalette(currentPalette); // 同步按钮选中态并按恢复的配色重绘
 updatePaletteToggleIcon();  // 配色栏默认展开，同步收起/展开按钮图标
 applyPanelAppearance();     // 统一菜单/调试/选谱/管理面板的透明度与模糊（含动态创建的 .csel-pop）
+_loadFpsCap();              // 恢复帧率上限设置

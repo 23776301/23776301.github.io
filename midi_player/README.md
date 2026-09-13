@@ -58,7 +58,7 @@ MIDI不载声响，是二进制的乐思底稿。
 - 界面仍在正常刷新，但声音卡顿、爆音，最终静音。
 - 诊断日志显示 `audioCtx.currentTime` 的推进速度只有真实时间的约 20%，即音频时钟被拖慢甚至停摆。
 - 触发点是合成钢琴（`__synth__`）回退分支：该分支早期没有复音上限，高密度谱面瞬间创建约 1000 个振荡器 voice，直接把音频渲染线程打满。
-- 合成钢琴每个音符原本要 3 个振荡器 + 3 个分音 Gain + 1 个包络 Gain（7 节点），而采样音色只需 1 个 BufferSource + 1 个 Gain（2 节点）；故同密度下合成分支的 DSP 负载高得多。现已改为**预渲染循环 `AudioBuffer` + `BufferSource` + 包络 Gain**（2 节点，且缓冲区与 `AudioContext` 同采样率、零重采样），音频线程开销已**低于**采样音色。
+- 合成钢琴每个音符原本要 3 个振荡器 + 3 个分音 Gain + 1 个包络 Gain（7 节点），而采样音色只需 1 个 BufferSource + 1 个 Gain（2 节点）；故同密度下合成分支的 DSP 负载高得多。现已改为**预渲染循环 `AudioBuffer` + `BufferSource` + 包络 Gain**（2 节点，且缓冲区与 `AudioContext` 同采样率、零重采样），音频线程开销已**与**采样音色相当（每音符 2 节点）。
 
 **根因**
 
@@ -116,7 +116,7 @@ MIDI不载声响，是二进制的乐思底稿。
 
 ### 2.3.2 自适应同音重触发下限
 
-- 解析谱面时按「平均密度 = 音符数 / 总时长」计算 `baseRetriggerFloor`：
+- 解析谱面时按「平均密度 = 全曲音符总数 / 全曲时长（秒）」计算 `baseRetriggerFloor`；日志打印保留 **2 位小数**并给出算式，如 `谱面密度=1234.56 音符/s（=12345 音符 / 10.00s，全曲平均）`。注意这是**全曲平均**，不是瞬时密度：
 
   | 密度（音符/秒） | 重触发下限 |
   | --- | --- |
@@ -310,7 +310,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **音色加载**：Soundfont 以 `*-ogg.js` 形式提供，内部是 base64 音频；`_doLoad` 下载/读缓存后用 `new Function` 求值取数据，再经 `atob → Uint8Array → decodeAudioData` 得到 `AudioBuffer`。
 - **媒体源（多镜像完整下载竞速 + 本站 Pages 兜底）**：`_mediaUrls()` 为每个资源生成候选源数组——4 个 jsDelivr 边缘（`cdn` / `fastly` / `gcore` / `testingcf`）、5 个国内常用 GitHub 加速镜像（`ghproxy.net` / `gh-proxy.com` / `ghfast.top` / `gh.llkk.cc` / `gh.xxooo.cf`）、`statically` / `githack`，外加本站同源 Pages。`_raceDownloadFull()` 让所有镜像**同时完整下载**同一资源，`Promise.any` 取**最先完整完成**者，胜出后立即 `abort()` 其余并丢弃其不完整分片。开关 `raceFull`（默认开）关闭时改用 `_fetchByFirstByte()`（只竞速首字节）。
 - **冷启动优先级管线**（`COLD_START` + `coldStart()`）：**同一时刻只竞速一个资源**，避免多资源互相抢带宽：**P0** 竞速下载默认谱面（`Rush E 3.mid.br`）；**P0 完成立即用合成钢琴起播**，同时进入 **P1** 竞速下载默认音色（古钢琴 `clavinet`），此期间不下载其它任何资源；**P2** 古钢琴就绪后，才下载 `mandatorySheets` / `mandatoryTimbres` 配置的预配置必下谱面与音色（默认 `The Sound of Silence`）。音色下载并预解码完成后只切 `current`，不打断正在发声的 voice。
-- **谱面压缩传输（只传 brotli）**：仓库**只保留 `.mid.br`**，原始 `.mid` 与 `.gz` 已删除，传输一律使用 br 压缩后的文件。`_fetchMediaBlob()` 取 `.br` 后解压：原生 `DecompressionStream('brotli')` 优先；不支持时**惰性加载内置 WASM 解码器**（`vendor/brotli_dec_wasm.js` + `vendor/brotli_dec_wasm_bg.wasm`，`brotli-dec-wasm@2.3.2`）。以 `_looksLikeMidi()` 校验 `MThd`，兼容服务端已按 `Content-Encoding` 自动解压的情况。解压后的谱面按原路径写入 Cache API，回访不再下载也不再解压。`Rush E 3.mid` 2.70 MB → br **95 KB**。
+- **谱面压缩传输（只传 brotli）**：仓库**只保留 `.mid.br`**，原始 `.mid` 与 `.gz` 已删除，传输一律使用 br 压缩后的文件。`_fetchMediaBlob()` 取 `.br` 后解压：原生 `DecompressionStream('brotli')` 优先；不支持时**惰性加载自定义 WASM 解码器**（`vendor/brotli_dec_wasm.js` + `vendor/brotli_dec_wasm_bg.wasm`，`brotli-dec-wasm@2.3.2`）。以 `_looksLikeMidi()` 校验 `MThd`，兼容服务端已按 `Content-Encoding` 自动解压的情况。解压后的谱面按原路径写入 Cache API，回访不再下载也不再解压。`Rush E 3.mid` 2.70 MB → br **95 KB**。
 - **依赖本地化**：`@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`，不再依赖 jsDelivr；入口 `app.js` 仍同源优先加载。
 - **竞速日志（固化最后一行，不重复打「下载成功」）**：进行中 `_raceLog()` 每 0.5s 覆盖同一行显示领先镜像与速度；完成后 `_raceLogFinal()` 把该行固化为 `竞速[文件名] 完成 <- [镜像] 大小 用时Xs 平均YKB/s` 并**保留不删**，用于指示本次性能。失败时同样保留 `全部镜像失败`。竞速行已含来源/体积/速度/文件名，故不再额外打印 `xx下载成功` 的蓝色日志（缓存命中仍打印）。
 - **压缩收益可观测**：`.mid.br` 解压后打印 `br解压 <压缩体积> -> <解压体积>（压缩比 N×，传输节省 X%）`；音色若被 HTTP 层压缩，也会打印 `HTTP压缩传输 <压缩后> -> <解压后>（压缩比 N×）`。
@@ -318,7 +318,7 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **br 支持可观测**：启动时打印 `br 解压支持：原生 DecompressionStream(brotli)=true/false`，并在**调试面板**显示 `br 解压：原生支持 / 需 WASM 解码器`；WASM 解码器的加载过程（JS 模块加载 → WASM 竞速下载 → 初始化 → 就绪）逐条打印。
 - **预解码**：`predecodeAll` 按每批 8 个解码 88 个音，避免一次性解码阻塞主线程与音频时间线。
 - **合成回退（预渲染循环波形，零重采样）**：`__synth__` 分支先用 `_getSynthLoopBuffers()` **解析式预渲染**每个音高的无缝循环 `AudioBuffer`（三角波奇次谐波 + 2/3 次正弦泛音；按 Nyquist 限制谐波数防混叠；循环体内谐波均为整数周期，循环点无缝），再由 **`BufferSource(loop=true)` + 动态包络 Gain** 播放，与采样分支同构（每音符 2 节点）。相比旧的「单振荡器 + `PeriodicWave`」：① 缓冲区采样率 = `AudioContext.sampleRate`，播放时**零重采样**；② 单声道、全部 88 音仅约 130KB；③ 无需 `decodeAudioData`/`OfflineAudioContext`。**注意**：`decodeAudioData` 会把采样音色一次性重采样到 ctx 采样率，所以古钢琴等**播放时同样零重采样**——预渲染让合成钢琴的播放开销**与采样音色相当**（每音符 2 节点），而非更低；要严格更低需改用 AudioWorklet（见下）。`initAudio()` 时用 `setTimeout(...,0)` 预热（约 8ms），首个合成音符不再触发一次性构建。仅在音色加载失败或 buffer 缺失时使用；极端场景无法创建 `AudioBuffer` 时退回单振荡器 `PeriodicWave`。合成钢琴本身**无任何音频文件**（0 字节），因此不需要下载。
-- **进一步降低合成开销（AudioWorklet，未实现）**：当前每音符仍需 `createBufferSource` + `createGain` 两个节点（与采样音色相同）。若把整个合成器放进一个 `AudioWorkletProcessor`（用 Blob URL 内联，**不增加网络请求**），所有 voice 在一个节点内以纯数值合成，可实现**每音符 0 节点、零节点 churn、零 GC**，这是让合成钢琴**严格比采样音色更不易卡顿**的唯一途径；代价是需 `audioWorklet.addModule` 异步就绪、且无法复用 `activeVoices` 抢占逻辑，复杂度与兼容性风险较高。
+- **合成开销进一步降低（AudioWorklet，渐进增强）**：把整个合成器放进一个 `AudioWorkletProcessor`（源码用 Blob URL 内联，**不增加网络请求**），所有 voice 在同一节点内以查表波表 + 数值包络合成，实现**每音符 0 个 Web Audio 节点、零节点 churn、零 GC**——这是让合成钢琴**严格比采样音色更不易卡顿**的途径。`initAudio()` 后台 `addModule`；就绪前用上面的预渲染缓冲区方案，就绪后无缝切到 worklet，失败自动回退。处理器内建每八度一张限谐波波表（防混叠）与 128 voice 池（满了抢占最旧），并通过 `port` 回报活跃 voice 数供调试面板统计。
 - **增益**：`timbreGain` 对个别音色（三角钢琴、古钢琴）单独设增益，其余默认 3.0。
 - **包络**：短音符按比例缩短 attack/release，避免事件时间倒挂。
 - **采样缓存**：每个音色按 midi 缓存已解码 `AudioBuffer`（`entry.buffers[midi]`），超出 88 键范围的音会映射到最近有效键。
@@ -369,7 +369,9 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 ## 9.3 弹窗与 Toast
 
 - **自定义配色面板** `paletteEditor`（在配色行内、「自定义」按钮下方展开）：目标选择 + 全彩取色板 + 实时预览，无保存/取消。
-- **谱面管理弹窗** `manageModal`：列出用户上传与内置谱面；全部用 `createElement` + `textContent` 构建，避免文件名 XSS。
+- **谱面管理弹窗** `manageModal`：列出用户上传与内置谱面；全部用 `createElement` + `textContent` 构建，避免文件名 XSS。每行在垃圾桶/下载按钮旁标注**需下载体积**（br 压缩后的实际传输量，来自静态表 `MEDIA_BR_SIZES`）；**点击未下载的行直接下载并切换播放，不再二次确认弹窗**。
+- **选谱列表过滤测试谱**：`midi/list.json` 中标记 `test:true` 的测试谱**只有在本地下过时才出现在选谱下拉**，避免初始只下载 2 首正式谱、列表却列出一堆未下载测试谱；管理弹窗中仍可见可下载。
+- **音色列表**：每个音色在下载/删除按钮旁标注 br 传输体积；**点击未下载的音色直接下载并切换**（不再要求先点下载按钮）。
 - **Toast**：`window.showToast(msg)` 顶部居中提示，4s 自动消失；用于谱面加载/解析失败与音色回退提示。
 
 ## 9.4 响应式与视口
@@ -407,7 +409,8 @@ document.getElementById('loopBtn').innerHTML = loopMode === 'one' ? ONE_LOOP_ICO
 - **音乐倍速**：`speedSlider`（0.1–3.0×，步进 0.1，与下落流速一致的滑块）；**音量滑块已移除**，主增益固定 100%，由系统音量控制。
 - **钢琴高度**：`pianoHeightSlider`（5%–50%）调节键盘区占绘制区的高度，`renderStatic` / `drawScene` 用 `C.h * pianoHeightPct/100`。
 - **横竖屏两套默认高度**：按渲染区宽高判定方向（高 > 宽 = 竖屏，否则横屏），竖屏默认 **15%**（移动端竖屏），横屏默认 **25%**（PC / 移动端全屏且浏览器支持旋转）。`_syncPianoHeightForOrientation()` 在 `resizeCanvas` 开头执行：方向变化时套用该方向的默认值；用户手动拖动滑块后按方向分别记忆（`_pianoHeightOverride`），旋转回来恢复各自的值。
-- **音游? 开关**：位于设置面板右上角（透明度/模糊滑块右侧）；开 = 「欣赏模式」（音符自动发声），关 = 「音游模式」（音符只下落、需点击琴键）。
+- **音游模式开关**：位于设置面板右上角（透明度/模糊滑块右侧），标签固定为「音游模式」四个字。**默认关闭 = 欣赏模式**（音符自动发声）；打开 = 音游模式（音符只下落、需点击琴键）。
+- **帧率上限**：`fpsCapSlider` 可选 `不限 / 30 / 60 / 90 / 120` fps（`localStorage.renderFpsCap`，默认不限=跟随显示器刷新率）。`playLoop` 在帧间隔不足 `1000/cap` 毫秒时跳过本帧（只重排 rAF、不推进逻辑与绘制），降低主线程/GPU 负载。**渲染降级时上限临时压到 30fps**（`_effectiveFpsCap()` 取 `min(用户上限, 30)`），恢复后回原值；这比仅靠 LOD 抽帧更平滑，因为直接减少整帧的绘制与逻辑次数。
 - **渲染降级自动弹出**：开启时，性能降级会自动弹出**调试面板**并滚到日志底部；恢复时不自动收起。
 
 ## 9.8 钢琴键盘交互
@@ -777,11 +780,14 @@ midi_player/
 | --- | --- | --- |
 | 镜像扩容 | 竞速镜像从 4 个 jsDelivr 扩到 4 jsDelivr + 5 个国内常用 GitHub 加速（ghproxy.net / gh-proxy.com / ghfast.top / gh.llkk.cc / gh.xxoo.cf）+ statically / githack + 本站 Pages；`CDN_BASES` 改为 `prefix` 统一拼接与来源识别 | `_pending_` |
 | 冷启动管线 | `COLD_START` 三段式，**同一时刻只竞速一个资源**：P0 竞速下载 Rush E3 br 谱 → 完成即用合成钢琴起播 + P1 竞速下载古钢琴 → P2 下载预配置必下音色与谱 | `_pending_` |
-| br 单格式 | 删除原始 `.mid` 与 `.gz`，只保留 `.mid.br`；解压原生优先，否则惰性加载内置 WASM 解码器 `vendor/brotli_dec_wasm.js`（brotli-dec-wasm@2.3.2） | `_pending_` |
+| br 单格式 | 删除原始 `.mid` 与 `.gz`，只保留 `.mid.br`；解压原生优先，否则惰性加载自定义 WASM 解码器 `vendor/brotli_dec_wasm.js`（brotli-dec-wasm@2.3.2） | `_pending_` |
 | 可观测性 | 调试面板显示浏览器 br 支持；启动打印 br 支持与 WASM 解码器加载过程；竞速日志完成后**固化为性能行**不再刷掉；日志含每个文件名 | `_pending_` |
 | 依赖本地化 | `@tonejs/midi@2.0.28` 的 `Midi.js` 内置于 `vendor/Midi.js`；CSS 全内联（`ui-kit` 页面已内联，无外部样式请求） | `_pending_` |
 | 日志精简 | 竞速最终行已含来源/体积/速度/文件名，删除重复的「下载成功」蓝字；`.mid.br` 与音色打印压缩比；WASM 二进制也参与多镜像竞速；移除「默认谱面已加载」，不支持 `renderCapacity` 时静默 | `01334f5` |
 | 合成钢琴预渲染 | 解析式预渲染每音高的无缝循环 `AudioBuffer`（单声道 ~130KB、与 ctx 同采样率），改用 `BufferSource(loop) + Gain` 播放，每音符 2 节点，播放开销与采样音色相当 | `390b66c` |
+| 合成钢琴 AudioWorklet | 单节点合成器（Blob URL 内联、无额外请求），每音符 0 节点、零 churn；每八度限谐波波表防混叠，128 voice 池，就绪前/失败回退预渲染缓冲区方案 | `_pending_` |
+| 交互优化 | 设置开关只显示「音游模式」且默认关（=欣赏模式）；测试谱未下载不出现在选谱列表；管理/音色列表在按钮旁标注 br 传输体积；点击未下载的谱面/音色直接下载并切换（去掉二次确认）；`内置 WASM` 改称 `自定义 WASM`；密度日志改 2 位小数并解释算法；切歌日志合并为「切换: xxx.mid - xxx 音色」 | `_pending_` |
+| 帧率上限 | 设置面板新增帧率上限（不限/30/60/90/120）；渲染降级时临时压到 30fps，比仅抽帧 LOD 更平滑 | `_pending_` |
 
 ## 2026-09 首版与性能攻坚
 

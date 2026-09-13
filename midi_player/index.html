@@ -242,6 +242,7 @@ button:active,[onclick]:active,[role="button"]:active,a:active{opacity:.78}
 .manage-row:hover{background:rgba(255,255,255,.1)}
 .manage-row .name{flex:1;font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .manage-row .tag{font-size:10px;color:var(--dim)}
+.manage-row .size,.csel-opt .size{font-size:10px;color:var(--dim);white-space:nowrap;margin-left:2px}
 .icon-btn{background:none;border:none;color:var(--dim);cursor:pointer;padding:4px;display:inline-flex;align-items:center;border-radius:6px}
 .icon-btn:hover{color:var(--text);background:rgba(255,255,255,.08)}
 .icon-btn.del:hover{color:#ff6b6b}
@@ -567,10 +568,10 @@ select:focus{border-color:var(--accent)}
                   <label title="面板透明度">透明 <input id="panelTransparency" type="range" min="0" max="100" step="5" value="40" oninput="applyPanelAppearance()"> <span class="pct" id="transparencyPct">40%</span></label>
                   <label title="面板背景模糊">模糊 <input id="panelBlur" type="range" min="0" max="100" step="5" value="0" oninput="applyPanelAppearance()"> <span class="pct" id="blurPct">0%</span></label>
                 </div>
-                <label class="switch" title="欣赏模式：音符自动发声；音游模式：需点击琴键发声" style="margin-left:auto">
-                  <input id="playModeSw" type="checkbox" checked onchange="onPlayModeChange()">
+                <label class="switch" title="音游模式：音符只下落、需点击琴键发声；关闭为欣赏模式：音符自动发声" style="margin-left:auto">
+                  <input id="playModeSw" type="checkbox" onchange="onPlayModeChange()">
                   <span class="track"><span class="knob"></span></span>
-                  <span id="playModeLabel">欣赏模式</span>
+                  <span id="playModeLabel">音游模式</span>
                 </label>
               </div>
             </div>
@@ -603,6 +604,11 @@ select:focus{border-color:var(--accent)}
               <label>键数版型</label>
               <input type="range" id="keyboardPresetSlider" min="0" max="6" step="1" value="6" oninput="onKeyboardPresetChange()">
               <span class="val" id="keyboardPresetVal">88键</span>
+            </div>
+            <div class="row">
+              <label title="可视化渲染帧率上限；不限=跟随显示器刷新率。降低上限可减轻主线程/GPU 负载；渲染降级时会临时降到 30fps">帧率上限</label>
+              <input type="range" id="fpsCapSlider" min="0" max="4" step="1" value="0" oninput="onFpsCapChange()">
+              <span class="val" id="fpsCapVal">不限</span>
             </div>
             <div class="row">
               <label title="开：所有镜像同时完整下载，最快完成者胜出；关：仅竞速首字节响应">完整下载竞速</label>
